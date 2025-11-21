@@ -7,7 +7,7 @@ import {
   Star, Send, Mail, MessageSquare, ThumbsUp, ThumbsDown, 
   UserCircle, Trash2, Settings, Filter, Save, CreditCard,
   UploadCloud, Moon, Sun, BookOpen, Lock, Unlock, Sparkles,
-  Award, Eye, EyeOff, Paperclip, Receipt
+  Award, Eye, EyeOff, Paperclip, Receipt, Trophy, Zap, Check
 } from 'lucide-react';
 
 // --- Import Services ---
@@ -22,10 +22,46 @@ const COLORS = {
 };
 
 const CATEGORIES = [
-  { id: 'dev', name: "Development", icon: <Code size={20} />, color: "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400", count: "120+ Jobs" },
-  { id: 'design', name: "Creative Design", icon: <PenTool size={20} />, color: "bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400", count: "85+ Jobs" },
-  { id: 'video', name: "Video & Animation", icon: <Video size={20} />, color: "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400", count: "50+ Jobs" },
-  { id: 'music', name: "Music & Audio", icon: <Music size={20} />, color: "bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400", count: "30+ Jobs" },
+  { 
+    id: 'dev', 
+    name: "Web Development", 
+    description: "Learn React, HTML, and CSS basics.",
+    icon: <Code size={24} />, 
+    color: "text-blue-500", 
+    bg: "bg-blue-50 dark:bg-blue-900/20", 
+    borderColor: "border-blue-200 dark:border-blue-800",
+    xp: 500
+  },
+  { 
+    id: 'design', 
+    name: "Creative Design", 
+    description: "Master color theory and layout.",
+    icon: <PenTool size={24} />, 
+    color: "text-purple-500", 
+    bg: "bg-purple-50 dark:bg-purple-900/20", 
+    borderColor: "border-purple-200 dark:border-purple-800",
+    xp: 450
+  },
+  { 
+    id: 'video', 
+    name: "Video & Animation", 
+    description: "Editing cuts, transitions & formats.",
+    icon: <Video size={24} />, 
+    color: "text-red-500", 
+    bg: "bg-red-50 dark:bg-red-900/20", 
+    borderColor: "border-red-200 dark:border-red-800",
+    xp: 400
+  },
+  { 
+    id: 'music', 
+    name: "Music & Audio", 
+    description: "Bitrates, mixing and sound design.",
+    icon: <Music size={24} />, 
+    color: "text-green-500", 
+    bg: "bg-green-50 dark:bg-green-900/20", 
+    borderColor: "border-green-200 dark:border-green-800",
+    xp: 300
+  },
 ];
 
 const QUIZZES = {
@@ -199,6 +235,7 @@ const LandingPage = ({ setView, onFeedback, darkMode, toggleTheme }) => (
           <Button variant="secondary" className="h-14 px-8 text-lg" icon={PlusCircle} onClick={() => setView('auth')}>Post a Job</Button>
        </div>
     </section>
+    {/* About Us */}
     <section className="bg-gray-50 dark:bg-gray-900 py-20 px-6">
       <div className="max-w-7xl mx-auto">
          <div className="text-center mb-12">
@@ -222,8 +259,8 @@ const LandingPage = ({ setView, onFeedback, darkMode, toggleTheme }) => (
          </div>
       </div>
     </section>
-
-    {/* --- RESTORED FEEDBACK SECTION --- */}
+    
+    {/* Feedback Section */}
     <section className="py-20 px-6 bg-white dark:bg-gray-950">
        <div className="max-w-3xl mx-auto bg-indigo-900 rounded-3xl p-10 text-center text-white shadow-2xl relative overflow-hidden">
           <div className="relative z-10">
@@ -306,7 +343,8 @@ const Auth = ({ setView, onLogin }) => {
                qualification: form.get('qualification'),
                specialty: form.get('specialty'),
                services: form.get('services'),
-               resume_url: resumeUrl
+               resume_url: resumeUrl,
+               unlocked_skills: []
              };
         await supabase.from(table).insert([data]);
         onLogin('Account created!');
@@ -396,6 +434,9 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [portfolioItems, setPortfolioItems] = useState([]);
   const [rawPortfolioText, setRawPortfolioText] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
+  
+  // --- QUIZ STATE ---
+  const [quizState, setQuizState] = useState({ selected: null, status: 'idle' }); // 'idle', 'correct', 'incorrect'
 
   useEffect(() => {
     const fetchData = async () => {
@@ -503,19 +544,33 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     setPaymentModal(null); 
   };
 
-  const handleQuizSubmit = async (categoryId, answer) => {
-    if (QUIZZES[categoryId].answer === answer) {
-      const newSkills = [...unlockedSkills, categoryId];
-      setUnlockedSkills(newSkills);
-      setBadges([...badges, 'Skill Unlocked']);
-      
-      await supabase.from('freelancers').update({ unlocked_skills: newSkills }).eq('id', user.id);
-      setUser({ ...user, unlockedSkills: newSkills });
+  // --- ENHANCED QUIZ HANDLER ---
+  const handleQuizSelection = async (categoryId, answer) => {
+    const correctAnswer = QUIZZES[categoryId].answer;
+    setQuizState({ selected: answer, status: answer === correctAnswer ? 'correct' : 'incorrect' });
 
-      showToast("Correct! Category Unlocked.", "success");
-      setModal(null);
+    if (answer === correctAnswer) {
+      // Wait 1.5s to show green success state, then unlock
+      setTimeout(async () => {
+        const newSkills = [...unlockedSkills, categoryId];
+        setUnlockedSkills(newSkills);
+        
+        // Add XP and Badge logic visually (mockup)
+        setBadges([...badges, 'Skill Unlocked']);
+        
+        await supabase.from('freelancers').update({ unlocked_skills: newSkills }).eq('id', user.id);
+        setUser({ ...user, unlockedSkills: newSkills });
+
+        setModal(null); // Close quiz
+        setQuizState({ selected: null, status: 'idle' });
+        showToast("🎉 Skill Unlocked! +500 XP", "success");
+      }, 1500);
     } else {
-      showToast("Incorrect. Try again!", "error");
+      // Reset after 1s if wrong
+      setTimeout(() => {
+        setQuizState({ selected: null, status: 'idle' });
+        showToast("Incorrect. Try again!", "error");
+      }, 1000);
     }
   };
 
@@ -605,21 +660,68 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
               </div>
             )}
 
+            {/* --- IMPROVED ACADEMY UI --- */}
             {tab === 'academy' && !isClient && (
-               <div className="space-y-6 animate-fade-in">
-                  <h2 className="text-2xl font-bold dark:text-white flex items-center gap-2"><BookOpen className="text-indigo-600"/> Academy - Unlock Skills</h2>
+               <div className="space-y-8 animate-fade-in">
+                  {/* Gamified Header */}
+                  <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
+                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
+                     <div className="relative z-10 flex justify-between items-end">
+                        <div>
+                           <h2 className="text-3xl font-bold mb-2 flex items-center gap-3"><Trophy size={32} className="text-yellow-300"/> Level {Math.floor(unlockedSkills.length / 2) + 1} Freelancer</h2>
+                           <p className="text-indigo-100">Complete quizzes to unlock new job categories and earn badges!</p>
+                        </div>
+                        <div className="text-right hidden sm:block">
+                           <div className="text-4xl font-black">{unlockedSkills.length * 500} <span className="text-lg font-normal opacity-70">XP</span></div>
+                           <div className="text-sm opacity-80">{unlockedSkills.length} / 4 Skills Mastered</div>
+                        </div>
+                     </div>
+                     {/* Progress Bar */}
+                     <div className="mt-6 h-3 w-full bg-black/20 rounded-full overflow-hidden backdrop-blur-sm">
+                        <div className="h-full bg-yellow-400 transition-all duration-1000 ease-out" style={{ width: `${(unlockedSkills.length / 4) * 100}%` }}></div>
+                     </div>
+                  </div>
+
+                  {/* Skill Cards Grid */}
                   <div className="grid md:grid-cols-2 gap-6">
                      {CATEGORIES.map((cat) => {
                        const isUnlocked = unlockedSkills.includes(cat.id);
                        return (
-                         <div key={cat.id} className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 flex justify-between items-center">
-                            <div className="flex items-center gap-4">
-                               <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${cat.color}`}>{cat.icon}</div>
-                               <div><h3 className="font-bold dark:text-white">{cat.name}</h3><p className="text-xs text-gray-500">{isUnlocked ? "Unlocked & Verified" : "Locked - Take Quiz"}</p></div>
+                         <div 
+                           key={cat.id} 
+                           className={`relative bg-white dark:bg-gray-900 p-6 rounded-2xl border transition-all duration-300 group hover:-translate-y-1 hover:shadow-xl
+                             ${isUnlocked 
+                               ? 'border-emerald-200 dark:border-emerald-900/50 shadow-emerald-100 dark:shadow-none' 
+                               : 'border-gray-200 dark:border-gray-800 hover:border-indigo-200 dark:hover:border-indigo-900'
+                             }`}
+                         >
+                            {/* Status Badge */}
+                            <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 
+                                ${isUnlocked ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+                                {isUnlocked ? <><Check size={12}/> Mastered</> : <><Lock size={12}/> Locked</>}
                             </div>
-                            <Button variant={isUnlocked ? "success" : "outline"} onClick={() => !isUnlocked && setModal(`quiz-${cat.id}`)} disabled={isUnlocked} className={isUnlocked ? "bg-emerald-100 text-emerald-700 border-none dark:bg-emerald-900/30 dark:text-emerald-400" : ""}>
-                                {isUnlocked ? <><Unlock size={18}/> Unlocked</> : <><Lock size={18}/> Take Quiz</>}
-                            </Button>
+
+                            <div className="flex items-start gap-4 mb-6">
+                               <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${cat.bg} ${cat.color} group-hover:scale-110 transition-transform duration-300 shadow-sm`}>
+                                  {cat.icon}
+                               </div>
+                               <div>
+                                  <h3 className="font-bold text-lg dark:text-white">{cat.name}</h3>
+                                  <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">{cat.description}</p>
+                               </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
+                               <div className="text-xs font-bold text-gray-400 flex items-center gap-1"><Zap size={14} className="fill-yellow-400 text-yellow-400"/> +{cat.xp} XP</div>
+                               <Button 
+                                 variant={isUnlocked ? "success" : "primary"} 
+                                 onClick={() => !isUnlocked && setModal(`quiz-${cat.id}`)} 
+                                 disabled={isUnlocked}
+                                 className={`h-10 px-6 text-xs ${isUnlocked ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none shadow-none' : ''}`}
+                               >
+                                  {isUnlocked ? "Unlocked" : "Start Quiz"}
+                               </Button>
+                            </div>
                          </div>
                        )
                      })}
@@ -773,16 +875,48 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
           </form>
         </Modal>
       )}
+      {/* --- ENHANCED QUIZ MODAL --- */}
       {modal?.startsWith('quiz-') && (
-        <Modal title="Skill Assessment" onClose={() => setModal(null)}>
-           <div className="space-y-4">
-              <p className="text-gray-600 dark:text-gray-300 mb-4">Pass this quiz to unlock the <strong>{QUIZZES[modal.replace('quiz-', '')]?.answer || 'Skill'}</strong> badge and apply for jobs.</p>
-              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-                 <p className="font-bold mb-4 dark:text-white">{QUIZZES[modal.replace('quiz-', '')]?.question}</p>
-                 <div className="space-y-2">
-                    {QUIZZES[modal.replace('quiz-', '')]?.options.map(opt => (
-                       <button key={opt} onClick={() => handleQuizSubmit(modal.replace('quiz-', ''), opt)} className="w-full text-left p-3 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:border-indigo-500 transition-all dark:text-gray-300">{opt}</button>
-                    ))}
+        <Modal title="Skill Assessment" onClose={() => {setModal(null); setQuizState({selected: null, status: 'idle'})}}>
+           <div className="space-y-6">
+              {/* Progress Header */}
+              <div className="flex justify-between items-center">
+                 <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-1 rounded dark:bg-indigo-900 dark:text-indigo-300">Question 1/1</span>
+                 <span className="text-xs text-gray-400">Win +500 XP</span>
+              </div>
+
+              {/* Question */}
+              <div>
+                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+                    {QUIZZES[modal.replace('quiz-', '')]?.question}
+                 </h3>
+                 
+                 <div className="space-y-3">
+                    {QUIZZES[modal.replace('quiz-', '')]?.options.map(opt => {
+                       const isSelected = quizState.selected === opt;
+                       const isCorrect = quizState.status === 'correct';
+                       const isWrong = quizState.status === 'incorrect';
+                       
+                       let btnClass = "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-indigo-500 dark:hover:border-indigo-500";
+                       
+                       if (isSelected) {
+                          if (isCorrect) btnClass = "bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-500 dark:text-white";
+                          else if (isWrong) btnClass = "bg-red-50 border-red-500 text-red-700 dark:bg-red-900/30 dark:border-red-500 dark:text-white";
+                       }
+
+                       return (
+                          <button 
+                             key={opt} 
+                             onClick={() => handleQuizSelection(modal.replace('quiz-', ''), opt)} 
+                             className={`w-full text-left p-4 rounded-xl border-2 font-medium transition-all flex justify-between items-center ${btnClass}`}
+                             disabled={quizState.status !== 'idle'}
+                          >
+                             {opt}
+                             {isSelected && isCorrect && <CheckCircle className="text-emerald-500"/>}
+                             {isSelected && isWrong && <X className="text-red-500"/>}
+                          </button>
+                       )
+                    })}
                  </div>
               </div>
            </div>
