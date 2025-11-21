@@ -3,7 +3,7 @@ import {
   Briefcase, User, CheckCircle, ArrowRight, Menu, X, 
   Code, PenTool, Video, Music, Shield, Rocket, Loader2,
   Instagram, Twitter, Linkedin, LogOut, PlusCircle,
-  LayoutDashboard, FileText, Search, Bell, ChevronRight, Star, Send, Mail, MessageSquare, ThumbsUp, ThumbsDown, UserCircle
+  LayoutDashboard, FileText, Search, Bell, ChevronRight, Star, Send, Mail, MessageSquare, ThumbsUp, ThumbsDown, UserCircle, UploadCloud
 } from 'lucide-react';
 
 // --- Import Services ---
@@ -11,7 +11,7 @@ import { auth } from './firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { supabase } from './supabase'; 
 
-// --- UTILS ---
+// --- CONSTANTS ---
 const COLORS = {
   primary: "from-indigo-600 to-violet-600",
   secondary: "from-emerald-500 to-teal-500",
@@ -160,8 +160,7 @@ const ChatSystem = ({ currentUser, activeChat, setActiveChat }) => {
   );
 };
 
-// --- SUB-COMPONENTS ---
-
+// --- LANDING PAGE ---
 const LandingPage = ({ setView, onFeedback }) => (
   <div className="bg-white">
     <nav className="fixed w-full z-50 bg-white/80 backdrop-blur-lg border-b border-gray-100">
@@ -235,6 +234,7 @@ const LandingPage = ({ setView, onFeedback }) => (
   </div>
 );
 
+// --- AUTH COMPONENT (UPDATED UPLOAD UI) ---
 const Auth = ({ setView, onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState('freelancer');
@@ -273,7 +273,44 @@ const Auth = ({ setView, onLogin }) => {
          <div className="flex justify-between items-center mb-8"><h2 className="text-2xl font-black text-gray-900">{isLogin ? 'Welcome' : 'Join Us'}</h2><button onClick={() => setView('home')}><X/></button></div>
          {!isLogin && <div className="flex bg-gray-100 p-1 rounded-xl mb-6"><button onClick={() => setRole('freelancer')} className={`flex-1 py-2 text-sm font-bold rounded-lg ${role === 'freelancer' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>Freelancer</button><button onClick={() => setRole('client')} className={`flex-1 py-2 text-sm font-bold rounded-lg ${role === 'client' ? 'bg-white shadow-sm' : 'text-gray-500'}`}>Client</button></div>}
          <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && <><Input name="name" label="Name" required /><div className="grid grid-cols-2 gap-4"><Input name="phone" label="Phone" required /><Input name="nationality" label="Country" required /></div>{role === 'freelancer' ? <><div className="grid grid-cols-2 gap-4"><Input name="age" label="Age" /><Input name="gender" label="Gender" type="select" options={["Male", "Female"]} /></div><Input name="upi" label="UPI ID" /><input type="file" onChange={(e) => setFile(e.target.files[0])}/></> : <><Input name="org" label="Org?" type="select" options={["No", "Yes"]} /><input type="file" onChange={(e) => setFile(e.target.files[0])}/></>}</>}
+            {!isLogin && (
+              <>
+                <Input name="name" label="Name" required />
+                <div className="grid grid-cols-2 gap-4"><Input name="phone" label="Phone" required /><Input name="nationality" label="Country" required /></div>
+                {role === 'freelancer' ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-4"><Input name="age" label="Age" /><Input name="gender" label="Gender" type="select" options={["Male", "Female"]} /></div>
+                    <Input name="upi" label="UPI ID" />
+                    
+                    {/* NEW UPLOAD UI */}
+                    <div className="mb-2">
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">School ID / Aadhaar</label>
+                      <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:bg-gray-50 relative transition-colors">
+                        <input type="file" onChange={(e) => setFile(e.target.files[0])} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" required />
+                        <UploadCloud className="mx-auto text-indigo-400 mb-2" size={24} />
+                        <p className="text-sm font-bold text-gray-700">{file ? file.name : "Click to Upload"}</p>
+                        <p className="text-xs text-gray-400 mt-1">Max 2MB</p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Input name="org" label="Org?" type="select" options={["No", "Yes"]} />
+                    
+                    {/* NEW UPLOAD UI */}
+                    <div className="mb-2">
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">Business Proof / ID</label>
+                      <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:bg-gray-50 relative transition-colors">
+                        <input type="file" onChange={(e) => setFile(e.target.files[0])} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" required />
+                        <UploadCloud className="mx-auto text-violet-400 mb-2" size={24} />
+                        <p className="text-sm font-bold text-gray-700">{file ? file.name : "Click to Upload"}</p>
+                        <p className="text-xs text-gray-400 mt-1">Max 2MB</p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
             <Input name="email" label="Email" required /><Input name="password" label="Password" type="password" required />
             <Button className="w-full mt-6" disabled={loading}>{loading ? 'Processing...' : (isLogin ? 'Log In' : 'Create Account')}</Button>
          </form>
@@ -283,6 +320,7 @@ const Auth = ({ setView, onLogin }) => {
   );
 };
 
+// --- DASHBOARD ---
 const Dashboard = ({ user, onLogout, showToast }) => {
   const isClient = user.type === 'client';
   const [tab, setTab] = useState('overview');
@@ -340,13 +378,11 @@ const Dashboard = ({ user, onLogout, showToast }) => {
     await supabase.from('applications').update({ status }).eq('id', appId);
     await supabase.from('notifications').insert([{ user_id: freelancerId, message: `Application ${status} by client.` }]);
     showToast(`Marked as ${status}`);
-    // Optimistic update
     setApplications(applications.map(a => a.id === appId ? { ...a, status } : a));
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
       <aside className={`fixed md:static inset-y-0 left-0 z-40 w-72 bg-white border-r border-gray-200 transform ${menuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-200`}>
         <div className="p-8 border-b border-gray-50 flex justify-between items-center">
           <div className="flex items-center gap-2 font-black text-xl text-gray-900"><div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${COLORS.primary} flex items-center justify-center text-white`}><Rocket size={16} /></div>TeenVerse</div>
@@ -367,13 +403,9 @@ const Dashboard = ({ user, onLogout, showToast }) => {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 min-w-0 overflow-y-auto h-screen">
          <header className="bg-white/80 backdrop-blur-md sticky top-0 z-30 border-b border-gray-200 px-8 py-4 flex justify-between items-center">
-            <div className="flex items-center gap-4">
-               <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 hover:bg-gray-100 rounded-lg"><Menu/></button>
-               <h2 className="text-xl font-bold text-gray-800 capitalize">{tab}</h2>
-            </div>
+            <div className="flex items-center gap-4"><button onClick={() => setMenuOpen(true)} className="md:hidden p-2 hover:bg-gray-100 rounded-lg"><Menu/></button><h2 className="text-xl font-bold text-gray-800 capitalize">{tab}</h2></div>
             <div className="flex items-center gap-4 relative">
                {isClient && <Button variant="primary" icon={PlusCircle} onClick={() => setModal('post-job')}>Post Job</Button>}
                <button className="p-2 text-gray-400 hover:text-gray-600 rounded-full relative"><Bell size={20}/>{notifications.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>}</button>
@@ -445,6 +477,7 @@ const Dashboard = ({ user, onLogout, showToast }) => {
          </div>
       </main>
 
+      {/* Modals */}
       {modal === 'post-job' && (
         <Modal title="Post Job" onClose={() => setModal(null)}>
           <form onSubmit={handlePostJob} className="space-y-4">
@@ -460,7 +493,6 @@ const Dashboard = ({ user, onLogout, showToast }) => {
       {modal === 'apply-job' && (
         <Modal title={`Apply for ${selectedJob?.title}`} onClose={() => setModal(null)}>
           <form onSubmit={handleApplyJob} className="space-y-4">
-             <div className="bg-indigo-50 p-3 rounded-lg text-indigo-700 text-sm mb-2">Client Budget: <strong>{selectedJob?.budget}</strong></div>
              <Input name="bid_amount" label="Your Bid Amount (₹)" required />
              <Input name="cover_letter" label="Cover Letter" type="textarea" placeholder="Why are you the best fit?" required />
              <Button className="w-full" variant="success">Submit Application</Button>
