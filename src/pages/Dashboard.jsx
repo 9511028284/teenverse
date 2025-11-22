@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Rocket, Menu, LayoutDashboard, Briefcase, FileText, MessageSquare, BookOpen, Sparkles, Settings, LogOut, 
   Award, Sun, Moon, Bell, Search, Filter, PlusCircle, Zap, Lock, Check, Clock, Trash2, ThumbsUp, CreditCard, 
-  Receipt, X, CheckCircle, Package, Save // <--- 'Save' icon added here
+  Receipt, X, CheckCircle, Package, Save, Share2, Download, Trophy, Unlock
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { CATEGORIES, COLORS, QUIZZES } from '../utils/constants';
@@ -10,6 +10,7 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Modal from '../components/ui/Modal';
 import ChatSystem from '../components/features/ChatSystem';
+import Pricingpage from './PricingPages';
 
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
   const isClient = user.type === 'client';
@@ -166,26 +167,33 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     if (error) showToast(error.message, 'error'); else { showToast('Applied successfully!'); setModal(null); }
   };
 
-const handleUpdateProfile = async (e) => {
+  const handleUpdateProfile = async (e) => {
     e.preventDefault();
     const tableName = isClient ? 'clients' : 'freelancers';
     
-    // 1. Clone the form data
-    const updates = { ...profileForm };
+    const cleanUpdates = {
+        name: profileForm.name,
+        phone: profileForm.phone,
+        nationality: profileForm.nationality
+    };
 
-    // 2. REMOVE fields that don't exist in the database columns
-    delete updates.type;            // Only for UI logic
-    delete updates.unlockedSkills;  // UI variable (DB uses unlocked_skills)
-    delete updates.badges;          // UI variable (not in DB yet or managed separately)
+    if (!isClient) {
+        cleanUpdates.age = profileForm.age;
+        cleanUpdates.qualification = profileForm.qualification;
+        cleanUpdates.specialty = profileForm.specialty;
+        cleanUpdates.services = profileForm.services;
+        cleanUpdates.upi = profileForm.upi;
+    } else {
+        cleanUpdates.is_organisation = profileForm.is_organisation;
+    }
 
-    // 3. Send clean data to Supabase
-    const { error } = await supabase.from(tableName).update(updates).eq('id', user.id);
+    const { error } = await supabase.from(tableName).update(cleanUpdates).eq('id', user.id);
     
     if (error) { 
       showToast(error.message, 'error'); 
     } else { 
       showToast("Profile updated successfully!"); 
-      setUser(profileForm); 
+      setUser({ ...user, ...cleanUpdates }); 
     }
   };
 
@@ -251,15 +259,24 @@ const handleUpdateProfile = async (e) => {
     setApplications(applications.map(a => a.id === appId ? { ...a, status } : a));
   };
 
+  // --- SHARE PROFILE CARD ---
+  const handleDownloadCard = () => {
+    alert("In a real app, this would download the image using html2canvas! For now, take a screenshot to share on Instagram.");
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex transition-colors duration-300">
       {/* Sidebar */}
-      <aside className={`fixed md:static inset-y-0 left-0 z-40 w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform ${menuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-200`}>
-        <div className="p-8 border-b border-gray-50 dark:border-gray-800 flex justify-between items-center">
+      
+      <aside className={`fixed md:static inset-y-0 left-0 z-40 w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform ${menuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-200 flex flex-col h-screen`}>
+        <div className="p-8 border-b border-gray-50 dark:border-gray-800 flex justify-between items-center flex-shrink-0">
           <div className="flex items-center gap-2 font-black text-xl text-gray-900 dark:text-white"><div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${COLORS.primary} flex items-center justify-center text-white`}><Rocket size={16} /></div>TeenVerse</div>
           <button onClick={() => setMenuOpen(false)} className="md:hidden text-gray-400"><X/></button>
         </div>
-        <div className="p-4 space-y-1">
+
+ 
+        
+        <div className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
            <button onClick={() => {setTab('overview'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium ${tab === 'overview' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><LayoutDashboard size={18}/> Dashboard</button>
            <button onClick={() => {setTab('jobs'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium ${tab === 'jobs' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><Briefcase size={18}/> {isClient ? 'Find Services' : 'Find Work'}</button>
            {!isClient && <button onClick={() => {setTab('my-services'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium ${tab === 'my-services' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><Package size={18}/> My Services</button>}
@@ -269,11 +286,12 @@ const handleUpdateProfile = async (e) => {
              <>
                <button onClick={() => {setTab('academy'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium ${tab === 'academy' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><BookOpen size={18}/> Academy</button>
                <button onClick={() => {setTab('portfolio'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium ${tab === 'portfolio' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><Sparkles size={18}/> Portfolio AI</button>
+               <button onClick={() => {setTab('profile-card'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium ${tab === 'profile-card' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><Share2 size={18}/> Share Profile</button>
              </>
            )}
            <button onClick={() => {setTab('settings'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium ${tab === 'settings' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><Settings size={18}/> Settings</button>
         </div>
-        <div className="absolute bottom-0 w-full p-6 border-t border-gray-100 dark:border-gray-800">
+        <div className="p-6 border-t border-gray-100 dark:border-gray-800 flex-shrink-0">
            <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center font-bold text-gray-600 dark:text-gray-300">{user.name[0]}</div>
               <div className="overflow-hidden">
@@ -281,6 +299,7 @@ const handleUpdateProfile = async (e) => {
                 <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.type}</p>
               </div>
            </div>
+           
            <Button variant="outline" className="w-full justify-start text-gray-500 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 border-gray-200 dark:border-gray-700" icon={LogOut} onClick={onLogout}>Sign Out</Button>
         </div>
       </aside>
@@ -291,7 +310,7 @@ const handleUpdateProfile = async (e) => {
          <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md sticky top-0 z-30 border-b border-gray-200 dark:border-gray-800 px-8 py-4 flex justify-between items-center">
             <div className="flex items-center gap-4">
                <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg dark:text-white"><Menu/></button>
-               <h2 className="text-xl font-bold text-gray-800 dark:text-white capitalize">{tab}</h2>
+               <h2 className="text-xl font-bold text-gray-800 dark:text-white capitalize">{tab === 'profile-card' ? 'Share Your Card' : tab}</h2>
             </div>
             <div className="flex items-center gap-4 relative">
                {isClient && !parentMode && <Button variant="primary" icon={PlusCircle} onClick={() => setModal('post-job')}>Post Job</Button>}
@@ -310,6 +329,62 @@ const handleUpdateProfile = async (e) => {
          </header>
 
          <div className="p-8 max-w-6xl mx-auto">
+            {/* NEW TAB: PROFILE CARD (SHAREABLE) */}
+            {tab === 'profile-card' && !isClient && (
+                <div className="flex flex-col items-center justify-center animate-fade-in">
+                   <div className="bg-gradient-to-br from-gray-900 to-black p-8 rounded-[32px] w-[350px] text-white shadow-2xl border border-gray-800 relative overflow-hidden group hover:scale-105 transition-transform duration-500">
+                      {/* Decorative Glows */}
+                      <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-500 rounded-full blur-[80px] opacity-40 group-hover:opacity-60 transition-opacity"></div>
+                      <div className="absolute bottom-0 left-0 w-40 h-40 bg-purple-500 rounded-full blur-[80px] opacity-40 group-hover:opacity-60 transition-opacity"></div>
+
+                      <div className="relative z-10 flex flex-col items-center text-center">
+                         <div className="w-24 h-24 rounded-full border-4 border-indigo-500 p-1 mb-4">
+                             <div className="w-full h-full rounded-full bg-gray-800 flex items-center justify-center text-4xl font-bold text-indigo-300">
+                                 {user.name[0]}
+                             </div>
+                         </div>
+                         
+                         <h2 className="text-2xl font-black tracking-tight">{user.name}</h2>
+                         <p className="text-indigo-400 font-medium mb-6">TeenVerse {user.role}</p>
+
+                         <div className="grid grid-cols-2 gap-4 w-full mb-6">
+                            <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm">
+                               <div className="text-2xl font-bold text-yellow-400">{Math.floor(unlockedSkills.length / 2) + 1}</div>
+                               <div className="text-xs opacity-70 uppercase tracking-widest">Level</div>
+                            </div>
+                            <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm">
+                               <div className="text-2xl font-bold text-emerald-400">{badges.length}</div>
+                               <div className="text-xs opacity-70 uppercase tracking-widest">Badges</div>
+                            </div>
+                         </div>
+
+                         {/* Skills Tags */}
+                         <div className="flex flex-wrap justify-center gap-2 mb-8">
+                            {unlockedSkills.length === 0 && <span className="text-xs opacity-50">No skills unlocked yet</span>}
+                            {unlockedSkills.map(skill => (
+                                <span key={skill} className="px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-xs font-bold text-indigo-300 uppercase">
+                                    {skill}
+                                </span>
+                            ))}
+                         </div>
+
+                         <div className="w-full pt-6 border-t border-white/10 flex justify-between items-center">
+                             <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center"><Rocket size={16}/></div>
+                                <span className="font-bold text-sm">TeenVerse</span>
+                             </div>
+                             <div className="text-xs opacity-50">Find me here!</div>
+                         </div>
+                      </div>
+                   </div>
+
+                   <div className="mt-8 text-center">
+                      <Button variant="primary" icon={Download} onClick={handleDownloadCard}>Download Story Card</Button>
+                      <p className="text-xs text-gray-500 mt-3">Perfect for Instagram Stories & WhatsApp Status</p>
+                   </div>
+                </div>
+            )}
+
             {tab === 'overview' && (
               <div className="grid md:grid-cols-3 gap-6 animate-fade-in">
                  <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-6 text-white shadow-xl"><p className="text-indigo-100 mb-2">Total {isClient ? 'Spent' : 'Earnings'}</p><h3 className="text-4xl font-bold">₹{totalEarnings.toFixed(2)}</h3></div>
@@ -325,7 +400,7 @@ const handleUpdateProfile = async (e) => {
                      <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
                      <div className="relative z-10 flex justify-between items-end">
                         <div>
-                           <h2 className="text-3xl font-bold mb-2 flex items-center gap-3"><Award size={32} className="text-yellow-300"/> Level {Math.floor(unlockedSkills.length / 2) + 1} Freelancer</h2>
+                           <h2 className="text-3xl font-bold mb-2 flex items-center gap-3"><Trophy size={32} className="text-yellow-300"/> Level {Math.floor(unlockedSkills.length / 2) + 1} Freelancer</h2>
                            <p className="text-indigo-100">Complete quizzes to unlock new job categories and earn badges!</p>
                         </div>
                      </div>
@@ -473,7 +548,6 @@ const handleUpdateProfile = async (e) => {
                         <div className="flex gap-2">
                            <Button variant="outline" className="shrink-0" icon={MessageSquare} onClick={() => {setActiveChat({ id: isClient ? app.freelancer_id : app.client_id, name: isClient ? app.freelancer_name : 'Client' }); setTab('messages');}}>Chat</Button>
                            {isClient && app.status === 'Pending' && !parentMode && <><Button variant="success" icon={ThumbsUp} onClick={() => { if(!parentMode) updateStatus(app.id, 'Accepted', app.freelancer_id)}}>Accept</Button></>}
-                           {/* NEW: Changed to open Custom Modal */}
                            {isClient && app.status === 'Accepted' && !parentMode && (
                               <Button variant="payment" icon={CreditCard} onClick={() => initiatePayment(app.id, app.bid_amount, app.freelancer_id)}>Pay Now</Button>
                            )}

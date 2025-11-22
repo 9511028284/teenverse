@@ -56,6 +56,7 @@ export default function TeenVerse() {
       {/* ROUTING */}
       {view === 'home' && <LandingPage setView={setView} onFeedback={handleFeedback} darkMode={darkMode} toggleTheme={toggleTheme} />}
       {view === 'auth' && <Auth setView={setView} onLogin={(msg) => showToast(msg)} />}
+       
       
       {/* ADMIN DASHBOARD */}
       {view === 'admin' && user?.type === 'admin' && <AdminDashboard user={user} onLogout={async () => { await signOut(auth); setView('home'); showToast('Logged out'); }} />}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Code, PenTool, Video, Music } from 'lucide-react';
+import { Code, PenTool, Video, Music, ShieldCheck, Star, Zap } from 'lucide-react';
 
 export const COLORS = {
   primary: "from-indigo-600 to-violet-600",
@@ -51,3 +51,46 @@ export const QUIZZES = {
   'video': { question: "Which format is standard for web video?", options: ["MP4", "PSD", "DOCX", "EXE"], answer: "MP4" },
   'music': { question: "What is a common audio bitrate?", options: ["320 kbps", "1080p", "4K", "RGB"], answer: "320 kbps" }
 };
+
+// --- NEW: PRICING PLANS ---
+export const PRICING_PLANS = [
+  {
+    id: 'starter',
+    name: "Starter Verification",
+    price: 19,
+    icon: <ShieldCheck size={32} className="text-blue-500" />,
+    color: "from-blue-400 to-blue-600",
+    features: [
+      "Basic 'Verified' Badge",
+      "Apply to 5 Jobs/Day",
+      "Standard Support"
+    ]
+  },
+  {
+    id: 'pro',
+    name: "Pro Freelancer",
+    price: 29,
+    icon: <Star size={32} className="text-yellow-400" />,
+    color: "from-yellow-400 to-orange-500",
+    recommended: true,
+    features: [
+      "Gold 'Pro' Badge",
+      "Unlimited Job Applications",
+      "Priority Support",
+      "Profile Highlight"
+    ]
+  },
+  {
+    id: 'elite',
+    name: "Elite Status",
+    price: 49,
+    icon: <Zap size={32} className="text-purple-500" />,
+    color: "from-purple-500 to-pink-600",
+    features: [
+      "Diamond 'Elite' Badge",
+      "Top of Search Results",
+      "0% Commission on First Job",
+      "Direct Client Access"
+    ]
+  }
+];
