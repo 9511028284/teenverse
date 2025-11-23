@@ -1,9 +1,9 @@
 import React from 'react';
-import { Rocket, Star, Search, PlusCircle, Instagram, Twitter, Linkedin, Send, Moon, Sun } from 'lucide-react';
+import { Rocket, Star, Search, PlusCircle, Instagram, Twitter, Linkedin, Send, Moon, Sun, FileText, Lock, AlertTriangle } from 'lucide-react';
 import Button from '../components/ui/Button';
 import { COLORS, CATEGORIES } from '../utils/constants';
 
-const LandingPage = ({ setView, onFeedback, darkMode, toggleTheme }) => (
+const LandingPage = ({ setView, onFeedback, darkMode, toggleTheme, onLegalClick }) => (
   <div className="bg-white dark:bg-gray-950 min-h-screen transition-colors duration-300">
     <nav className="fixed w-full z-50 bg-white/80 dark:bg-gray-950/80 backdrop-blur-lg border-b border-gray-100 dark:border-gray-800">
       <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
@@ -19,6 +19,8 @@ const LandingPage = ({ setView, onFeedback, darkMode, toggleTheme }) => (
         </div>
       </div>
     </nav>
+    
+    {/* Hero Section */}
     <section className="pt-32 pb-20 px-6 text-center max-w-5xl mx-auto">
        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold uppercase mb-8 border border-indigo-100 dark:border-indigo-800"><Star size={12} className="fill-indigo-600 dark:fill-indigo-400"/> The #1 Platform for Teen Freelancers</div>
        <h1 className="text-6xl md:text-7xl font-black text-gray-900 dark:text-white mb-8 tracking-tight">Turn your <span className="text-indigo-600 dark:text-indigo-400">Passion</span><br/> into <span className="text-emerald-500">Paychecks.</span></h1>
@@ -28,6 +30,8 @@ const LandingPage = ({ setView, onFeedback, darkMode, toggleTheme }) => (
           <Button variant="secondary" className="h-14 px-8 text-lg" icon={PlusCircle} onClick={() => setView('auth')}>Post a Job</Button>
        </div>
     </section>
+
+    {/* About Us */}
     <section className="bg-gray-50 dark:bg-gray-900 py-20 px-6">
       <div className="max-w-7xl mx-auto">
          <div className="text-center mb-12">
@@ -39,18 +43,10 @@ const LandingPage = ({ setView, onFeedback, darkMode, toggleTheme }) => (
             <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all"><h3 className="font-bold text-xl text-purple-600 dark:text-purple-400 mb-2">For Parents</h3><p className="text-gray-600 dark:text-gray-300">A safe, monitored environment where your child can learn the value of work.</p></div>
             <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-lg transition-all"><h3 className="font-bold text-xl text-emerald-600 dark:text-emerald-400 mb-2">For Clients</h3><p className="text-gray-600 dark:text-gray-300">Tap into the digital-native generation for fresh ideas and modern skills.</p></div>
          </div>
-         <h2 className="text-2xl font-bold text-center mb-8 text-gray-900 dark:text-white">Explore Opportunities</h2>
-         <div className="grid md:grid-cols-4 gap-6">
-            {CATEGORIES.map((cat, i) => (
-              <div key={i} className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 hover:shadow-xl transition-all cursor-pointer group">
-                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${cat.color} bg-gray-50 dark:bg-gray-800 group-hover:scale-110 transition-transform`}>{cat.icon}</div>
-                 <h3 className="font-bold text-gray-900 dark:text-white mb-1">{cat.name}</h3>
-                 <p className="text-sm text-gray-400">{cat.count}</p>
-              </div>
-            ))}
-         </div>
       </div>
     </section>
+
+    {/* Feedback */}
     <section className="py-20 px-6 bg-white dark:bg-gray-950">
        <div className="max-w-3xl mx-auto bg-indigo-900 rounded-3xl p-10 text-center text-white shadow-2xl relative overflow-hidden">
           <div className="relative z-10">
@@ -65,13 +61,21 @@ const LandingPage = ({ setView, onFeedback, darkMode, toggleTheme }) => (
           </div>
        </div>
     </section>
-    <footer className="bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800 py-8">
+
+    {/* Footer with Legal Links */}
+    <footer className="bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800 py-12">
        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2 font-bold text-gray-900 dark:text-white"><div className="w-6 h-6 bg-indigo-600 rounded flex items-center justify-center text-white"><Rocket size={12}/></div>TeenVerse</div>
-          <div className="flex gap-6 text-sm text-gray-500 dark:text-gray-400 font-medium"><button className="hover:text-indigo-600 dark:hover:text-indigo-400">Privacy</button><button className="hover:text-indigo-600 dark:hover:text-indigo-400">Terms</button><button className="hover:text-indigo-600 dark:hover:text-indigo-400">Contact</button></div>
+          
+          <div className="flex gap-6 text-sm text-gray-500 dark:text-gray-400 font-medium">
+             <button onClick={() => onLegalClick('privacy')} className="hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"><Lock size={14}/> Privacy Policy</button>
+             <button onClick={() => onLegalClick('terms')} className="hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"><FileText size={14}/> Terms & Conditions</button>
+             <button onClick={() => onLegalClick('disclaimer')} className="hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"><AlertTriangle size={14}/> Disclaimer</button>
+          </div>
+
           <div className="flex gap-4"><Instagram size={18} className="text-gray-400 hover:text-pink-600 cursor-pointer"/><Twitter size={18} className="text-gray-400 hover:text-blue-400 cursor-pointer"/><Linkedin size={18} className="text-gray-400 hover:text-blue-700 cursor-pointer"/></div>
        </div>
-       <div className="text-center text-xs text-gray-400 mt-8">© 2025 TeenVerse Inc.</div>
+       <div className="text-center text-xs text-gray-400 mt-8">© 2025 TeenVerse Inc. • Compliant with Child Labor Regulations</div>
     </footer>
   </div>
 );

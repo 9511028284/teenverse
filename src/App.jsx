@@ -6,17 +6,22 @@ import Toast from './components/ui/Toast';
 import LandingPage from './pages/LandingPage';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
-import AdminDashboard from './pages/AdminPage'; // <--- IMPORT NEW ADMIN PAGE
+import AdminDashboard from './pages/AdminPage'; 
+import Legal from './pages/Legal';
+import TermsAgreement from './pages/TermsAgreement'; // Import new page
 
 export default function TeenVerse() {
   const [view, setView] = useState('home');
   const [user, setUser] = useState(null);
   const [toast, setToast] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
+  const [legalPage, setLegalPage] = useState('terms');
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (u) => {
+      
       if (u) {
+
         // 1. CHECK IF ADMIN
         const { data: adminCheck } = await supabase.from('admins').select('*').eq('email', u.email).single();
         
@@ -27,8 +32,9 @@ export default function TeenVerse() {
           showToast('Welcome back, Admin.');
           return; 
         }
+        // If we are currently on the 'terms' page (just signed up), don't auto-redirect yet
+        if (view === 'terms') return; 
 
-        // 2. NORMAL USER CHECK
         let { data: c } = await supabase.from('clients').select('*').eq('id', u.uid).single();
         if (c) { setUser({ ...c, type: 'client' }); setView('dashboard'); }
         else {
@@ -38,7 +44,7 @@ export default function TeenVerse() {
         showToast('Logged in successfully');
       } else { setUser(null); }
     });
-  }, []);
+  }, [view]); // Depend on view so we don't redirect away from terms prematurely
 
   useEffect(() => {
     if (darkMode) document.documentElement.classList.add('dark');
@@ -49,20 +55,29 @@ export default function TeenVerse() {
   const showToast = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 4000); };
   const handleFeedback = async (e) => { e.preventDefault(); const formData = new FormData(e.target); await supabase.from('feedback').insert([{ name: formData.get('name'), email: formData.get('email'), message: formData.get('message') }]); showToast('Feedback sent!'); e.target.reset(); };
 
+  const handleLegalNavigation = (page) => {
+    setLegalPage(page);
+    setView('legal');
+  };
+
   return (
     <>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
-      {/* ROUTING */}
-      {view === 'home' && <LandingPage setView={setView} onFeedback={handleFeedback} darkMode={darkMode} toggleTheme={toggleTheme} />}
-      {view === 'auth' && <Auth setView={setView} onLogin={(msg) => showToast(msg)} />}
-       
+      {view === 'home' && <LandingPage setView={setView} onFeedback={handleFeedback} darkMode={darkMode} toggleTheme={toggleTheme} onLegalClick={handleLegalNavigation} />}
       
-      {/* ADMIN DASHBOARD */}
+      {view === 'legal' && <Legal onBack={() => setView('home')} />}
+
+      {/* Terms Agreement (Post-Signup) */}
+      {view === 'terms' && <TermsAgreement onAgree={() => window.location.reload()} />}
+
+        {/* ADMIN DASHBOARD */}
       {view === 'admin' && user?.type === 'admin' && <AdminDashboard user={user} onLogout={async () => { await signOut(auth); setView('home'); showToast('Logged out'); }} />}
       
-      {/* REGULAR DASHBOARD */}
-      {view === 'dashboard' && user && user.type !== 'admin' && <Dashboard user={user} setUser={setUser} onLogout={async () => { await signOut(auth); setView('home'); showToast('Logged out successfully'); }} showToast={showToast} darkMode={darkMode} toggleTheme={toggleTheme} />}
+
+      {view === 'auth' && <Auth setView={setView} onLogin={(msg) => showToast(msg)} onSignUpSuccess={() => setView('terms')} />}
+      
+      {view === 'dashboard' && user && <Dashboard user={user} setUser={setUser} onLogout={async () => { await signOut(auth); setView('home'); showToast('Logged out successfully'); }} showToast={showToast} darkMode={darkMode} toggleTheme={toggleTheme} />}
     </>
   );
 }

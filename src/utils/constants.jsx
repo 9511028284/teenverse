@@ -52,7 +52,32 @@ export const QUIZZES = {
   'music': { question: "What is a common audio bitrate?", options: ["320 kbps", "1080p", "4K", "RGB"], answer: "320 kbps" }
 };
 
-// --- NEW: PRICING PLANS ---
+// --- BATTLES DATA ---
+export const BATTLES = [
+  {
+    id: 1,
+    title: "Logo Design: Space Cafe",
+    description: "Design a modern, minimalist logo for a futuristic coffee shop on Mars.",
+    reward: "5000 XP + 'Champion' Badge",
+    participants: 12,
+    timeLeft: "2 Days",
+    entries: [
+       { id: 101, user: "Rahul K.", image: "https://via.placeholder.com/150/000000/FFFFFF/?text=SpaceCafe1", votes: 45 },
+       { id: 102, user: "Sarah M.", image: "https://via.placeholder.com/150/1a1a1a/FFFFFF/?text=SpaceCafe2", votes: 32 },
+    ]
+  },
+  {
+    id: 2,
+    title: "Code Challenge: React Counter",
+    description: "Build the most creative counter app using React & Tailwind.",
+    reward: "3000 XP + 'Code Ninja' Badge",
+    participants: 8,
+    timeLeft: "5 Days",
+    entries: []
+  }
+];
+
+// --- PRICING PLANS ---
 export const PRICING_PLANS = [
   {
     id: 'starter',

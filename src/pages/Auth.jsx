@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
-import { X, UploadCloud, Paperclip } from 'lucide-react';
+import { X, UploadCloud } from 'lucide-react';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 import { supabase } from '../supabase';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 
-const Auth = ({ setView, onLogin }) => {
+const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState('freelancer');
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
-  const [resume, setResume] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -20,12 +19,11 @@ const Auth = ({ setView, onLogin }) => {
     
     try {
       if (isLogin) {
-        // LOGIN LOGIC
+        // LOGIN
         await signInWithEmailAndPassword(auth, form.get('email'), form.get('password'));
         onLogin('Welcome back!');
-        // No reload needed for login, the App.jsx listener handles it
       } else {
-        // SIGN UP LOGIC
+        // SIGN UP
         const cred = await createUserWithEmailAndPassword(auth, form.get('email'), form.get('password'));
         
         let fileUrl = "";
@@ -36,17 +34,9 @@ const Auth = ({ setView, onLogin }) => {
           fileUrl = res.data.publicUrl;
         }
 
-        let resumeUrl = "";
-        if (role === 'freelancer' && resume) {
-          const resumeName = `resume_${cred.user.uid}_${Date.now()}`;
-          await supabase.storage.from('resumes').upload(resumeName, resume);
-          const res = supabase.storage.from('resumes').getPublicUrl(resumeName);
-          resumeUrl = res.data.publicUrl;
-        }
-
         const table = role === 'client' ? 'clients' : 'freelancers';
         
-        // FIX 1: Ensure 'type' is NOT included here to prevent the DB error
+        // SIMPLIFIED DATA (Removed resume, skills, grade, etc.)
         const data = role === 'client' 
            ? { 
                id: cred.user.uid, 
@@ -67,22 +57,14 @@ const Auth = ({ setView, onLogin }) => {
                age: form.get('age'), 
                gender: form.get('gender'), 
                upi: form.get('upi'),
-               qualification: form.get('qualification'),
-               specialty: form.get('specialty'),
-               services: form.get('services'),
-               resume_url: resumeUrl,
                unlocked_skills: [] 
              };
 
         const { error } = await supabase.from(table).insert([data]);
-        
         if (error) throw error;
 
-        onLogin('Account created!');
-        
-        // FIX 2: Force Reload to fix the Redirect Issue
-        // This ensures App.jsx re-runs and finds the user in Supabase
-        window.location.reload();
+        // Redirect to Terms Agreement Page instead of Dashboard
+        onSignUpSuccess(); 
       }
     } catch (err) { 
       alert(err.message); 
@@ -109,19 +91,9 @@ const Auth = ({ setView, onLogin }) => {
                       <Input name="age" label="Age" />
                       <Input name="gender" label="Gender" type="select" options={["Male", "Female"]} />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                       <Input name="qualification" label="Grade/Qualification" placeholder="e.g. 10th Grade" />
-                       <Input name="specialty" label="Main Skill" placeholder="e.g. Video Editing" />
-                    </div>
-                    <Input name="services" label="Services Offered" placeholder="e.g. Python, Logo Design (Comma separated)" />
                     <Input name="upi" label="UPI ID" />
-                    <div className="group">
-                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Upload Resume / CV</label>
-                      <label className="flex items-center gap-3 w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
-                        <Paperclip size={20} className="text-orange-500" /><span className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">{resume ? resume.name : "Attach Resume (PDF)..."}</span>
-                        <input type="file" onChange={(e) => setResume(e.target.files[0])} className="hidden" accept=".pdf,.doc,.docx" />
-                      </label>
-                    </div>
+                    
+                    {/* Removed Resume, Qualification, Services inputs */}
                   </>
                 ) : (
                   <Input name="org" label="Org?" type="select" options={["No", "Yes"]} />
