@@ -6,7 +6,7 @@ import {
   Trophy, Unlock, Swords, Heart, Crown, ShieldCheck, FileCheck
 } from 'lucide-react';
 import { supabase } from '../supabase';
-import { CATEGORIES, COLORS, QUIZZES, BATTLES, PRICING_PLANS } from '../utils/constants';
+import { CATEGORIES, COLORS, QUIZZES, } from '../utils/constants';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Modal from '../components/ui/Modal';
@@ -45,7 +45,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [rawPortfolioText, setRawPortfolioText] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [quizState, setQuizState] = useState({ selected: null, status: 'idle' }); 
-  const [activeBattles, setActiveBattles] = useState(BATTLES || []); 
+   
 
   useEffect(() => {
     const fetchData = async () => {
@@ -295,8 +295,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         <div className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
            <button onClick={() => {setTab('overview'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${tab === 'overview' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><LayoutDashboard size={18}/> Dashboard</button>
            
-           <button onClick={() => {setTab('pricing'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${tab === 'pricing' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><Crown size={18} className="text-yellow-500"/> Get Verified</button>
-
+           
            <button onClick={() => {setTab('jobs'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${tab === 'jobs' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><Briefcase size={18}/> {isClient ? 'Find Services' : 'Find Work'}</button>
            
            {!isClient && <button onClick={() => {setTab('my-services'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${tab === 'my-services' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><Package size={18}/> My Services</button>}
@@ -309,7 +308,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
              <>
                <button onClick={() => {setTab('academy'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${tab === 'academy' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><BookOpen size={18}/> Academy</button>
                
-               <button onClick={() => {setTab('battles'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${tab === 'battles' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><Swords size={18}/> Battles</button>
                
                <button onClick={() => {setTab('portfolio'); setMenuOpen(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${tab === 'portfolio' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}><Sparkles size={18}/> Portfolio AI</button>
                
@@ -361,16 +359,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
          </header>
 
          <div className="p-8 max-w-6xl mx-auto">
-            {/* NEW: PRICING TAB */}
-            {tab === 'pricing' && <Pricing onBack={() => setTab('overview')} showToast={showToast} />}
-
-            {tab === 'overview' && (
-              <div className="grid md:grid-cols-3 gap-6 animate-fade-in">
-                 <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-6 text-white shadow-xl"><p className="text-indigo-100 mb-2">Total {isClient ? 'Spent' : 'Earnings'}</p><h3 className="text-4xl font-bold">₹{totalEarnings.toFixed(2)}</h3></div>
-                 <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm"><p className="text-gray-500 dark:text-gray-400 mb-2">{isClient ? 'Active Jobs' : 'Jobs Applied'}</p><h3 className="text-3xl font-bold dark:text-white">{isClient ? jobs.length : applications.length}</h3></div>
-                 <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm"><p className="text-gray-500 dark:text-gray-400 mb-2">Badges Earned</p><div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold"><Award size={20}/> {badges.length}</div></div>
-              </div>
-            )}
+           
 
             {/* RECORDS & COMPLIANCE TAB */}
             {tab === 'records' && (
@@ -422,59 +411,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                </div>
             )}
 
-            {/* BATTLES TAB */}
-            {tab === 'battles' && !isClient && (
-               <div className="space-y-6 animate-fade-in">
-                  <div className="bg-gradient-to-r from-orange-500 to-red-600 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
-                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
-                     <div className="relative z-10">
-                        <h2 className="text-3xl font-bold mb-2 flex items-center gap-3"><Swords size={32}/> Weekly Battles</h2>
-                        <p className="text-orange-100">Compete with other teens, win XP, badges, and community clout!</p>
-                     </div>
-                  </div>
-                  <div className="grid gap-8">
-                     {activeBattles.map(battle => (
-                        <div key={battle.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
-                           <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex flex-col md:flex-row justify-between items-start gap-4">
-                              <div>
-                                 <div className="flex items-center gap-3 mb-2">
-                                    <span className="px-3 py-1 bg-red-100 text-red-600 text-xs font-bold rounded-full uppercase">Live</span>
-                                    <span className="text-gray-500 text-sm flex items-center gap-1"><Clock size={14}/> {battle.timeLeft} Left</span>
-                                 </div>
-                                 <h3 className="text-2xl font-bold dark:text-white mb-2">{battle.title}</h3>
-                                 <p className="text-gray-600 dark:text-gray-300">{battle.description}</p>
-                              </div>
-                              <div className="text-right">
-                                 <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Prize Pool</div>
-                                 <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{battle.reward}</div>
-                                 <Button className="mt-3" onClick={() => handleJoinBattle(battle.id)}>Join Battle</Button>
-                              </div>
-                           </div>
-                           {battle.entries && battle.entries.length > 0 && (
-                              <div className="p-6 bg-gray-50 dark:bg-gray-800/50">
-                                 <h4 className="font-bold dark:text-white mb-4">Current Entries</h4>
-                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                    {battle.entries.map(entry => (
-                                       <div key={entry.id} className="bg-white dark:bg-gray-900 rounded-xl p-3 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all">
-                                          <div className="aspect-video bg-gray-200 rounded-lg mb-3 overflow-hidden">
-                                             <img src={entry.image} alt="Entry" className="w-full h-full object-cover"/>
-                                          </div>
-                                          <div className="flex justify-between items-center">
-                                             <span className="text-xs font-bold dark:text-white truncate">{entry.user}</span>
-                                             <button onClick={() => handleVote(battle.id, entry.id)} className="flex items-center gap-1 text-xs font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 px-2 py-1 rounded-full transition-colors">
-                                                <Heart size={12} className="fill-rose-500"/> {entry.votes}
-                                             </button>
-                                          </div>
-                                       </div>
-                                    ))}
-                                 </div>
-                              </div>
-                           )}
-                        </div>
-                     ))}
-                  </div>
-               </div>
-            )}
+                    
 
             {/* ACADEMY TAB */}
             {tab === 'academy' && !isClient && (
