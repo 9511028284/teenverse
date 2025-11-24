@@ -8,7 +8,8 @@ import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminPage'; 
 import Legal from './pages/Legal';
-import TermsAgreement from './pages/TermsAgreement'; // Import new page
+import TermsAgreement from './pages/TermsAgreement';
+import ParentApproval from './pages/ParentApproval'; // Import new page
 
 export default function TeenVerse() {
   const [view, setView] = useState('home');
@@ -71,9 +72,15 @@ export default function TeenVerse() {
       {/* Terms Agreement (Post-Signup) */}
       {view === 'terms' && <TermsAgreement onAgree={() => window.location.reload()} />}
 
+
+        {/* NEW: Parent Approval Route */}
+      {view === 'parent-approval' && <ParentApproval token={approvalToken} onApprovalComplete={() => setView('home')} />}
+
+
+
         {/* ADMIN DASHBOARD */}
       {view === 'admin' && user?.type === 'admin' && <AdminDashboard user={user} onLogout={async () => { await signOut(auth); setView('home'); showToast('Logged out'); }} />}
-      
+
 
       {view === 'auth' && <Auth setView={setView} onLogin={(msg) => showToast(msg)} onSignUpSuccess={() => setView('terms')} />}
       
