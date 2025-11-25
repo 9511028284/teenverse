@@ -27,7 +27,7 @@ const Jobs = ({
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        {isClient && <Button onClick={() => setModal('post-job')} icon={PlusCircle}>Post New Job</Button>}
+       
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
