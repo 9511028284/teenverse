@@ -37,12 +37,10 @@ export default function TeenVerse() {
   // 2. Main Authentication Listener (Firebase + Supabase Profile Fetch)
   useEffect(() => {
     return onAuthStateChanged(auth, async (u) => {
-      setLoading(true);
+     
       if (u) {
-        if (view === 'terms') {
-            setLoading(false);
-            return;
-        }
+         if (view === 'terms') return;
+
 
         // A. CHECK ADMIN
         const { data: adminCheck } = await supabase
@@ -96,7 +94,7 @@ export default function TeenVerse() {
         // User Logged Out
         if (view !== 'parent-approval') {
             setUser(null); 
-            if (view !== 'landing' && view !== 'auth') setView('home'); 
+            if (view !== 'landing' && view !== 'auth' && view !== 'legal') setView('home'); 
         }
       }
       setLoading(false);
@@ -145,45 +143,21 @@ export default function TeenVerse() {
 
   // --- RENDER ---
   
-  if (loading) {
-      return <div className="h-screen w-screen flex items-center justify-center bg-white dark:bg-gray-900"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>;
-  }
 
   return (
-    <>
+   <>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
       {view === 'home' && <LandingPage setView={setView} onFeedback={handleFeedback} darkMode={darkMode} toggleTheme={toggleTheme} onLegalClick={handleLegalNavigation} />}
       
-      {view === 'legal' && <Legal onBack={() => setView('home')} page={legalPage} />}
+      {/* FIX: Pass legalPage prop to Legal component */}
+      {view === 'legal' && <Legal page={legalPage} onBack={() => setView('home')} />}
 
       {view === 'terms' && <TermsAgreement onAgree={() => window.location.reload()} />}
-
       {view === 'parent-approval' && <ParentApproval token={approvalToken} onApprovalComplete={() => setView('home')} />}
-
       {view === 'auth' && <Auth setView={setView} onLogin={(msg) => showToast(msg)} onSignUpSuccess={() => setView('terms')} />}
-      
       {view === 'admin' && user?.type === 'admin' && <AdminDashboard user={user} onLogout={async () => { await signOut(auth); setView('home'); showToast('Logged out'); }} />}
-
-      {/* DASHBOARD (Contains ChatSystem inside it usually) */}
-      {view === 'dashboard' && user && user.type !== 'admin' && (
-        <Dashboard 
-            user={user} 
-            setUser={setUser} 
-            onLogout={async () => { await signOut(auth); setView('home'); showToast('Logged out successfully'); }} 
-            showToast={showToast} 
-            darkMode={darkMode} 
-            toggleTheme={toggleTheme} 
-        />
-      )}
-      
-      {/* HIDDEN DEBUG ROUTE: If you need to test ChatSystem in isolation, enable this view */}
-      {view === 'chat-debug' && user && (
-          <div className="p-10 h-screen bg-gray-100 dark:bg-gray-900">
-             <button onClick={() => setView('dashboard')} className="mb-4 text-blue-500">Back to Dashboard</button>
-             <ChatSystem user={user} activeChat={null} setActiveChat={()=>{}} />
-          </div>
-      )}
+      {view === 'dashboard' && user && user.type !== 'admin' && <Dashboard user={user} setUser={setUser} onLogout={async () => { await signOut(auth); setView('home'); showToast('Logged out successfully'); }} showToast={showToast} darkMode={darkMode} toggleTheme={toggleTheme} />}
     </>
   );
 }
