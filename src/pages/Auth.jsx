@@ -19,6 +19,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [age, setAge] = useState(null);
   const [isMinor, setIsMinor] = useState(false);
   const [parentEmail, setParentEmail] = useState('');
+
+ 
   
   // OTP State
   const [showVerify, setShowVerify] = useState(false);
@@ -147,6 +149,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       fileUrl = res.data.publicUrl;
     }
 
+    
+
     const table = role === 'client' ? 'clients' : 'freelancers';
     
     const data = role === 'client' 
@@ -157,7 +161,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
            phone: formDataObj.phone, 
            nationality: formDataObj.nationality, 
            id_proof_url: fileUrl, 
-           is_organisation: formDataObj.org 
+           is_organisation: formDataObj.org,
+           
          }
        : { 
            id: cred.user.uid, 
@@ -173,6 +178,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
            parent_email: isMinor ? parentEmail : null, // Store Parent Email if minor
            is_parent_verified: isMinor, // Flag to show they were verified
            unlocked_skills: [] 
+           
          };
 
     const { error } = await supabase.from(table).insert([data]);
@@ -296,9 +302,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                     ) : (
                       <Input name="org" label="Org?" type="select" options={["No", "Yes"]} />
                     )}
+                     
+                     
                     
                     <div className="group">
-                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 ml-1">{role === 'freelancer' ? "Upload ID Proof" : "Upload Org ID"}</label>
+                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 ml-1">{role === 'freelancer' ? "Upload your id if 18 or above else upload your parent" : "Upload Org ID"}</label>
+                      <p className="text-xs text-orange-700 dark:text-orange-300">
+                                note: we just want to verify your name and age 
+                                 so blur your photo, id number etc.
+                              </p>
                       <label className="flex items-center gap-3 w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-all group-focus-within:ring-2 group-focus-within:ring-indigo-500">
                         <UploadCloud size={20} className="text-indigo-500" />
                         <span className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">{file ? file.name : "Click to upload..."}</span>

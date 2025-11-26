@@ -25,6 +25,9 @@ import Portfolio from '../components/dashboard/Portfolio';
 import ProfileCard from '../components/dashboard/ProfileCard';
 import Records from '../components/dashboard/Records';
 import SettingsComp from '../components/dashboard/SettingsComp';
+// NEW IMPORT FOR DOWNLOAD
+import html2canvas from 'html2canvas'; 
+
 
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
   const isClient = user?.type === 'client';
@@ -37,7 +40,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [services, setServices] = useState([]); 
   const [applications, setApplications] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  
+
+  // NEW: Referral Stats State
+  const [referralStats, setReferralStats] = useState({ count: 0, earnings: 0 });
+
   // UI States
   const [showNotifications, setShowNotifications] = useState(false); 
   const [modal, setModal] = useState(null);
@@ -59,10 +65,19 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [activeBattles, setActiveBattles] = useState(BATTLES || []); 
 
+  
+
+
   const SAFE_QUIZZES = QUIZZES || {};
 
   const [quizState, setQuizState] =
   useState({ selected : null, status: 'idle'});
+
+
+
+  // REF FOR PROFILE CARD DOWNLOAD
+  const profileCardRef = useRef(null); 
+  
 
 
   const LOCAL_CATEGORIES = {
@@ -99,6 +114,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
           }
       }
 
+
+
       let appsData = [];
       if (isClient) {
         const { data: myJobs } = await supabase.from('jobs').select('*').eq('client_id', user.id).order('created_at', {ascending: false});
@@ -131,7 +148,16 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         lastNotificationId.current = latest.id;
       }
       setNotifications(notifs || []);
+      
+       // 4. REFERRALS (Fixed placement inside async function)
+      const { count } = await supabase
+         .from('referrals')
+         .select('*', { count: 'exact', head: true })
+         .eq('referrer_id', user.id);
+      
+      setReferralStats({ count: count || 0, earnings: (count || 0) * 50 });
     };
+    
 
     fetchData();
     const interval = setInterval(fetchData, 5000); 
@@ -301,7 +327,33 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
      showToast("Voted!");
   };
 
-  const handleDownloadCard = () => alert("Download feature coming soon!");
+  
+  // --- NEW: REAL DOWNLOAD FUNCTION ---
+  const handleDownloadCard = async () => {
+    if (profileCardRef.current) {
+      try {
+        showToast("Generating image...", "info");
+        const canvas = await html2canvas(profileCardRef.current, {
+           backgroundColor: null, // Transparent background if needed, or matches CSS
+           scale: 2, // Higher resolution
+           useCORS: true // Allow loading external images (avatars)
+        });
+        
+        const image = canvas.toDataURL("image/png");
+        const link = document.createElement("a");
+        link.href = image;
+        link.download = `TeenVerse-${user.name || 'Profile'}.png`;
+        link.click();
+        
+        showToast("Downloaded successfully!", "success");
+      } catch (err) {
+        console.error("Download failed:", err);
+        showToast("Failed to download image.", "error");
+      }
+    } else {
+      showToast("Could not find card element.", "error");
+    }
+  };
 
   // UI Helpers
   const SidebarItem = ({ id, icon: Icon, label, color }) => (
@@ -379,8 +431,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
            ) : (
              <>
                <SidebarItem id="overview" icon={LayoutDashboard} label="Dashboard" />
-               <SidebarItem id="pricing" icon={CheckCircle} label="Get Verified" color="text-yellow-500" />
-               
+              
                <div className="pt-4 pb-2 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Work</div>
                <SidebarItem id="jobs" icon={Briefcase} label={isClient ? 'Find Services' : 'Find Work'} />
                {/* NEW: MY POSTED JOBS FOR CLIENT */}
@@ -394,7 +445,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                  <>
                    <div className="pt-4 pb-2 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Growth</div>
                    <SidebarItem id="academy" icon={BookOpen} label="Academy" />
-                   <SidebarItem id="battles" icon={Swords} label="Battles" color="text-red-500" />
+                  
                    <SidebarItem id="portfolio" icon={Sparkles} label="Portfolio AI" color="text-purple-500" />
                    <SidebarItem id="profile-card" icon={Share2} label="Share Profile" />
                  </>
@@ -442,8 +493,22 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
          <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth custom-scrollbar">
             <div className="max-w-6xl mx-auto">
-            {tab === 'pricing' && <Pricing onBack={() => setTab('overview')} showToast={showToast} />}
-            {tab === 'overview' && <Overview user={user} isClient={isClient} totalEarnings={totalEarnings} jobsCount={isClient ? jobs.length : applications.length} badgesCount={badges.length} setTab={setTab} />}
+             
+             {/* OVERVIEW - PASS REFERRAL STATS */}
+                 {tab === 'overview' && (
+               <Overview 
+                  user={user} 
+                  isClient={isClient} 
+                  totalEarnings={totalEarnings} 
+                  jobsCount={isClient ? jobs.length : applications.length} 
+                  badgesCount={badges.length} 
+                  setTab={setTab}
+                  referralCount={referralStats.count} // Pass Count
+                  referralEarnings={referralStats.earnings} // Pass Earnings
+               />
+            )}
+
+           
             {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} parentMode={parentMode} />}
             
             {/* NEW: CLIENT POSTED JOBS TAB */}
@@ -453,9 +518,21 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
             {tab === 'applications' && <Applications applications={applications} isClient={isClient} updateStatus={updateStatus} initiatePayment={initiatePayment} parentMode={parentMode} />}
             {tab === 'messages' && <div className="h-[calc(100vh-140px)]"><ChatSystem user={user} activeChat={activeChat} setActiveChat={setActiveChat} parentMode={parentMode} /></div>}
             {tab === 'academy' && !isClient && <Academy unlockedSkills={unlockedSkills} setModal={setModal} quizzes={SAFE_QUIZZES} />}
-            {tab === 'battles' && !isClient && <Battles activeBattles={activeBattles} handleJoinBattle={handleJoinBattle} handleVote={handleVote} />}
+            
             {tab === 'portfolio' && !isClient && <Portfolio rawPortfolioText={rawPortfolioText} setRawPortfolioText={setRawPortfolioText} handleAiGenerate={handleAiGenerate} isAiLoading={isAiLoading} portfolioItems={portfolioItems} />}
-            {tab === 'profile-card' && !isClient && <ProfileCard user={user} unlockedSkills={unlockedSkills} badges={badges} userLevel={userLevel} applications={applications} handleDownloadCard={handleDownloadCard} showToast={showToast} />}
+            {/* --- PROFILE CARD WITH REF PASSED --- */}
+            {tab === 'profile-card' && !isClient && (
+               <ProfileCard 
+                 ref={profileCardRef} // <--- This REF is what makes download work
+                 user={user} 
+                 unlockedSkills={unlockedSkills} 
+                 badges={badges} 
+                 userLevel={userLevel} 
+                 applications={applications} 
+                 handleDownloadCard={handleDownloadCard} 
+                 showToast={showToast} 
+               />
+            )}
             {tab === 'records' && <Records applications={applications} />}
             {tab === 'settings' && <SettingsComp profileForm={profileForm} setProfileForm={setProfileForm} isClient={isClient} handleUpdateProfile={handleUpdateProfile} parentMode={parentMode} setParentMode={setParentMode} />}
             </div>
