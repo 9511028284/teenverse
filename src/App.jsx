@@ -158,6 +158,6 @@ export default function TeenVerse() {
       {view === 'auth' && <Auth setView={setView} onLogin={(msg) => showToast(msg)} onSignUpSuccess={() => setView('terms')} />}
       {view === 'admin' && user?.type === 'admin' && <AdminDashboard user={user} onLogout={async () => { await signOut(auth); setView('home'); showToast('Logged out'); }} />}
       {view === 'dashboard' && user && user.type !== 'admin' && <Dashboard user={user} setUser={setUser} onLogout={async () => { await signOut(auth); setView('home'); showToast('Logged out successfully'); }} showToast={showToast} darkMode={darkMode} toggleTheme={toggleTheme} />}
-    </>
+   </>
   );
 }
