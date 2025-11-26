@@ -48,6 +48,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   }, [dob]);
 
+
+
   // --- THE CORE SUBMIT HANDLER ---
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -64,6 +66,12 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         onLogin('Welcome back!');
       } else {
         // --- SIGNUP FLOW ---
+
+        if (role === 'freelancer' && age < 14){
+          alert("you must be atleast 14 years old to signup as a freelancer");
+          setLoading(false);
+          return;
+        }
         
         // 1. CHECK IF MINOR (Freelancers only)
         if (role === 'freelancer' && isMinor) {

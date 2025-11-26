@@ -61,6 +61,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
   const SAFE_QUIZZES = QUIZZES || {};
 
+  const [quizState, setQuizState] =
+  useState({ selected : null, status: 'idle'});
+
+
   const LOCAL_CATEGORIES = {
     'dev': 'Development',
     'design': 'Design',
