@@ -368,7 +368,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
           
           {/* Header */}
           <div className="p-6 pb-2 flex items-center justify-between shrink-0">
-             <div className={`flex items-center gap-3 transition-all duration-300 ${zenMode ? 'justify-center w-full' : ''}`}>
+             <a href="https://teenverse.vercel.app">
+              <div className={`flex items-center gap-3 transition-all duration-300 ${zenMode ? 'justify-center w-full' : ''}`}>
                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 shrink-0">
                  <Rocket size={20} className="fill-white/20"/>
                </div>
@@ -378,6 +379,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                  </span>
                )}
              </div>
+             </a>
              <button onClick={() => setMenuOpen(false)} className="md:hidden text-gray-400 hover:text-red-500"><X size={24}/></button>
           </div>
 
