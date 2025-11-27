@@ -17,7 +17,7 @@ const Legal = ({ onBack }) => {
           
           <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mt-4">Eligibility</h3>
           <ul className="list-disc ml-5 space-y-1">
-            <li>Users must be 13–19 years old.</li>
+            <li>Users must be 14–19 years old.</li>
             <li>Users under 18 require parent/guardian consent.</li>
             <li>Parent/guardian identity may be verified approved alternatives in place of their child.</li>
           </ul>
@@ -31,7 +31,7 @@ const Legal = ({ onBack }) => {
           </ul>
 
           <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mt-4">Platform Fee & Payments</h3>
-          <p>TeenVerseHub charges a <strong>3% platform fee</strong> on every completed transaction. This fee is non‑refundable. Teenage freelancers may receive payments into a parent/guardian bank account if they are under 18.</p>
+          <p>TeenVerseHub charges a <strong>2% platform fee</strong> on every completed transaction. This fee is non‑refundable. Teenage freelancers may receive payments into a parent/guardian bank account if they are under 18.</p>
 
           <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mt-4">Prohibited Activities</h3>
           <p>Users may NOT offer hacking, scams, dangerous tasks, adult content, violence, fake documents, exam assistance, or illegal services.</p>
@@ -70,7 +70,7 @@ const Legal = ({ onBack }) => {
       content: (
         <div className="space-y-4 text-gray-600 dark:text-gray-300">
           <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">Platform Fee Refunds</h3>
-          <p>The 4% platform fee is <strong>non‑refundable</strong>. This applies even if the project is cancelled by the client or freelancer.</p>
+          <p>The 2% platform fee is <strong>non‑refundable</strong>. This applies even if the project is cancelled by the client or freelancer.</p>
 
           <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mt-4">Client–Freelancer Payments</h3>
           <p>Payments between clients and freelancers are not handled by the platform. Therefore:</p>

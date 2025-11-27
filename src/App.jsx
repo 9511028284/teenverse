@@ -4,6 +4,8 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { supabase } from './supabase';
 import Toast from './components/ui/Toast';
 import { Loader2 } from 'lucide-react'; // Added for loading state
+import ParentDashboard from './pages/ParentDashboard'; // NEW IMPORT
+
 
 // Pages
 import LandingPage from './pages/LandingPage';
@@ -56,6 +58,22 @@ export default function TeenVerse() {
           setLoading(false);
           return; 
         }
+
+        // 2. CHECK IF PARENT (New Logic)
+        // We check if this email is listed as a 'parent_email' for any freelancer
+        const { data: teenChild } = await supabase.from('freelancers').select('*').eq('parent_email', u.email).maybeSingle();
+        if (teenChild) {
+           // Found a teen linked to this parent!
+           // We need to link them formally if not already done
+           if (!teenChild.parent_user_id) {
+              await supabase.from('freelancers').update({ parent_user_id: u.uid }).eq('id', teenChild.id);
+           }
+           setUser({ id: u.uid, email: u.email, name: "Parent Guardian", type: "parent" });
+           setView('parent'); // Set view to parent
+           showToast('Welcome Parent!');
+           return;
+        }
+
 
         // B. CHECK CLIENT
         let { data: c } = await supabase
@@ -152,6 +170,8 @@ export default function TeenVerse() {
       
       {/* FIX: Pass legalPage prop to Legal component */}
       {view === 'legal' && <Legal page={legalPage} onBack={() => setView('home')} />}
+     
+  {view === 'parent' && <ParentDashboard user={user} onLogout={async () => { await signOut(auth); setView('home'); showToast('Logged out'); }} />}
 
       {view === 'terms' && <TermsAgreement onAgree={() => window.location.reload()} />}
       {view === 'parent-approval' && <ParentApproval token={approvalToken} onApprovalComplete={() => setView('home')} />}

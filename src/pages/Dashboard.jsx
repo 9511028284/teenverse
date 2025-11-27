@@ -3,7 +3,7 @@ import {
   Rocket, Menu, LayoutDashboard, Briefcase, FileText, MessageSquare, BookOpen, Sparkles, Settings, LogOut, 
   Award, Sun, Moon, Bell, Search, Filter, PlusCircle, Zap, Lock, Check, Clock, Trash2, ThumbsUp, CreditCard, 
   Receipt, X, CheckCircle, Package, Save, Share2, Download, 
-  Trophy, Unlock, Swords, Heart, Crown, ShieldCheck, FileCheck, Maximize2, Minimize2, User, ListChecks
+  Trophy, Unlock, Swords, Heart, Crown, ShieldCheck, FileCheck, Maximize2, Minimize2, User, ListChecks, ChevronRight
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { CATEGORIES, COLORS, QUIZZES, BATTLES, PRICING_PLANS } from '../utils/constants';
@@ -11,23 +11,21 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Modal from '../components/ui/Modal';
 import ChatSystem from '../components/features/ChatSystem';
-import Pricing from './Pricing';
+
 
 // Import Sub-Components
 import Overview from '../components/dashboard/Overview';
 import Jobs from '../components/dashboard/Jobs';
 import MyServices from '../components/dashboard/MyServices';
-import ClientPostedJobs from '../components/dashboard/ClientPostedJobs'; // NEW IMPORT
+import ClientPostedJobs from '../components/dashboard/ClientPostedJobs';
 import Applications from '../components/dashboard/Applications';
 import Academy from '../components/dashboard/Academy';
-import Battles from '../components/dashboard/Battles';
+
 import Portfolio from '../components/dashboard/Portfolio';
 import ProfileCard from '../components/dashboard/ProfileCard';
 import Records from '../components/dashboard/Records';
 import SettingsComp from '../components/dashboard/SettingsComp';
-// NEW IMPORT FOR DOWNLOAD
 import html2canvas from 'html2canvas'; 
-
 
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
   const isClient = user?.type === 'client';
@@ -41,7 +39,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [applications, setApplications] = useState([]);
   const [notifications, setNotifications] = useState([]);
 
-  // NEW: Referral Stats State
+  // Referral Stats State
   const [referralStats, setReferralStats] = useState({ count: 0, earnings: 0 });
 
   // UI States
@@ -65,20 +63,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [activeBattles, setActiveBattles] = useState(BATTLES || []); 
 
-  
-
-
   const SAFE_QUIZZES = QUIZZES || {};
 
-  const [quizState, setQuizState] =
-  useState({ selected : null, status: 'idle'});
-
-
+  const [quizState, setQuizState] = useState({ selected : null, status: 'idle'});
 
   // REF FOR PROFILE CARD DOWNLOAD
   const profileCardRef = useRef(null); 
-  
-
 
   const LOCAL_CATEGORIES = {
     'dev': 'Development',
@@ -114,8 +104,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
           }
       }
 
-
-
       let appsData = [];
       if (isClient) {
         const { data: myJobs } = await supabase.from('jobs').select('*').eq('client_id', user.id).order('created_at', {ascending: false});
@@ -149,7 +137,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       }
       setNotifications(notifs || []);
       
-       // 4. REFERRALS (Fixed placement inside async function)
       const { count } = await supabase
          .from('referrals')
          .select('*', { count: 'exact', head: true })
@@ -158,7 +145,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       setReferralStats({ count: count || 0, earnings: (count || 0) * 50 });
     };
     
-
     fetchData();
     const interval = setInterval(fetchData, 5000); 
     return () => clearInterval(interval);
@@ -183,27 +169,14 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         description: formData.get('description'), 
         category: formData.get('category') || 'dev' 
     };
-    
     const { error } = await supabase.from('jobs').insert([jobData]);
-    if (error) {
-        showToast(error.message, 'error'); 
-    } else { 
-        showToast('Job Posted!'); 
-        setModal(null); 
-        // Optimistic update for client view
-        setJobs([jobData, ...jobs]);
-    }
+    if (error) { showToast(error.message, 'error'); } else { showToast('Job Posted!'); setModal(null); setJobs([jobData, ...jobs]); }
   };
 
   const handleDeleteJob = async (id) => {
     if(!window.confirm("Are you sure you want to delete this job?")) return;
     const { error } = await supabase.from('jobs').delete().eq('id', id);
-    if (error) {
-      showToast(error.message, 'error');
-    } else {
-      showToast('Job Deleted');
-      setJobs(jobs.filter(j => j.id !== id));
-    }
+    if (error) { showToast(error.message, 'error'); } else { showToast('Job Deleted'); setJobs(jobs.filter(j => j.id !== id)); }
   };
 
   const handleCreateService = async (e) => {
@@ -219,24 +192,13 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       category: formData.get('category')
     };
     const { error } = await supabase.from('services').insert([serviceData]);
-    if (error) {
-      showToast(error.message, 'error');
-    } else {
-      showToast('Gig Created Successfully!');
-      setModal(null);
-      setServices([serviceData, ...services]);
-    }
+    if (error) { showToast(error.message, 'error'); } else { showToast('Gig Created Successfully!'); setModal(null); setServices([serviceData, ...services]); }
   };
 
   const handleDeleteService = async (id) => {
     if(!window.confirm("Delete this gig?")) return;
     const { error } = await supabase.from('services').delete().eq('id', id);
-    if (error) {
-      showToast(error.message, 'error');
-    } else {
-      showToast('Service Deleted');
-      setServices(services.filter(s => s.id !== id));
-    }
+    if (error) { showToast(error.message, 'error'); } else { showToast('Service Deleted'); setServices(services.filter(s => s.id !== id)); }
   };
 
   const handleApplyJob = async (e) => {
@@ -327,342 +289,425 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
      showToast("Voted!");
   };
 
-  
-  // --- NEW: REAL DOWNLOAD FUNCTION ---
   const handleDownloadCard = async () => {
     if (profileCardRef.current) {
       try {
         showToast("Generating image...", "info");
-        const canvas = await html2canvas(profileCardRef.current, {
-           backgroundColor: null, // Transparent background if needed, or matches CSS
-           scale: 2, // Higher resolution
-           useCORS: true // Allow loading external images (avatars)
-        });
-        
+        const canvas = await html2canvas(profileCardRef.current, { backgroundColor: null, scale: 2, useCORS: true });
         const image = canvas.toDataURL("image/png");
         const link = document.createElement("a");
         link.href = image;
         link.download = `TeenVerse-${user.name || 'Profile'}.png`;
         link.click();
-        
         showToast("Downloaded successfully!", "success");
-      } catch (err) {
-        console.error("Download failed:", err);
-        showToast("Failed to download image.", "error");
-      }
-    } else {
-      showToast("Could not find card element.", "error");
-    }
+      } catch (err) { console.error("Download failed:", err); showToast("Failed to download image.", "error"); }
+    } else { showToast("Could not find card element.", "error"); }
   };
 
-  // UI Helpers
+  // --- REDESIGNED SIDEBAR ITEM ---
   const SidebarItem = ({ id, icon: Icon, label, color }) => (
     <button 
       onClick={() => {setTab(id); setMenuOpen(false);}} 
       className={`
-        w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
+        group relative w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-medium transition-all duration-300
         ${tab === id 
-          ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 shadow-sm translate-x-1' 
-          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-200'
+          ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30 ring-1 ring-white/20' 
+          : 'text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-white/5 hover:text-indigo-600 dark:hover:text-white'
         }
       `}
     >
-      <Icon size={18} className={tab === id ? 'text-indigo-600 dark:text-indigo-400' : color || ''} />
-      {!zenMode && label}
-      {!zenMode && tab === id && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 ml-auto animate-pulse" />}
+      <Icon size={18} className={`transition-transform duration-300 group-hover:scale-110 ${tab === id ? 'text-white' : color || ''}`} />
+      {!zenMode && (
+        <>
+          <span className="flex-1 text-left">{label}</span>
+          {tab === id && <ChevronRight size={14} className="opacity-80 animate-pulse"/>}
+        </>
+      )}
     </button>
   );
 
   const getTabIcon = () => {
-    switch(tab) {
-      case 'overview': return <LayoutDashboard className="text-indigo-500"/>;
-      case 'jobs': return <Briefcase className="text-blue-500"/>;
-      case 'posted-jobs': return <ListChecks className="text-indigo-500"/>; // Updated icon
-      case 'academy': return <BookOpen className="text-green-500"/>;
-      case 'battles': return <Swords className="text-red-500"/>;
-      case 'settings': return <Settings className="text-gray-500"/>;
-      case 'profile-card': return <User className="text-purple-500"/>;
-      case 'pricing': return <Crown className="text-yellow-500"/>;
-      case 'records': return <ShieldCheck className="text-blue-500"/>;
-      default: return <LayoutDashboard className="text-indigo-500"/>;
-    }
+    const icons = {
+      'overview': <LayoutDashboard size={20} className="text-indigo-600 dark:text-indigo-400"/>,
+      'jobs': <Briefcase size={20} className="text-blue-500"/>,
+      'posted-jobs': <ListChecks size={20} className="text-indigo-500"/>,
+      'academy': <BookOpen size={20} className="text-emerald-500"/>,
+      'battles': <Swords size={20} className="text-rose-500"/>,
+      'settings': <Settings size={20} className="text-gray-500"/>,
+      'profile-card': <User size={20} className="text-purple-500"/>,
+      'pricing': <Crown size={20} className="text-yellow-500"/>,
+      'records': <ShieldCheck size={20} className="text-blue-500"/>
+    };
+    return icons[tab] || <LayoutDashboard size={20} className="text-indigo-500"/>;
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-[#0B1120] transition-colors duration-300 font-sans overflow-hidden">
-      {/* Sidebar */}
-      <aside className={`fixed md:static inset-y-0 left-0 z-50 w-72 bg-white dark:bg-[#0F172A]/95 backdrop-blur-xl border-r border-gray-200 dark:border-gray-800 transform ${menuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-200 flex flex-col h-screen shadow-2xl md:shadow-none ${zenMode ? 'md:w-20' : 'md:w-72'}`}>
-        {/* ... Sidebar Header ... */}
-        <div className={`p-6 border-b border-gray-100 dark:border-gray-800 flex ${zenMode ? 'justify-center' : 'justify-between'} items-center flex-shrink-0`}>
-          <div className="flex items-center gap-3 font-black text-xl text-gray-900 dark:text-white overflow-hidden">
-            <div className={`flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br ${COLORS?.primary || 'from-indigo-600 to-purple-600'} flex items-center justify-center text-white shadow-lg shadow-indigo-500/30`}>
-              <Rocket size={20} />
-            </div>
-            {!zenMode && <span className="animate-fade-in whitespace-nowrap">TeenVerse</span>}
-          </div>
-          <button onClick={() => setMenuOpen(false)} className="md:hidden text-gray-400 hover:text-white"><Minimize2 size={24}/></button>
-        </div>
+    <div className="flex h-screen bg-[#F8FAFC] dark:bg-[#020617] transition-colors duration-500 font-sans overflow-hidden">
+      
+      {/* Background Gradient Mesh */}
+      <div className="fixed inset-0 pointer-events-none z-0 opacity-40 dark:opacity-20">
+         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-200 via-transparent to-transparent dark:from-indigo-900"></div>
+         <div className="absolute bottom-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-purple-200 via-transparent to-transparent dark:from-purple-900"></div>
+      </div>
 
-        {!zenMode && (
-          <div className="px-6 py-4 animate-fade-in">
-             <div className="flex items-center gap-3 mb-3">
-                <div className="relative">
-                   <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center font-bold text-gray-600 dark:text-gray-300 text-lg border-2 border-white dark:border-gray-600 shadow-md">{user.name ? user.name[0] : <User />}</div>
-                   <div className="absolute -bottom-1 -right-1 bg-yellow-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm border border-white dark:border-gray-800">{userLevel}</div>
-                </div>
-                <div className="overflow-hidden min-w-0">
-                  <p className="text-sm font-bold truncate dark:text-gray-200 flex items-center gap-1">{user.name?.split(' ')[0] || 'User'} {badges.length > 0 && <Award size={12} className="text-yellow-500 fill-yellow-500"/>}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.type}</p>
-                </div>
-             </div>
-             <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5 mb-1 overflow-hidden"><div className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full" style={{width: `${progressPercent}%`}}></div></div>
-             <div className="flex justify-between text-[10px] text-gray-400 uppercase font-bold"><span>{currentXP} XP</span><span>Next: {nextLevelXP}</span></div>
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
-           {zenMode ? (
-             <div className="flex flex-col items-center gap-4 pt-4">
-                <button onClick={() => setTab('overview')} className="p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"><LayoutDashboard size={20}/></button>
-                <button onClick={() => setTab('jobs')} className="p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"><Briefcase size={20}/></button>
-                <button onClick={() => setTab('messages')} className="p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"><MessageSquare size={20}/></button>
-                {!isClient && <button onClick={() => setTab('academy')} className="p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"><BookOpen size={20}/></button>}
-             </div>
-           ) : (
-             <>
-               <SidebarItem id="overview" icon={LayoutDashboard} label="Dashboard" />
-              
-               <div className="pt-4 pb-2 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Work</div>
-               <SidebarItem id="jobs" icon={Briefcase} label={isClient ? 'Find Services' : 'Find Work'} />
-               {/* NEW: MY POSTED JOBS FOR CLIENT */}
-               {isClient && <SidebarItem id="posted-jobs" icon={ListChecks} label="My Posted Jobs" />}
-               
-               {!isClient && <SidebarItem id="my-services" icon={Package} label="My Services" />}
-               <SidebarItem id="applications" icon={FileText} label={isClient ? 'Applicants' : 'Applications'} />
-               <SidebarItem id="messages" icon={MessageSquare} label="Messages" />
-               
-               {!isClient && (
-                 <>
-                   <div className="pt-4 pb-2 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Growth</div>
-                   <SidebarItem id="academy" icon={BookOpen} label="Academy" />
-                  
-                   <SidebarItem id="portfolio" icon={Sparkles} label="Portfolio AI" color="text-purple-500" />
-                   <SidebarItem id="profile-card" icon={Share2} label="Share Profile" />
-                 </>
+      {/* --- SIDEBAR --- */}
+      <aside className={`
+          fixed md:static inset-y-0 left-0 z-50 transform 
+          ${menuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 
+          transition-all duration-300 ease-in-out
+          flex flex-col h-screen 
+          ${zenMode ? 'md:w-24' : 'md:w-80'}
+      `}>
+        {/* Floating Sidebar Container */}
+        <div className={`
+            flex flex-col h-full m-0 md:m-4 rounded-none md:rounded-3xl 
+            bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-xl 
+            border-r md:border border-gray-200 dark:border-white/5 
+            shadow-2xl md:shadow-xl overflow-hidden
+        `}>
+          
+          {/* Header */}
+          <div className="p-6 pb-2 flex items-center justify-between shrink-0">
+             <div className={`flex items-center gap-3 transition-all duration-300 ${zenMode ? 'justify-center w-full' : ''}`}>
+               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 shrink-0">
+                 <Rocket size={20} className="fill-white/20"/>
+               </div>
+               {!zenMode && (
+                 <span className="font-bold text-xl tracking-tight text-gray-900 dark:text-white">
+                   Teen<span className="text-indigo-600">Verse</span>
+                 </span>
                )}
-               
-               <div className="pt-4 pb-2 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">System</div>
-               <SidebarItem id="records" icon={ShieldCheck} label="Records" />
-               <SidebarItem id="settings" icon={Settings} label="Settings" />
-             </>
-           )}
-        </div>
-        {/* Sidebar Footer */}
-        <div className="p-4 border-t border-gray-100 dark:border-gray-800 flex-shrink-0">
-           <Button variant="ghost" className={`w-full ${zenMode ? 'justify-center px-0' : 'justify-start'} text-gray-500 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10`} icon={LogOut} onClick={onLogout}>{!zenMode && "Sign Out"}</Button>
+             </div>
+             <button onClick={() => setMenuOpen(false)} className="md:hidden text-gray-400 hover:text-red-500"><X size={24}/></button>
+          </div>
+
+          {/* User Profile Snippet */}
+          {!zenMode && (
+            <div className="mx-4 mt-4 p-4 rounded-2xl bg-gray-50/80 dark:bg-white/5 border border-gray-100 dark:border-white/5 group hover:border-indigo-100 transition-colors">
+               <div className="flex items-center gap-3 mb-3">
+                  <div className="relative">
+                     <div className="w-12 h-12 rounded-full bg-white dark:bg-gray-800 p-0.5 ring-2 ring-indigo-100 dark:ring-indigo-900 overflow-hidden">
+                        <div className="w-full h-full rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
+                           {user.name ? user.name[0] : <User size={20}/>}
+                        </div>
+                     </div>
+                     <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm border-2 border-white dark:border-gray-900">
+                        Lv.{userLevel}
+                     </div>
+                  </div>
+                  <div className="overflow-hidden">
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">
+                       {user.name?.split(' ')[0] || 'User'} 
+                       {badges.length > 0 && <Award size={12} className="text-amber-500 fill-amber-500"/>}
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.type} Account</p>
+                  </div>
+               </div>
+               <div className="space-y-1">
+                 <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    <span>XP Progress</span>
+                    <span>{Math.round(progressPercent)}%</span>
+                 </div>
+                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-500 to-violet-500 h-full rounded-full transition-all duration-500" style={{width: `${progressPercent}%`}}></div>
+                 </div>
+               </div>
+            </div>
+          )}
+
+          {/* Navigation Links */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1 custom-scrollbar">
+             {zenMode ? (
+               <div className="flex flex-col items-center gap-4">
+                  {['overview', 'jobs', 'messages', !isClient && 'academy'].filter(Boolean).map(t => (
+                    <button key={t} onClick={() => setTab(t)} className={`p-3 rounded-2xl transition-all ${tab===t ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5'}`}>
+                      {t === 'overview' && <LayoutDashboard size={20}/>}
+                      {t === 'jobs' && <Briefcase size={20}/>}
+                      {t === 'messages' && <MessageSquare size={20}/>}
+                      {t === 'academy' && <BookOpen size={20}/>}
+                    </button>
+                  ))}
+               </div>
+             ) : (
+               <>
+                 <SidebarItem id="overview" icon={LayoutDashboard} label="Dashboard" />
+                 
+                 <div className="mt-6 mb-2 px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Workspace</div>
+                 <SidebarItem id="jobs" icon={Briefcase} label={isClient ? 'Browse Services' : 'Find Jobs'} />
+                 {isClient && <SidebarItem id="posted-jobs" icon={ListChecks} label="My Listings" />}
+                 {!isClient && <SidebarItem id="my-services" icon={Package} label="My Gigs" />}
+                 <SidebarItem id="applications" icon={FileText} label="Applications" />
+                 <SidebarItem id="messages" icon={MessageSquare} label="Messages" />
+                 
+                 {!isClient && (
+                   <>
+                     <div className="mt-6 mb-2 px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Growth</div>
+                     <SidebarItem id="academy" icon={BookOpen} label="Academy" />
+                     <SidebarItem id="portfolio" icon={Sparkles} label="AI Portfolio" color="text-violet-500" />
+                     <SidebarItem id="profile-card" icon={Share2} label="Share Profile" />
+                   </>
+                 )}
+                 
+                 <div className="mt-6 mb-2 px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">System</div>
+                 <SidebarItem id="records" icon={ShieldCheck} label="My Records" />
+                 <SidebarItem id="settings" icon={Settings} label="Settings" />
+               </>
+             )}
+          </div>
+
+          {/* Footer Actions */}
+          <div className="p-4 border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/20">
+             <div className="flex gap-2">
+                <button onClick={() => setZenMode(!zenMode)} className="flex-1 flex items-center justify-center p-2 rounded-xl text-gray-500 hover:bg-white dark:hover:bg-white/10 transition-colors">
+                  {zenMode ? <Maximize2 size={18}/> : <Minimize2 size={18}/>}
+                </button>
+                <button onClick={onLogout} className="flex-1 flex items-center justify-center p-2 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                   <LogOut size={18}/>
+                </button>
+             </div>
+          </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 bg-gray-50 dark:bg-[#0B1120] relative">
-         {/* Header */}
-         <header className="bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-md sticky top-0 z-30 border-b border-gray-200 dark:border-gray-800 px-4 md:px-8 py-4 flex justify-between items-center">
-            <div className="flex items-center gap-3 md:gap-4">
-               <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg dark:text-white"><Menu/></button>
-               <button onClick={() => setZenMode(!zenMode)} className="hidden md:flex p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-gray-500 dark:text-gray-400">
-                 {zenMode ? <Maximize2 size={20}/> : <Minimize2 size={20}/>}
-               </button>
-               <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg hidden sm:block">{getTabIcon()}</div>
-                  <h2 className="text-lg md:text-xl font-bold text-gray-800 dark:text-white capitalize">{tab.replace('-', ' ')}</h2>
+      {/* --- MAIN CONTENT --- */}
+      <main className="flex-1 flex flex-col min-w-0 relative z-10">
+         
+         {/* Glass Header */}
+         <header className="sticky top-0 z-30 px-6 py-4">
+            <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-xl border border-gray-200/50 dark:border-white/5 rounded-2xl shadow-sm px-6 py-3 flex justify-between items-center">
+               
+               {/* Left: Mobile Menu & Breadcrumbs */}
+               <div className="flex items-center gap-4">
+                  <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl"><Menu/></button>
+                  <div className="flex items-center gap-3">
+                     <div className="hidden sm:flex w-10 h-10 rounded-xl bg-gray-50 dark:bg-white/5 items-center justify-center border border-gray-100 dark:border-white/5">
+                        {getTabIcon()}
+                     </div>
+                     <div>
+                        <h2 className="text-lg font-bold text-gray-900 dark:text-white capitalize leading-none">{tab.replace('-', ' ')}</h2>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Welcome back, {user.name?.split(' ')[0]}</p>
+                     </div>
+                  </div>
                </div>
-            </div>
-            <div className="flex items-center gap-2 md:gap-4">
-               <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300">
-                  {darkMode ? <Sun size={20} className="text-amber-400" /> : <Moon size={20} className="text-indigo-600" />}
-               </button>
-               <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-full relative"><Bell size={20}/>{notifications.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-bounce"></span>}</button>
-               {showNotifications && (
-                 <div className="absolute right-4 top-16 w-80 bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 animate-fade-in">
-                    <div className="p-3 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-[#0F172A]"><span className="font-bold text-sm dark:text-white">Notifications</span><button onClick={handleClearNotifications} className="text-xs text-indigo-500">Clear All</button></div>
-                    <div className="max-h-64 overflow-y-auto">{notifications.length === 0 ? <div className="p-6 text-center text-gray-400 text-xs">No new alerts</div> : notifications.map(n => <div key={n.id} className="p-3 border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-xs dark:text-gray-300">{n.message}</div>)}</div>
-                 </div>
-               )}
+
+               {/* Right: Actions */}
+               <div className="flex items-center gap-3">
+                  <div className="hidden md:flex items-center gap-1 bg-gray-100 dark:bg-black/30 p-1 rounded-full">
+                     <button onClick={() => !darkMode && toggleTheme()} className={`p-2 rounded-full transition-all ${!darkMode ? 'bg-white shadow-sm text-amber-500' : 'text-gray-400'}`}><Sun size={18}/></button>
+                     <button onClick={() => darkMode && toggleTheme()} className={`p-2 rounded-full transition-all ${darkMode ? 'bg-gray-800 shadow-sm text-indigo-400' : 'text-gray-400'}`}><Moon size={18}/></button>
+                  </div>
+
+                  <div className="relative">
+                    <button onClick={() => setShowNotifications(!showNotifications)} className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-gray-50 text-gray-500 dark:text-gray-400 transition-colors">
+                      <Bell size={20}/>
+                      {notifications.length > 0 && <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#0F172A]"></span>}
+                    </button>
+                    {/* Notification Dropdown */}
+                    {showNotifications && (
+                      <div className="absolute right-0 top-12 w-80 bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden animate-fade-in z-50">
+                          <div className="p-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-white/5">
+                             <span className="font-bold text-sm dark:text-white">Notifications</span>
+                             <button onClick={handleClearNotifications} className="text-xs font-medium text-indigo-500 hover:text-indigo-600">Clear All</button>
+                          </div>
+                          <div className="max-h-64 overflow-y-auto">
+                             {notifications.length === 0 ? <div className="p-8 text-center text-gray-400 text-xs">No new alerts</div> : notifications.map(n => (
+                               <div key={n.id} className="p-3 border-b border-gray-50 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 text-xs text-gray-600 dark:text-gray-300 flex gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0"></div>
+                                  {n.message}
+                               </div>
+                             ))}
+                          </div>
+                      </div>
+                    )}
+                  </div>
+               </div>
             </div>
          </header>
 
-         <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth custom-scrollbar">
-            <div className="max-w-6xl mx-auto">
-             
-             {/* OVERVIEW - PASS REFERRAL STATS */}
+         {/* Scrollable Content Area */}
+         <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-8 custom-scrollbar">
+            <div className="max-w-7xl mx-auto">
+               <div className="animate-fade-in-up">
                  {tab === 'overview' && (
-               <Overview 
-                  user={user} 
-                  isClient={isClient} 
-                  totalEarnings={totalEarnings} 
-                  jobsCount={isClient ? jobs.length : applications.length} 
-                  badgesCount={badges.length} 
-                  setTab={setTab}
-                  referralCount={referralStats.count} // Pass Count
-                  referralEarnings={referralStats.earnings} // Pass Earnings
-               />
-            )}
-
-           
-            {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} parentMode={parentMode} />}
-            
-            {/* NEW: CLIENT POSTED JOBS TAB */}
-            {tab === 'posted-jobs' && isClient && <ClientPostedJobs jobs={jobs} setModal={setModal} handleDeleteJob={handleDeleteJob} />}
-
-            {tab === 'my-services' && !isClient && <MyServices services={services} setModal={setModal} handleDeleteService={handleDeleteService} />}
-            {tab === 'applications' && <Applications applications={applications} isClient={isClient} updateStatus={updateStatus} initiatePayment={initiatePayment} parentMode={parentMode} />}
-            {tab === 'messages' && <div className="h-[calc(100vh-140px)]"><ChatSystem user={user} activeChat={activeChat} setActiveChat={setActiveChat} parentMode={parentMode} /></div>}
-            {tab === 'academy' && !isClient && <Academy unlockedSkills={unlockedSkills} setModal={setModal} quizzes={SAFE_QUIZZES} />}
-            
-            {tab === 'portfolio' && !isClient && <Portfolio rawPortfolioText={rawPortfolioText} setRawPortfolioText={setRawPortfolioText} handleAiGenerate={handleAiGenerate} isAiLoading={isAiLoading} portfolioItems={portfolioItems} />}
-            {/* --- PROFILE CARD WITH REF PASSED --- */}
-            {tab === 'profile-card' && !isClient && (
-               <ProfileCard 
-                 ref={profileCardRef} // <--- This REF is what makes download work
-                 user={user} 
-                 unlockedSkills={unlockedSkills} 
-                 badges={badges} 
-                 userLevel={userLevel} 
-                 applications={applications} 
-                 handleDownloadCard={handleDownloadCard} 
-                 showToast={showToast} 
-               />
-            )}
-            {tab === 'records' && <Records applications={applications} />}
-            {tab === 'settings' && <SettingsComp profileForm={profileForm} setProfileForm={setProfileForm} isClient={isClient} handleUpdateProfile={handleUpdateProfile} parentMode={parentMode} setParentMode={setParentMode} />}
+                  <Overview 
+                      user={user} 
+                      isClient={isClient} 
+                      totalEarnings={totalEarnings} 
+                      jobsCount={isClient ? jobs.length : applications.length} 
+                      badgesCount={badges.length} 
+                      setTab={setTab}
+                      referralCount={referralStats.count} 
+                      referralEarnings={referralStats.earnings} 
+                  />
+                 )}
+                 {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} parentMode={parentMode} />}
+                 {tab === 'posted-jobs' && isClient && <ClientPostedJobs jobs={jobs} setModal={setModal} handleDeleteJob={handleDeleteJob} />}
+                 {tab === 'my-services' && !isClient && <MyServices services={services} setModal={setModal} handleDeleteService={handleDeleteService} />}
+                 {tab === 'applications' && <Applications applications={applications} isClient={isClient} updateStatus={updateStatus} initiatePayment={initiatePayment} parentMode={parentMode} />}
+                 {tab === 'messages' && <div className="bg-white dark:bg-[#1E293B] rounded-3xl border border-gray-200 dark:border-white/5 shadow-sm overflow-hidden h-[calc(100vh-180px)]"><ChatSystem user={user} activeChat={activeChat} setActiveChat={setActiveChat} parentMode={parentMode} /></div>}
+                 {tab === 'academy' && !isClient && <Academy unlockedSkills={unlockedSkills} setModal={setModal} quizzes={SAFE_QUIZZES} />}
+                 {tab === 'portfolio' && !isClient && <Portfolio rawPortfolioText={rawPortfolioText} setRawPortfolioText={setRawPortfolioText} handleAiGenerate={handleAiGenerate} isAiLoading={isAiLoading} portfolioItems={portfolioItems} />}
+                 {tab === 'profile-card' && !isClient && (
+                    <ProfileCard ref={profileCardRef} user={user} unlockedSkills={unlockedSkills} badges={badges} userLevel={userLevel} applications={applications} handleDownloadCard={handleDownloadCard} showToast={showToast} />
+                 )}
+                 {tab === 'records' && <Records applications={applications} />}
+                 {tab === 'settings' && <SettingsComp profileForm={profileForm} setProfileForm={setProfileForm} isClient={isClient} handleUpdateProfile={handleUpdateProfile} parentMode={parentMode} setParentMode={setParentMode} />}
+               </div>
             </div>
          </div>
       </main>
 
-      {/* --- MODALS --- */}
+      {/* --- MODALS (Redesigned) --- */}
       {modal === 'post-job' && (
-        <Modal title="Post a Job" onClose={() => setModal(null)}>
-          <form onSubmit={handlePostJob} className="space-y-4">
+        <Modal title="Create New Listing" onClose={() => setModal(null)}>
+          <form onSubmit={handlePostJob} className="space-y-5">
             <div>
-               <label className="block text-sm font-medium mb-1 dark:text-gray-300">Job Title</label>
-               <input 
-                  name="title" 
-                  type="text" 
-                  placeholder="e.g. React Developer Needed" 
-                  className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" 
-                  required 
-               />
+               <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Job Title</label>
+               <input name="title" type="text" placeholder="e.g. Senior React Developer" className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" required />
             </div>
             <div className="grid grid-cols-2 gap-4">
                <div>
-                  <label className="block text-sm font-medium mb-1 dark:text-gray-300">Budget (₹)</label>
-                  <input name="budget" type="number" className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-700 dark:text-white outline-none" required />
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Budget (₹)</label>
+                  <input name="budget" type="number" className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" required />
                </div>
                <div>
-                  <label className="block text-sm font-medium mb-1 dark:text-gray-300">Duration</label>
-                  <input name="duration" type="text" className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-700 dark:text-white outline-none" required />
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Duration</label>
+                  <input name="duration" type="text" placeholder="e.g. 2 Weeks" className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" required />
                </div>
             </div>
-            <div className="space-y-1">
-               <label className="text-xs font-bold text-gray-500 uppercase">Category</label>
-               <select name="category" className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-700 dark:text-white outline-none">{Object.keys(LOCAL_CATEGORIES).map(cat => <option key={cat} value={cat}>{LOCAL_CATEGORIES[cat]}</option>)}</select>
+            <div>
+               <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Category</label>
+               <div className="relative">
+                 <select name="category" className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none appearance-none focus:ring-2 focus:ring-indigo-500 transition-all">
+                    {Object.keys(LOCAL_CATEGORIES).map(cat => <option key={cat} value={cat}>{LOCAL_CATEGORIES[cat]}</option>)}
+                 </select>
+                 <div className="absolute right-4 top-4 pointer-events-none text-gray-500"><ChevronRight size={14} className="rotate-90"/></div>
+               </div>
             </div>
-            <div className="space-y-1">
-               <label className="text-xs font-bold text-gray-500 uppercase">Description</label>
-               <textarea name="description" rows="4" className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-700 dark:text-white outline-none" required></textarea>
+            <div>
+               <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Description</label>
+               <textarea name="description" rows="4" className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-all" required></textarea>
             </div>
-            <Button className="w-full py-3">Post Job</Button>
+            <Button className="w-full py-3.5 text-base shadow-lg shadow-indigo-500/30">Publish Job</Button>
           </form>
         </Modal>
       )}
+
       {modal === 'create-service' && (
-        <Modal title="Create Gig" onClose={() => setModal(null)}>
-           <form onSubmit={handleCreateService} className="space-y-4">
-            <div className="space-y-1">
-               <label className="text-xs font-bold text-gray-500 uppercase">Title</label>
-               <input name="title" type="text" placeholder="e.g. I will design logos" className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-700 dark:text-white outline-none" required />
+        <Modal title="Setup New Gig" onClose={() => setModal(null)}>
+           <form onSubmit={handleCreateService} className="space-y-5">
+            <div>
+               <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Gig Title</label>
+               <input name="title" type="text" placeholder="e.g. I will design your logo" className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" required />
             </div>
             <div className="grid grid-cols-2 gap-4">
-               <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase">Price (₹)</label><input name="price" type="number" className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-700 dark:text-white outline-none" required /></div>
-               <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase">Delivery</label><input name="delivery_time" type="text" className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-700 dark:text-white outline-none" required /></div>
+               <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Price (₹)</label><input name="price" type="number" className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" required /></div>
+               <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Delivery</label><input name="delivery_time" type="text" className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" required /></div>
             </div>
-            <div className="space-y-1">
-               <label className="text-xs font-bold text-gray-500 uppercase">Category</label>
-               <select name="category" className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-700 dark:text-white outline-none">{Object.keys(LOCAL_CATEGORIES).map(cat => <option key={cat} value={cat}>{LOCAL_CATEGORIES[cat]}</option>)}</select>
+            <div>
+               <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Category</label>
+               <div className="relative">
+                 <select name="category" className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none appearance-none">
+                    {Object.keys(LOCAL_CATEGORIES).map(cat => <option key={cat} value={cat}>{LOCAL_CATEGORIES[cat]}</option>)}
+                 </select>
+               </div>
             </div>
-            <div className="space-y-1">
-               <label className="text-xs font-bold text-gray-500 uppercase">Description</label>
-               <textarea name="description" rows="4" className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-700 dark:text-white outline-none" required></textarea>
+            <div>
+               <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Description</label>
+               <textarea name="description" rows="4" className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" required></textarea>
             </div>
-            <Button className="w-full py-3">Create Gig</Button>
+            <Button className="w-full py-3.5 shadow-lg shadow-indigo-500/30">Create Gig</Button>
           </form>
         </Modal>
       )}
+
       {modal === 'apply-job' && (
-        <Modal title="Apply for Job" onClose={() => setModal(null)}>
-           <form onSubmit={handleApplyJob} className="space-y-4">
-              <div className="space-y-1">
-                 <label className="text-xs font-bold text-gray-500 uppercase">Your Bid (₹)</label>
-                 <input name="bid_amount" type="number" defaultValue={selectedJob?.budget} className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-700 dark:text-white outline-none" required />
+        <Modal title="Submit Proposal" onClose={() => setModal(null)}>
+           <form onSubmit={handleApplyJob} className="space-y-5">
+              <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl flex items-center gap-3">
+                 <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-500/30 rounded-lg flex items-center justify-center text-indigo-600 dark:text-indigo-300"><Briefcase size={20}/></div>
+                 <div>
+                    <h4 className="font-bold text-sm dark:text-white line-clamp-1">{selectedJob?.title}</h4>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Budget: ₹{selectedJob?.budget}</p>
+                 </div>
               </div>
-              <div className="space-y-1">
-                 <label className="text-xs font-bold text-gray-500 uppercase">Cover Letter</label>
-                 <textarea name="cover_letter" rows="4" className="w-full p-3 bg-gray-50 dark:bg-[#0F172A] border rounded-xl dark:border-gray-700 dark:text-white outline-none" required></textarea>
+              <div>
+                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Your Bid Amount (₹)</label>
+                 <input name="bid_amount" type="number" defaultValue={selectedJob?.budget} className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" required />
               </div>
-              <Button className="w-full py-3">Submit Proposal</Button>
+              <div>
+                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5 ml-1">Cover Letter</label>
+                 <textarea name="cover_letter" rows="5" placeholder="Why are you the best fit for this role?" className="w-full p-3.5 bg-gray-50 dark:bg-[#020617] border border-gray-200 dark:border-white/10 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" required></textarea>
+              </div>
+              <Button className="w-full py-3.5 text-base shadow-lg shadow-indigo-500/30">Send Proposal</Button>
            </form>
         </Modal>
       )}
-      {/* Quiz & Payment Modals... */}
+
+      {/* Logic-Locked Modals (Style Updated) */}
       {modal === 'quiz-locked' && (
-         <Modal title="Locked" onClose={() => setModal(null)}>
-            <div className="text-center py-6">
-               <Lock className="mx-auto text-gray-400 mb-4" size={32}/>
-               <p className="text-gray-600 dark:text-gray-300 mb-6">You need to unlock this skill in the Academy first.</p>
-               <Button onClick={() => {setModal(null); setTab('academy');}} className="w-full">Go to Academy</Button>
+         <Modal title="Skill Locked" onClose={() => setModal(null)}>
+            <div className="text-center py-8">
+               <div className="w-20 h-20 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400">
+                  <Lock size={40}/>
+               </div>
+               <h3 className="text-xl font-bold dark:text-white mb-2">Access Denied</h3>
+               <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-xs mx-auto">You need to prove your skills in the Academy before applying to this category.</p>
+               <Button onClick={() => {setModal(null); setTab('academy');}} className="w-full py-3">Go to Academy</Button>
             </div>
          </Modal>
       )}
+
       {Object.keys(SAFE_QUIZZES).map(key => modal === `quiz-${key}` && (
-         <Modal key={key} title={SAFE_QUIZZES[key].question} onClose={() => {setModal(null); setQuizState({selected: null, status: 'idle'});}}>
-            <div className="space-y-4">
-               <div className="space-y-2">
+         <Modal key={key} title="Skill Assessment" onClose={() => {setModal(null); setQuizState({selected: null, status: 'idle'});}}>
+            <div className="space-y-6">
+               <h3 className="text-lg font-bold text-center dark:text-white px-4">{SAFE_QUIZZES[key].question}</h3>
+               <div className="space-y-3">
                   {SAFE_QUIZZES[key].options.map((opt, i) => (
                      <button 
                         key={i}
                         onClick={() => handleQuizSelection(key, opt)}
                         disabled={quizState.status !== 'idle'}
-                        className={`w-full p-4 rounded-xl text-left border transition-all font-medium
+                        className={`w-full p-4 rounded-xl text-left border-2 transition-all font-medium flex items-center justify-between
                            ${quizState.selected === opt 
-                              ? (quizState.status === 'correct' ? 'bg-emerald-100 border-emerald-500 text-emerald-700' : 'bg-red-100 border-red-500 text-red-700')
-                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100 dark:bg-[#0F172A] dark:border-gray-700 dark:text-gray-300'
+                              ? (quizState.status === 'correct' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-red-50 border-red-500 text-red-700')
+                              : 'bg-white border-gray-100 hover:border-indigo-500 hover:shadow-md dark:bg-[#020617] dark:border-white/10 dark:text-gray-300'
                            }
                         `}
                      >
                         {opt}
+                        {quizState.selected === opt && (quizState.status === 'correct' ? <CheckCircle size={20}/> : <X size={20}/>)}
                      </button>
                   ))}
                </div>
-               {quizState.status === 'correct' && <p className="text-center text-emerald-600 font-bold animate-bounce">Correct! Unlocking Skill...</p>}
+               {quizState.status === 'correct' && <p className="text-center text-emerald-600 font-bold animate-pulse">Correct! +500 XP Awarded</p>}
             </div>
          </Modal>
       ))}
+
       {paymentModal && (
-         <Modal title="Secure Payment" onClose={() => setPaymentModal(null)}>
-            <div className="space-y-6 text-center pt-4">
-               <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto text-indigo-600"><CreditCard size={32}/></div>
-               <div>
-                  <p className="text-xs font-bold text-gray-400 uppercase">Total Amount</p>
-                  <h2 className="text-4xl font-black text-gray-900 dark:text-white">₹{paymentModal.amount}</h2>
+         <Modal title="Secure Escrow Payment" onClose={() => setPaymentModal(null)}>
+            <div className="space-y-6 pt-4">
+               <div className="text-center">
+                  <div className="w-20 h-20 bg-indigo-50 dark:bg-indigo-900/20 rounded-full flex items-center justify-center mx-auto text-indigo-600 mb-4 shadow-inner">
+                     <CreditCard size={40}/>
+                  </div>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Payable</p>
+                  <h2 className="text-5xl font-black text-gray-900 dark:text-white mt-2">₹{paymentModal.amount}</h2>
                </div>
-               <div className="bg-gray-50 dark:bg-[#0F172A] p-4 rounded-xl text-sm space-y-2">
-                  <div className="flex justify-between text-gray-500"><span>Platform Fee</span><span>4%</span></div>
-                  <div className="flex justify-between font-bold dark:text-white border-t pt-2 border-gray-200 dark:border-gray-700"><span>Net Pay</span><span>₹{(parseFloat(paymentModal.amount) * 0.96).toFixed(2)}</span></div>
+               
+               <div className="bg-gray-50 dark:bg-[#020617] p-5 rounded-2xl text-sm space-y-3 border border-gray-100 dark:border-white/5">
+                  <div className="flex justify-between text-gray-500"><span>Service Fee (Platform)</span><span>4%</span></div>
+                  <div className="flex justify-between text-gray-500"><span>Taxes</span><span>0%</span></div>
+                  <div className="h-px bg-gray-200 dark:bg-white/10 my-2"></div>
+                  <div className="flex justify-between font-bold text-gray-900 dark:text-white text-base"><span>Freelancer Receives</span><span>₹{(parseFloat(paymentModal.amount) * 0.96).toFixed(2)}</span></div>
                </div>
-               <Button onClick={processPayment} className="w-full py-3 text-lg">Confirm Payment</Button>
+               <Button onClick={processPayment} className="w-full py-4 text-lg shadow-xl shadow-indigo-500/20">Confirm Transfer</Button>
+               <p className="text-center text-xs text-gray-400 flex items-center justify-center gap-1"><Lock size={12}/> 256-bit SSL Secured</p>
             </div>
          </Modal>
       )}
+
     </div>
   );
 };

@@ -30,7 +30,7 @@ const TermsAgreement = ({ onAgree }) => {
           <section>
             <h3 className="font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2"><FileText size={16}/> 2. Eligibility & Safety</h3>
             <ul className="list-disc pl-5 space-y-1">
-              <li>Users must be 13–19 years old.</li>
+              <li>Users must be 14–19 years old.</li>
               <li>Users under 18 require parent/guardian consent.</li>
               <li>Zero tolerance for harassment, scams, or unsafe behavior.</li>
             </ul>
