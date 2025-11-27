@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UserCircle, Send, ArrowLeft, Loader2, CheckCheck, MessageSquare, Flag } from 'lucide-react'; 
+import { UserCircle, Send, ArrowLeft, Loader2, CheckCheck, MessageSquare, Flag, ShieldAlert } from 'lucide-react'; 
 import { supabase } from '../../supabase';
 import Button from '../ui/Button'; 
 import Modal from '../ui/Modal';     
 import Input from '../ui/Input';     
+
+// 1. IMPORT AI LIBRARIES
+import * as toxicity from '@tensorflow-models/toxicity';
+import '@tensorflow/tfjs';
 
 const ChatSystem = ({ user, activeChat, setActiveChat }) => {
   const [messages, setMessages] = useState([]);
@@ -12,8 +16,27 @@ const ChatSystem = ({ user, activeChat, setActiveChat }) => {
   const [loading, setLoading] = useState(true);
   const scrollRef = useRef(null);
   const [reportModalOpen, setReportModalOpen] = useState(false); 
+  
+  // AI STATES
+  const [model, setModel] = useState(null);
+  const [isModelLoading, setIsModelLoading] = useState(true);
+  const [isToxic, setIsToxic] = useState(false); // To show warning UI
 
-  // 1. Fetch Contacts
+  // 2. LOAD AI MODEL ON MOUNT
+  useEffect(() => {
+    const loadModel = async () => {
+      console.log("Loading AI Moderation Model...");
+      // Threshold = 0.9 means we only block if AI is 90% sure it's bad
+      const threshold = 0.9; 
+      const loadedModel = await toxicity.load(threshold);
+      setModel(loadedModel);
+      setIsModelLoading(false);
+      console.log("AI Model Loaded!");
+    };
+    loadModel();
+  }, []);
+
+  // ... (Fetch Contacts Logic - Same as before) ...
   useEffect(() => {
     const fetchContacts = async () => {
       try {
@@ -56,7 +79,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat }) => {
     fetchContacts();
   }, [user, activeChat]);
 
-  // 2. Fetch Messages
+  // ... (Fetch Messages Logic - Same as before) ...
   useEffect(() => {
     if (!activeChat) return;
     const fetchMessages = async () => {
@@ -83,20 +106,35 @@ const ChatSystem = ({ user, activeChat, setActiveChat }) => {
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
+  // 3. MODIFIED SEND MESSAGE FUNCTION
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
+
+    // --- AI CHECK START ---
+    if (model) {
+        const predictions = await model.classify([input]);
+        // Check if any category (insult, threat, etc.) is true
+        const isBad = predictions.some(p => p.results[0].match === true);
+        
+        if (isBad) {
+            setIsToxic(true);
+            // Hide warning after 3 seconds
+            setTimeout(() => setIsToxic(false), 3000);
+            return; // STOP! Don't send the message.
+        }
+    }
+    // --- AI CHECK END ---
+
     const msgData = { sender_id: user.id, receiver_id: activeChat.id, content: input };
     setInput('');
     const { error } = await supabase.from('messages').insert([msgData]);
     if (error) console.error("Send error:", error);
   };
 
-  // --- NEW: HANDLE REPORT SUBMISSION ---
   const handleReportUser = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    
     const reportData = {
         reporter_id: user.id,
         reported_user_id: activeChat.id,
@@ -104,19 +142,22 @@ const ChatSystem = ({ user, activeChat, setActiveChat }) => {
         details: formData.get('details'),
         status: 'pending'
     };
-
     const { error } = await supabase.from('reports').insert([reportData]);
-
-    if (error) {
-        alert("Failed to submit report: " + error.message);
-    } else {
-        alert("User reported successfully. Our safety team has been notified.");
-        setReportModalOpen(false);
-    }
+    if (error) { alert("Failed: " + error.message); } 
+    else { alert("User reported."); setReportModalOpen(false); }
   };
 
   return (
-    <div className="flex h-[calc(100vh-120px)] bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-xl">
+    <div className="flex h-[calc(100vh-120px)] bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-xl relative">
+      
+      {/* AI WARNING POPUP */}
+      {isToxic && (
+        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-full shadow-xl z-50 flex items-center gap-2 animate-bounce">
+            <ShieldAlert size={20} />
+            <span className="font-bold text-sm">Message blocked: Please be respectful.</span>
+        </div>
+      )}
+
       {/* LEFT: CONTACTS LIST */}
       <div className={`w-full md:w-80 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 font-bold text-gray-700 dark:text-gray-200">Messages</div>
@@ -163,8 +204,14 @@ const ChatSystem = ({ user, activeChat, setActiveChat }) => {
             </div>
 
             <form onSubmit={sendMessage} className="p-4 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 flex gap-2">
-              <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type a message..." className="flex-1 bg-gray-100 dark:bg-gray-800 border-transparent focus:bg-white dark:focus:bg-black border focus:border-indigo-500 dark:text-white rounded-xl px-4 py-3 focus:outline-none transition-all" />
-              <button type="submit" className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 shadow-lg hover:shadow-indigo-500/30 transition-all transform active:scale-95"><Send size={20} /></button>
+              <input 
+                 value={input} 
+                 onChange={(e) => setInput(e.target.value)} 
+                 placeholder={isModelLoading ? "Initializing AI Safety..." : "Type a message..."} 
+                 disabled={isModelLoading}
+                 className="flex-1 bg-gray-100 dark:bg-gray-800 border-transparent focus:bg-white dark:focus:bg-black border focus:border-indigo-500 dark:text-white rounded-xl px-4 py-3 focus:outline-none transition-all disabled:opacity-50" 
+              />
+              <button type="submit" disabled={isModelLoading} className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-700 shadow-lg hover:shadow-indigo-500/30 transition-all transform active:scale-95 disabled:opacity-50"><Send size={20} /></button>
             </form>
           </>
         ) : (
@@ -174,7 +221,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat }) => {
           </div>
         )}
 
-        {/* --- REPORT MODAL --- */}
+        {/* Report Modal */}
         {reportModalOpen && (
             <Modal title="Report User" onClose={() => setReportModalOpen(false)}>
                 <form onSubmit={handleReportUser} className="space-y-4">

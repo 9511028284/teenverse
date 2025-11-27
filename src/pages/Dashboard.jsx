@@ -374,7 +374,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                </div>
                {!zenMode && (
                  <span className="font-bold text-xl tracking-tight text-gray-900 dark:text-white">
-                   Teen<span className="text-indigo-600">Verse</span>
+                   Teen<span className="text-indigo-600">VerseHub</span>
                  </span>
                )}
              </div>

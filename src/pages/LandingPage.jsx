@@ -13,7 +13,7 @@ const styles = `
 
   :root {
     --primary: #6366f1;
-    --acid: #ccff00;
+    --acid: #07A3B2;
     --neon-pink: #ff00ff;
   }
 
@@ -65,6 +65,44 @@ const styles = `
   
   .animate-float { animation: float 6s ease-in-out infinite; }
   @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+
+
+  /* Rave Mode */
+.rave * {
+  animation: raveFlash 0.12s infinite alternate;
+}
+@keyframes raveFlash {
+  0% { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg) brightness(1.5); }
+}
+
+/* Ripple Explosion */
+.ripple {
+  position: fixed;
+  width: 30px;
+  height: 30px;
+  background: #ccff00;
+  border-radius: 50%;
+  transform: scale(0);
+  pointer-events: none;
+  animation: rippleAnim 0.6s ease-out;
+}
+@keyframes rippleAnim {
+  100% {
+    transform: scale(25);
+    opacity: 0;
+  }
+}
+
+/* Particle Canvas */
+.particle {
+  position: fixed;
+  border-radius: 50%;
+  background: #ccff00;
+  mix-blend-mode: screen;
+  z-index: 2;
+}
+
 
   .bg-grid-pattern {
     background-size: 40px 40px;
@@ -129,12 +167,97 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
     }, 1500);
   };
 
+  /* === CRAZY MODE PATCH === */
+
+const [raveMode, setRaveMode] = useState(false);
+const [colorPulse, setColorPulse] = useState(false);
+
+// Neon Particles
+const particlesRef = useRef([]);
+
+useEffect(() => {
+  // Generate 150 floating neon particles
+  const particles = [];
+  for (let i = 0; i < 150; i++) {
+    particles.push({
+      id: i,
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      size: 2 + Math.random() * 4,
+      dx: -1 + Math.random() * 2,
+      dy: -1 + Math.random() * 2,
+    });
+  }
+  particlesRef.current = particles;
+
+  const animate = () => {
+    particlesRef.current = particlesRef.current.map(p => {
+      let x = p.x + p.dx;
+      let y = p.y + p.dy;
+      if (x < 0 || x > window.innerWidth) p.dx *= -1;
+      if (y < 0 || y > window.innerHeight) p.dy *= -1;
+      return { ...p, x, y };
+    });
+    requestAnimationFrame(animate);
+  };
+  animate();
+}, []);
+
+// Rave mode keyboard toggle
+useEffect(() => {
+  const listener = (e) => {
+    if (e.key.toLowerCase() === "r") setRaveMode(prev => !prev);
+  };
+  window.addEventListener("keydown", listener);
+  return () => window.removeEventListener("keydown", listener);
+}, []);
+
+// Color pulse every 12s
+useEffect(() => {
+  const colorTimer = setInterval(() => setColorPulse(true), 12000);
+  const resetTimer = setInterval(() => setColorPulse(false), 12500);
+  return () => { clearInterval(colorTimer); clearInterval(resetTimer); };
+}, []);
+
+// Ripple effect
+const createRipple = (e) => {
+  const ripple = document.createElement("span");
+  ripple.className = "ripple";
+  ripple.style.left = `${e.clientX}px`;
+  ripple.style.top = `${e.clientY}px`;
+  document.body.appendChild(ripple);
+  setTimeout(() => ripple.remove(), 600);
+};
+window.addEventListener("click", createRipple);
+
+
   return (
     <div className={`relative min-h-screen transition-colors duration-300 overflow-x-hidden selection:bg-[#ccff00] selection:text-black ${darkMode ? 'bg-[#050505] text-white' : 'bg-gray-50 text-gray-900'}`}>
       <style>{styles}</style>
       
       {/* --- CUSTOM CURSOR --- */}
       <div ref={cursorRef} className="custom-cursor hidden md:block"></div>
+
+      {/* CRAZY MODE STATE CONTROLLER */}
+<div className={`
+  fixed inset-0 pointer-events-none transition-all duration-500 
+  ${raveMode ? "rave" : ""}
+  ${colorPulse ? "hue-rotate-180" : ""}
+`}></div>
+
+{/* PARTICLE RENDERER */}
+{particlesRef.current.map(p => (
+  <div 
+    key={p.id}
+    className="particle"
+    style={{
+      left: p.x,
+      top: p.y,
+      width: p.size,
+      height: p.size
+    }}
+  ></div>
+))}
 
       {/* --- NOISE & BACKGROUND GRID --- */}
       <div className="bg-noise mix-blend-overlay"></div>
@@ -154,7 +277,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
                   T<span className="text-[#ccff00]">.</span>
                 </div>
              </div>
-             <span className="font-bold text-xl tracking-tighter">TeenVerse</span>
+             <span className="font-bold text-xl tracking-tighter">TeenVerseHub</span>
           </div>
 
           <div className="hidden md:flex items-center gap-8 font-bold text-sm uppercase tracking-wider">
@@ -204,8 +327,8 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
          <div className="z-10 max-w-6xl relative">
             <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full border border-white/10 bg-white/5 backdrop-blur-md mb-8 animate-float cursor-default">
                <span className="relative flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ccff00] opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-[#ccff00]"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#D9ECC7] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-[#D9ECC7]"></span>
                </span>
                <span className="text-xs font-mono text-gray-400">LIVE: 14,203 TEENS EARNING</span>
             </div>
