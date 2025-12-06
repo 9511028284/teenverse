@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Rocket, Star, Search, PlusCircle, Instagram, Twitter, Linkedin, Send, Moon, Sun, 
   FileText, Lock, AlertTriangle, Menu, X, Zap, ShieldCheck, Globe, Code, Heart, 
-  TrendingUp, ArrowRight, CheckCircle, Loader2, MousePointer2, Music, Video, DollarSign, Cpu
+  TrendingUp, ArrowRight, CheckCircle, Loader2, MousePointer2, Music, Video, DollarSign, Cpu,User, Briefcase
 } from 'lucide-react';
-import Button from '../components/ui/Button'; // Assuming you have this, or replace with <button>
-import { CATEGORIES } from '../utils/constants'; // Assuming you have this
+import Button from '../components/ui/Button'; 
+import { CATEGORIES } from '../utils/constants'; 
 
 /* --- 1. CSS INJECTION: THE CHAOS ENGINE --- */
 const styles = `
@@ -66,7 +66,6 @@ const styles = `
   .animate-float { animation: float 6s ease-in-out infinite; }
   @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
 
-
   /* Rave Mode */
 .rave * {
   animation: raveFlash 0.12s infinite alternate;
@@ -103,7 +102,6 @@ const styles = `
   z-index: 2;
 }
 
-
   .bg-grid-pattern {
     background-size: 40px 40px;
     background-image: linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
@@ -122,6 +120,11 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
   // Custom Cursor State
   const cursorRef = useRef(null);
   
+  /* === CRAZY MODE PATCH === */
+  const [raveMode, setRaveMode] = useState(false);
+  const [colorPulse, setColorPulse] = useState(false);
+  const particlesRef = useRef([]);
+
   // --- EFFECTS ---
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -167,69 +170,48 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
     }, 1500);
   };
 
-  /* === CRAZY MODE PATCH === */
+  // Neon Particles Initialization
+  useEffect(() => {
+    const particles = [];
+    for (let i = 0; i < 40; i++) { // Kept low for performance
+      particles.push({
+        id: i,
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        size: 2 + Math.random() * 4,
+        dx: -0.5 + Math.random(),
+        dy: -0.5 + Math.random(),
+      });
+    }
+    particlesRef.current = particles;
 
-const [raveMode, setRaveMode] = useState(false);
-const [colorPulse, setColorPulse] = useState(false);
+    // Use a simpler interval for React state update to avoid heavy re-renders
+    // In production, use HTML Canvas for this. Here we use CSS transitions.
+  }, []);
 
-// Neon Particles
-const particlesRef = useRef([]);
+  // Rave mode keyboard toggle
+  useEffect(() => {
+    const listener = (e) => {
+      if (e.key.toLowerCase() === "r") setRaveMode(prev => !prev);
+    };
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
 
-useEffect(() => {
-  // Generate 150 floating neon particles
-  const particles = [];
-  for (let i = 0; i < 150; i++) {
-    particles.push({
-      id: i,
-      x: Math.random() * window.innerWidth,
-      y: Math.random() * window.innerHeight,
-      size: 2 + Math.random() * 4,
-      dx: -1 + Math.random() * 2,
-      dy: -1 + Math.random() * 2,
-    });
-  }
-  particlesRef.current = particles;
-
-  const animate = () => {
-    particlesRef.current = particlesRef.current.map(p => {
-      let x = p.x + p.dx;
-      let y = p.y + p.dy;
-      if (x < 0 || x > window.innerWidth) p.dx *= -1;
-      if (y < 0 || y > window.innerHeight) p.dy *= -1;
-      return { ...p, x, y };
-    });
-    requestAnimationFrame(animate);
+  // Ripple effect
+  const createRipple = (e) => {
+    const ripple = document.createElement("span");
+    ripple.className = "ripple";
+    ripple.style.left = `${e.clientX}px`;
+    ripple.style.top = `${e.clientY}px`;
+    document.body.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 600);
   };
-  animate();
-}, []);
 
-// Rave mode keyboard toggle
-useEffect(() => {
-  const listener = (e) => {
-    if (e.key.toLowerCase() === "r") setRaveMode(prev => !prev);
-  };
-  window.addEventListener("keydown", listener);
-  return () => window.removeEventListener("keydown", listener);
-}, []);
-
-// Color pulse every 12s
-useEffect(() => {
-  const colorTimer = setInterval(() => setColorPulse(true), 12000);
-  const resetTimer = setInterval(() => setColorPulse(false), 12500);
-  return () => { clearInterval(colorTimer); clearInterval(resetTimer); };
-}, []);
-
-// Ripple effect
-const createRipple = (e) => {
-  const ripple = document.createElement("span");
-  ripple.className = "ripple";
-  ripple.style.left = `${e.clientX}px`;
-  ripple.style.top = `${e.clientY}px`;
-  document.body.appendChild(ripple);
-  setTimeout(() => ripple.remove(), 600);
-};
-window.addEventListener("click", createRipple);
-
+  useEffect(() => {
+      window.addEventListener("click", createRipple);
+      return () => window.removeEventListener("click", createRipple);
+  }, []);
 
   return (
     <div className={`relative min-h-screen transition-colors duration-300 overflow-x-hidden selection:bg-[#ccff00] selection:text-black ${darkMode ? 'bg-[#050505] text-white' : 'bg-gray-50 text-gray-900'}`}>
@@ -239,25 +221,7 @@ window.addEventListener("click", createRipple);
       <div ref={cursorRef} className="custom-cursor hidden md:block"></div>
 
       {/* CRAZY MODE STATE CONTROLLER */}
-<div className={`
-  fixed inset-0 pointer-events-none transition-all duration-500 
-  ${raveMode ? "rave" : ""}
-  ${colorPulse ? "hue-rotate-180" : ""}
-`}></div>
-
-{/* PARTICLE RENDERER */}
-{particlesRef.current.map(p => (
-  <div 
-    key={p.id}
-    className="particle"
-    style={{
-      left: p.x,
-      top: p.y,
-      width: p.size,
-      height: p.size
-    }}
-  ></div>
-))}
+      <div className={`fixed inset-0 pointer-events-none transition-all duration-500 ${raveMode ? "rave" : ""} ${colorPulse ? "hue-rotate-180" : ""}`}></div>
 
       {/* --- NOISE & BACKGROUND GRID --- */}
       <div className="bg-noise mix-blend-overlay"></div>
@@ -338,7 +302,7 @@ window.addEventListener("click", createRipple);
                <span className="glitch-wrapper">
                  <span className="glitch-text text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" data-text="EXIST.">EXIST.</span>
                </span> <br/>
-               Start <span className="relative inline-block text-white">
+               Start <span className="relative inline-block text-gray-500">
                   Earning
                   <svg className="absolute w-full h-4 -bottom-1 left-0 text-[#ccff00]" viewBox="0 0 100 10" preserveAspectRatio="none"><path d="M0 5 Q 50 10 100 5" stroke="currentColor" strokeWidth="4" fill="none" /></svg>
                </span>
@@ -431,6 +395,27 @@ window.addEventListener("click", createRipple);
                  <Lock size={64}/>
               </div>
            </div>
+        </div>
+      </section>
+
+      {/* --- HOW IT WORKS (Timeline) --- */}
+      
+      <section className="py-24 bg-neutral-900/50 relative">
+        <div className="max-w-4xl mx-auto px-6">
+            <h2 className="text-4xl font-black text-center mb-16 uppercase">How to <span className="text-[#ccff00]">Level Up</span></h2>
+            <div className="relative border-l-2 border-white/20 pl-8 space-y-12">
+                {[
+                    { title: "Create Profile", desc: "Link your GitHub/Portfolio. Verify age via DigiLocker.", icon: <User /> },
+                    { title: "Apply for Gigs", desc: "Pitch to clients. No cover letters, just show your work.", icon: <Briefcase /> },
+                    { title: "Get Paid", desc: "Money hits your escrow. Submit work. Get funds released instantly.", icon: <DollarSign /> }
+                ].map((step, idx) => (
+                    <div key={idx} className="relative group">
+                        <div className="absolute -left-[41px] top-0 w-6 h-6 rounded-full bg-black border-4 border-indigo-600 group-hover:border-[#ccff00] transition-colors"></div>
+                        <h3 className="text-2xl font-bold mb-2">{step.title}</h3>
+                        <p className="text-gray-400">{step.desc}</p>
+                    </div>
+                ))}
+            </div>
         </div>
       </section>
 
