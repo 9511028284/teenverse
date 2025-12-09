@@ -24,7 +24,7 @@ import emailjs from '@emailjs/browser';
 const EMAIL_CONFIG = {
   SERVICE_ID: "service_yhvj30u",
   TEMPLATE_ID: "template_nr1rd2n",
-  PUBLIC_KEY: "ZOft8l1SLf-HFiV"
+  PUBLIC_KEY: "_ZOft8l1SLf_-HFiV"
 };
 
 // --- CSS ---
