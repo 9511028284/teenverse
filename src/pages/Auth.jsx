@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, UploadCloud, ShieldAlert, Mail, ArrowRight, ArrowLeft, 
   User, Briefcase, Check, ChevronRight, Loader2, Lock, 
-  Eye, EyeOff, KeyRound, Sparkles
+  Eye, EyeOff, KeyRound, Sparkles, FileText
 } from 'lucide-react';
 import { 
   createUserWithEmailAndPassword, 
@@ -25,7 +25,7 @@ const EMAIL_CONFIG = {
   PUBLIC_KEY: "ZOft8l1SLf-HFiV"
 };
 
-// --- CSS FOR ANIMATED BACKGROUND ---
+// --- CSS ---
 const styles = `
   @keyframes gradient-xy {
     0%, 100% { background-position: 0% 50%; }
@@ -49,18 +49,17 @@ const GithubIcon = () => (<svg viewBox="0 0 24 24" className="w-5 h-5 fill-curre
 
 const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   // --- STATE ---
-  const [viewMode, setViewMode] = useState('login'); // 'login', 'signup', 'forgot'
+  const [viewMode, setViewMode] = useState('login'); 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
-  const [showPassword, setShowPassword] = useState(false); // Toggle Password Visibility
+  const [showPassword, setShowPassword] = useState(false);
   
-  // OTP Logic
   const [showVerify, setShowVerify] = useState(false);
   const [otp, setOtp] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState(null);
+  const [agreedToTerms, setAgreedToTerms] = useState(false); // New state for Checkbox
 
-  // Form Data
   const [formData, setFormData] = useState({
     role: 'freelancer', 
     email: '',
@@ -104,12 +103,16 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   const handleBack = () => setStep(prev => prev - 1);
 
-  // --- ACTIONS ---
+  // --- SAFE NAVIGATION HANDLER ---
+  const handleLegalClick = (e, page) => {
+    e.preventDefault(); // <--- THIS PREVENTS THE REDIRECT BUG
+    e.stopPropagation();
+    setView(page); // 'terms' or 'privacy'
+  };
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if(!formData.email) return alert("Please enter your email address first.");
-    
     setLoading(true);
     try {
       await sendPasswordResetEmail(auth, formData.email);
@@ -152,7 +155,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         }]);
         onSignUpSuccess();
       }
-
     } catch (err) {
       console.error(err);
       alert("Social Login Failed: " + err.message);
@@ -162,6 +164,11 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   const handleFinalSubmit = async () => {
+    // Check Terms Agreement
+    if (viewMode !== 'login' && !agreedToTerms) {
+        return alert("You must agree to the Terms & Privacy Policy to continue.");
+    }
+
     setLoading(true);
     try {
       if (viewMode === 'login') {
@@ -236,6 +243,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   const SocialButton = ({ icon, onClick, label }) => (
     <button 
+      type="button" // Important: Prevents form submission
       onClick={onClick}
       className="flex-1 bg-white/5 border border-white/10 hover:border-indigo-500/50 hover:bg-white/10 p-3 rounded-xl flex justify-center items-center transition-all duration-300 group relative overflow-hidden"
       title={label}
@@ -495,6 +503,20 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                             ) : (
                                <div><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Organization Name</label><input placeholder="Company Name (Optional)" onChange={(e) => updateField('org', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none"/></div>
                             )}
+
+                            {/* TERMS CHECKBOX (NEW) */}
+                            <div className="flex items-start gap-3 mt-6 p-3 bg-white/5 rounded-xl border border-white/5">
+                                <input 
+                                    type="checkbox" 
+                                    id="terms" 
+                                    checked={agreedToTerms}
+                                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                                    className="mt-1 w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-gray-700"
+                                />
+                                <label htmlFor="terms" className="text-xs text-gray-400 leading-relaxed cursor-pointer select-none">
+                                    I agree to the <button type="button" onClick={(e) => handleLegalClick(e, 'terms')} className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold">Terms of Service</button> and <button type="button" onClick={(e) => handleLegalClick(e, 'privacy')} className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold">Privacy Policy</button>.
+                                </label>
+                            </div>
                          </div>
                        </div>
                     )}
