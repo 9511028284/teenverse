@@ -28,7 +28,6 @@ const EMAIL_CONFIG = {
   PUBLIC_KEY: "_ZOft8l1SLf_-HFiV"
 };
 
-// --- CSS ---
 const styles = `
   @keyframes gradient-xy {
     0%, 100% { background-position: 0% 50%; }
@@ -59,12 +58,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   
   // Verification States
-  const [showVerify, setShowVerify] = useState(false); // For Parent OTP
-  const [verificationSent, setVerificationSent] = useState(false); // For Email Verification UI
+  const [showVerify, setShowVerify] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
   
   const [otp, setOtp] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+
+  // New State for Social Login flow
+  const [socialUser, setSocialUser] = useState(null); 
 
   const [formData, setFormData] = useState({
     role: 'freelancer', 
@@ -83,7 +85,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [age, setAge] = useState(null);
   const [isMinor, setIsMinor] = useState(false);
 
-  // --- MOBILE LOGIN FIX: Handle Redirect Result ---
+  // --- MOBILE LOGIN FIX & ONBOARDING INTERCEPTION ---
   useEffect(() => {
     const checkRedirect = async () => {
       setLoading(true);
@@ -91,22 +93,36 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         const result = await getRedirectResult(auth);
         if (result) {
           const user = result.user;
+          
           // Check if user exists in DB
           const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.uid).single();
           const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.uid).single();
 
           if (freelancerData || clientData) {
+            // User exists -> Go to Dashboard
             onLogin(`Welcome back ${user.displayName || ''}!`);
           } else {
-            // New Social User -> Create basic profile
-            await supabase.from('freelancers').insert([{
-               id: user.uid,
-               email: user.email,
-               name: user.displayName,
-               unlocked_skills: []
-            }]);
-            alert("Account created! Please update your profile details in settings.");
-            onSignUpSuccess();
+            // --- NEW USER FROM GOOGLE: START ONBOARDING ---
+            console.log("New Social User found. Starting onboarding...");
+            
+            // 1. Save the Auth object temporarily
+            setSocialUser(user);
+            
+            // 2. Pre-fill known data
+            setFormData(prev => ({
+              ...prev,
+              email: user.email,
+              name: user.displayName || '',
+              role: 'freelancer' // Default role
+            }));
+
+            // 3. Switch to Signup Mode
+            setViewMode('signup');
+            
+            // 4. Start at Step 1 (Role Selection)
+            setStep(1);
+            
+            alert("Please complete your profile details to finish signing up.");
           }
         }
       } catch (err) {
@@ -137,29 +153,37 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // --- UPDATED: HANDLE NEXT WITH SECURITY CHECKS ---
+  // --- HANDLE NEXT WITH SKIPPING PASSWORD STEP ---
   const handleNext = async () => {
+    // STEP 1: ROLE SELECTION
     if (step === 1) {
-        setStep(prev => prev + 1);
+        // If social login, SKIP Step 2 (Password) and go to Step 3
+        if (socialUser) {
+          setStep(3);
+        } else {
+          setStep(2);
+        }
         return;
     }
     
+    // STEP 2: CREDENTIALS (Skipped for Google users)
     if (step === 2) {
         if (!formData.email || !formData.password) return alert("Please fill in credentials");
         setStep(prev => prev + 1);
         return;
     }
 
+    // STEP 3: PERSONAL INFO & VALIDATION
     if (step === 3) {
         if (!formData.name || !formData.phone) return alert("Please fill in personal details");
 
-        // 1. STRICT PHONE VALIDATION (Indian Numbers)
+        // Phone Validation
         const phoneRegex = /^[6-9]\d{9}$/;
         if (!phoneRegex.test(formData.phone)) {
             return alert("Invalid Phone Number. Please enter a valid 10-digit mobile number starting with 6-9.");
         }
 
-        // 2. DUPLICATE PHONE CHECK (Database)
+        // Duplicate Check
         setLoading(true);
         try {
             const { data: fData } = await supabase.from('freelancers').select('phone').eq('phone', formData.phone).single();
@@ -173,15 +197,19 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
             setLoading(false);
             setStep(prev => prev + 1);
         } catch (error) {
-            console.error(error);
             setLoading(false);
-            // If DB error (network issue), we fail safe and block to prevent duplicates
             return alert("Unable to verify phone number. Please check connection.");
         }
     }
   };
 
-  const handleBack = () => setStep(prev => prev - 1);
+  const handleBack = () => {
+    if (step === 3 && socialUser) {
+      setStep(1); // Go back to Role if social user
+    } else {
+      setStep(prev => prev - 1);
+    }
+  };
 
   const handleLegalClick = (e, page) => {
     e.preventDefault(); 
@@ -215,7 +243,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         case 'apple': provider = new OAuthProvider('apple.com'); break;
         default: return;
       }
-      // Use Redirect for Mobile stability
       await signInWithRedirect(auth, provider);
     } catch (err) {
       console.error(err);
@@ -235,19 +262,16 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         // --- LOGIN LOGIC ---
         const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
         const user = userCredential.user;
-        
-        // CHECK EMAIL VERIFICATION
         if (!user.emailVerified) {
             await signOut(auth);
             throw new Error("Please verify your email address before logging in. Check your inbox.");
         }
-        
         onLogin('Welcome back!');
       } else {
-        // --- SIGNUP LOGIC ---
+        // --- SIGNUP LOGIC (BOTH SOCIAL AND EMAIL) ---
         if (formData.role === 'freelancer' && age < 13) throw new Error("You must be at least 13 years old to join.");
         
-        // Parent Verification Logic
+        // Parent Verification
         if (formData.role === 'freelancer' && isMinor) {
            if (!formData.parentEmail) throw new Error("Parent email is required for minors.");
            const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -286,34 +310,48 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   const completeSignup = async () => {
-    // 1. Create User
-    const cred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+    let uid = "";
     
-    // 2. Send Verification Email
-    await sendEmailVerification(cred.user);
+    // 1. Authenticate (Create User or Use Existing Social User)
+    if (socialUser) {
+      // User is already authenticated via Google
+      uid = socialUser.uid; 
+      // Note: We skip email verification for Google users as they are usually trusted
+    } else {
+      // Standard Email/Password Signup
+      const cred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+      uid = cred.user.uid;
+      await sendEmailVerification(cred.user);
+    }
 
-    // 3. Upload ID Proof
+    // 2. Upload ID Proof
     let fileUrl = "";
     if (file) {
-      const fileName = `id_${cred.user.uid}_${Date.now()}`;
+      const fileName = `id_${uid}_${Date.now()}`;
       await supabase.storage.from('id_proofs').upload(fileName, file);
       const res = supabase.storage.from('id_proofs').getPublicUrl(fileName);
       fileUrl = res.data.publicUrl;
     }
 
-    // 4. Save to DB
+    // 3. Save to Database
     const table = formData.role === 'client' ? 'clients' : 'freelancers';
     const dbData = formData.role === 'client' 
-       ? { id: cred.user.uid, name: formData.name, email: formData.email, phone: formData.phone, nationality: formData.nationality, id_proof_url: fileUrl, is_organisation: formData.org }
-       : { id: cred.user.uid, name: formData.name, email: formData.email, phone: formData.phone, nationality: formData.nationality, id_proof_url: fileUrl, dob: formData.dob, age: age, gender: formData.gender, upi: formData.upi, parent_email: isMinor ? formData.parentEmail : null, is_parent_verified: isMinor, unlocked_skills: [] };
+       ? { id: uid, name: formData.name, email: formData.email, phone: formData.phone, nationality: formData.nationality, id_proof_url: fileUrl, is_organisation: formData.org }
+       : { id: uid, name: formData.name, email: formData.email, phone: formData.phone, nationality: formData.nationality, id_proof_url: fileUrl, dob: formData.dob, age: age, gender: formData.gender, upi: formData.upi, parent_email: isMinor ? formData.parentEmail : null, is_parent_verified: isMinor, unlocked_skills: [] };
     
     const { error } = await supabase.from(table).insert([dbData]);
     if (error) throw error;
 
-    // 5. Force Logout & Show "Check Email"
-    await signOut(auth);
-    setLoading(false);
-    setVerificationSent(true);
+    // 4. Handle Post-Signup Flow
+    if (socialUser) {
+      // Social users go straight to dashboard
+      onSignUpSuccess(); 
+    } else {
+      // Email users must verify first
+      await signOut(auth);
+      setLoading(false);
+      setVerificationSent(true);
+    }
   };
 
   // --- SUB-COMPONENTS ---
@@ -378,7 +416,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
              </div>
           )}
 
-          {/* --- NEW VIEW: EMAIL VERIFICATION SENT --- */}
+          {/* --- VIEW: EMAIL VERIFICATION SENT --- */}
           {verificationSent ? (
              <div className="max-w-md mx-auto w-full text-center animate-in fade-in zoom-in duration-500">
                <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-green-500 border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)]">
@@ -534,8 +572,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                           </div>
                         )}
 
-                        {/* STEP 2: CREDENTIALS */}
-                        {step === 2 && (
+                        {/* STEP 2: CREDENTIALS (Only show if NOT social user) */}
+                        {step === 2 && !socialUser && (
                            <div className="animate-in slide-in-from-right-8 duration-500 space-y-5">
                              <div>
                                 <h2 className="text-3xl font-bold mb-2">Credentials</h2>
@@ -653,7 +691,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                         </div>
                         
                         <div className="mt-8 text-center">
-                           <button onClick={() => setViewMode('login')} className="text-gray-500 text-sm hover:text-white transition-colors">Already have an account? Log In</button>
+                           {!socialUser && (
+                              <button onClick={() => setViewMode('login')} className="text-gray-500 text-sm hover:text-white transition-colors">Already have an account? Log In</button>
+                           )}
                         </div>
                       </>
                    )}
