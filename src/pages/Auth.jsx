@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, UploadCloud, ShieldAlert, Mail, ArrowRight, ArrowLeft, 
   User, Briefcase, Check, ChevronRight, Loader2, Lock, 
-  Eye, EyeOff, KeyRound, Sparkles, FileText
+  Eye, EyeOff, KeyRound, Sparkles, FileText, MailCheck
 } from 'lucide-react';
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  // signInWithPopup, // REMOVED
-  signInWithRedirect, // ADDED
-  getRedirectResult,  // ADDED
+  signInWithRedirect, 
+  getRedirectResult,  
   sendPasswordResetEmail,
+  sendEmailVerification, 
+  signOut,
   GoogleAuthProvider, 
   GithubAuthProvider, 
   FacebookAuthProvider, 
@@ -57,7 +58,10 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [file, setFile] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   
-  const [showVerify, setShowVerify] = useState(false);
+  // Verification States
+  const [showVerify, setShowVerify] = useState(false); // For Parent OTP
+  const [verificationSent, setVerificationSent] = useState(false); // For Email Verification UI
+  
   const [otp, setOtp] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -79,7 +83,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [age, setAge] = useState(null);
   const [isMinor, setIsMinor] = useState(false);
 
-  // --- NEW: HANDLE REDIRECT RESULT (Mobile Fix) ---
+  // --- MOBILE LOGIN FIX: Handle Redirect Result ---
   useEffect(() => {
     const checkRedirect = async () => {
       setLoading(true);
@@ -87,16 +91,14 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         const result = await getRedirectResult(auth);
         if (result) {
           const user = result.user;
-          console.log("Redirect login successful:", user.email);
-
-          // Check if user exists in Supabase
+          // Check if user exists in DB
           const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.uid).single();
           const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.uid).single();
 
           if (freelancerData || clientData) {
             onLogin(`Welcome back ${user.displayName || ''}!`);
           } else {
-            // New user via Social Login - Create basic profile
+            // New Social User -> Create basic profile
             await supabase.from('freelancers').insert([{
                id: user.uid,
                email: user.email,
@@ -109,15 +111,14 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         }
       } catch (err) {
         console.error("Redirect Error:", err);
-        // alert("Login failed: " + err.message); // Optional: Uncomment to show errors
       } finally {
         setLoading(false);
       }
     };
     checkRedirect();
   }, [onLogin, onSignUpSuccess]);
-  // ------------------------------------------------
 
+  // --- AGE CALCULATION ---
   useEffect(() => {
     if (formData.dob) {
       const birthDate = new Date(formData.dob);
@@ -136,10 +137,48 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleNext = () => {
-    if (step === 2 && (!formData.email || !formData.password)) return alert("Please fill in credentials");
-    if (step === 3 && (!formData.name || !formData.phone)) return alert("Please fill in personal details");
-    setStep(prev => prev + 1);
+  // --- UPDATED: HANDLE NEXT WITH SECURITY CHECKS ---
+  const handleNext = async () => {
+    if (step === 1) {
+        setStep(prev => prev + 1);
+        return;
+    }
+    
+    if (step === 2) {
+        if (!formData.email || !formData.password) return alert("Please fill in credentials");
+        setStep(prev => prev + 1);
+        return;
+    }
+
+    if (step === 3) {
+        if (!formData.name || !formData.phone) return alert("Please fill in personal details");
+
+        // 1. STRICT PHONE VALIDATION (Indian Numbers)
+        const phoneRegex = /^[6-9]\d{9}$/;
+        if (!phoneRegex.test(formData.phone)) {
+            return alert("Invalid Phone Number. Please enter a valid 10-digit mobile number starting with 6-9.");
+        }
+
+        // 2. DUPLICATE PHONE CHECK (Database)
+        setLoading(true);
+        try {
+            const { data: fData } = await supabase.from('freelancers').select('phone').eq('phone', formData.phone).single();
+            const { data: cData } = await supabase.from('clients').select('phone').eq('phone', formData.phone).single();
+
+            if (fData || cData) {
+                setLoading(false);
+                return alert("This phone number is already registered with another account.");
+            }
+            
+            setLoading(false);
+            setStep(prev => prev + 1);
+        } catch (error) {
+            console.error(error);
+            setLoading(false);
+            // If DB error (network issue), we fail safe and block to prevent duplicates
+            return alert("Unable to verify phone number. Please check connection.");
+        }
+    }
   };
 
   const handleBack = () => setStep(prev => prev - 1);
@@ -165,7 +204,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
-  // --- UPDATED: SOCIAL LOGIN HANDLER ---
   const handleSocialLogin = async (providerName) => {
     setLoading(true);
     try {
@@ -177,20 +215,14 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         case 'apple': provider = new OAuthProvider('apple.com'); break;
         default: return;
       }
-      
-      // Use signInWithRedirect instead of Popup for better mobile support
+      // Use Redirect for Mobile stability
       await signInWithRedirect(auth, provider);
-      
-      // NOTE: The code below this line will NOT run immediately because 
-      // the page redirects. The logic is now handled in the useEffect above.
-      
     } catch (err) {
       console.error(err);
       alert("Social Login Failed: " + err.message);
       setLoading(false);
     }
   };
-  // -------------------------------------
 
   const handleFinalSubmit = async () => {
     if (viewMode !== 'login' && !agreedToTerms) {
@@ -200,11 +232,22 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     setLoading(true);
     try {
       if (viewMode === 'login') {
-        await signInWithEmailAndPassword(auth, formData.email, formData.password);
+        // --- LOGIN LOGIC ---
+        const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+        const user = userCredential.user;
+        
+        // CHECK EMAIL VERIFICATION
+        if (!user.emailVerified) {
+            await signOut(auth);
+            throw new Error("Please verify your email address before logging in. Check your inbox.");
+        }
+        
         onLogin('Welcome back!');
       } else {
+        // --- SIGNUP LOGIC ---
         if (formData.role === 'freelancer' && age < 13) throw new Error("You must be at least 13 years old to join.");
         
+        // Parent Verification Logic
         if (formData.role === 'freelancer' && isMinor) {
            if (!formData.parentEmail) throw new Error("Parent email is required for minors.");
            const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -243,7 +286,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   const completeSignup = async () => {
+    // 1. Create User
     const cred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+    
+    // 2. Send Verification Email
+    await sendEmailVerification(cred.user);
+
+    // 3. Upload ID Proof
     let fileUrl = "";
     if (file) {
       const fileName = `id_${cred.user.uid}_${Date.now()}`;
@@ -251,13 +300,20 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       const res = supabase.storage.from('id_proofs').getPublicUrl(fileName);
       fileUrl = res.data.publicUrl;
     }
+
+    // 4. Save to DB
     const table = formData.role === 'client' ? 'clients' : 'freelancers';
     const dbData = formData.role === 'client' 
        ? { id: cred.user.uid, name: formData.name, email: formData.email, phone: formData.phone, nationality: formData.nationality, id_proof_url: fileUrl, is_organisation: formData.org }
        : { id: cred.user.uid, name: formData.name, email: formData.email, phone: formData.phone, nationality: formData.nationality, id_proof_url: fileUrl, dob: formData.dob, age: age, gender: formData.gender, upi: formData.upi, parent_email: isMinor ? formData.parentEmail : null, is_parent_verified: isMinor, unlocked_skills: [] };
+    
     const { error } = await supabase.from(table).insert([dbData]);
     if (error) throw error;
-    onSignUpSuccess();
+
+    // 5. Force Logout & Show "Check Email"
+    await signOut(auth);
+    setLoading(false);
+    setVerificationSent(true);
   };
 
   // --- SUB-COMPONENTS ---
@@ -287,14 +343,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4 font-sans text-gray-100 relative overflow-hidden">
       <style>{styles}</style>
       
-      {/* Animated Background */}
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f111a] via-[#1a103c] to-[#0f111a] animate-gradient z-0"></div>
       <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 z-0 pointer-events-none"></div>
 
       <div className="w-full max-w-5xl h-[85vh] glass-panel rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row relative z-10">
         <button onClick={() => setView('home')} className="absolute top-6 right-6 z-20 text-gray-400 hover:text-white transition-colors bg-black/20 p-2 rounded-full hover:bg-white/10"><X size={20} /></button>
 
-        {/* LEFT PANEL: VISUALS */}
+        {/* LEFT PANEL */}
         <div className="hidden md:flex w-2/5 relative overflow-hidden flex-col justify-between p-12 bg-black/20">
           <div className="absolute inset-0 bg-indigo-600/10 mix-blend-overlay"></div>
           <div className="relative z-10">
@@ -304,7 +359,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
             <h1 className="text-5xl font-black tracking-tighter text-white mb-2 leading-tight">Join the <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Revolution.</span></h1>
             <p className="text-indigo-200/60 mt-4 text-lg">Your skills. Your rules. Your money.</p>
           </div>
-          
           <div className="relative z-10">
             <div className="flex -space-x-4 mb-4">
               {[1,2,3,4].map(i => (
@@ -315,261 +369,297 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
           </div>
         </div>
 
-        {/* RIGHT PANEL: FORMS */}
+        {/* RIGHT PANEL */}
         <div className="flex-1 p-8 md:p-12 overflow-y-auto relative flex flex-col justify-center bg-gradient-to-b from-transparent to-black/40">
           
-          {/* SHOW LOADER IF REDIRECT IS PROCESSING */}
           {loading && (
              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm rounded-3xl">
                 <Loader2 size={40} className="animate-spin text-indigo-500" />
              </div>
           )}
 
-          {/* --- VIEW: FORGOT PASSWORD --- */}
-          {viewMode === 'forgot' && (
-             <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-right-4 duration-300">
-               <button onClick={() => setViewMode('login')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 text-sm font-bold transition-colors"><ArrowLeft size={16}/> Back to Login</button>
-               <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center text-indigo-400 mb-6 border border-indigo-500/20">
-                  <KeyRound size={32} />
+          {/* --- NEW VIEW: EMAIL VERIFICATION SENT --- */}
+          {verificationSent ? (
+             <div className="max-w-md mx-auto w-full text-center animate-in fade-in zoom-in duration-500">
+               <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-green-500 border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)]">
+                  <MailCheck size={40} />
                </div>
-               <h2 className="text-3xl font-bold mb-2">Reset Password</h2>
-               <p className="text-gray-400 mb-8">Enter your email and we'll send you a link to get back into your account.</p>
-               
-               <form onSubmit={handleForgotPassword} className="space-y-4">
-                 <div className="group">
-                    <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400 transition-colors">Email Address</label>
-                    <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50 focus-within:shadow-[0_0_15px_rgba(99,102,241,0.15)]">
-                      <Mail size={18} className="text-gray-500 mr-3"/>
-                      <input type="email" placeholder="you@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required />
-                    </div>
-                 </div>
-                 <button type="submit" disabled={loading} className="w-full bg-white text-black font-bold py-4 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex justify-center items-center shadow-lg shadow-white/10">
-                    {loading ? <Loader2 className="animate-spin"/> : 'Send Reset Link'}
-                 </button>
-               </form>
-             </div>
-          )}
-
-          {/* --- VIEW: LOGIN --- */}
-          {viewMode === 'login' && (
-            <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <h2 className="text-3xl font-bold mb-2">Welcome Back</h2>
-               <p className="text-gray-400 mb-8">Enter your credentials to access your workspace.</p>
-               
-               <div className="space-y-5">
-                  <div className="group">
-                    <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400 transition-colors">Email</label>
-                    <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50 focus-within:shadow-[0_0_15px_rgba(99,102,241,0.15)]">
-                      <Mail size={18} className="text-gray-500 mr-3"/>
-                      <input type="email" placeholder="name@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} />
-                    </div>
-                  </div>
-
-                  <div className="group">
-                    <div className="flex justify-between items-center mb-2">
-                       <label className="text-xs font-bold text-gray-500 uppercase ml-1 group-focus-within:text-indigo-400 transition-colors">Password</label>
-                       <button onClick={() => setViewMode('forgot')} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button>
-                    </div>
-                    <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50 focus-within:shadow-[0_0_15px_rgba(99,102,241,0.15)]">
-                      <Lock size={18} className="text-gray-500 mr-3"/>
-                      <input 
-                        type={showPassword ? "text" : "password"} 
-                        placeholder="••••••••" 
-                        className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" 
-                        value={formData.password} 
-                        onChange={(e) => updateField('password', e.target.value)} 
-                      />
-                      <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">
-                        {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
-                      </button>
-                    </div>
-                  </div>
+               <h2 className="text-3xl font-bold mb-4">Verify your Email</h2>
+               <p className="text-gray-300 mb-2">We've sent a verification link to:</p>
+               <div className="bg-white/5 border border-white/10 rounded-lg py-2 px-4 inline-block mb-6 font-mono text-indigo-300">
+                 {formData.email}
                </div>
-               
-               <button onClick={handleFinalSubmit} disabled={loading} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 flex justify-center items-center gap-2 hover:scale-[1.02] active:scale-[0.98]">
-                  {loading ? <Loader2 className="animate-spin"/> : 'Log In'}
-               </button>
-
-               <div className="flex items-center gap-4 my-8">
-                 <div className="h-px bg-white/10 flex-1"></div>
-                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Or continue with</span>
-                 <div className="h-px bg-white/10 flex-1"></div>
-               </div>
-
-               <div className="flex gap-3">
-                  <SocialButton icon={<GoogleIcon />} onClick={() => handleSocialLogin('google')} label="Google" />
-                  <SocialButton icon={<GithubIcon />} onClick={() => handleSocialLogin('github')} label="GitHub" />
-               </div>
-
-               <p className="mt-8 text-center text-gray-500 text-sm">
-                 Don't have an account? <button onClick={() => setViewMode('signup')} className="text-white font-bold hover:underline">Sign Up</button>
+               <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+                 Click the link in the email to activate your account.<br/>
+                 You cannot log in until you verify.
                </p>
-            </div>
-          )}
-
-          {/* --- VIEW: SIGNUP --- */}
-          {viewMode === 'signup' && (
-            <div className="max-w-md mx-auto w-full">
-               {showVerify ? (
-                  <div className="text-center animate-in zoom-in duration-300">
-                     <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.2)]">
-                        <ShieldAlert size={40} />
+               <button onClick={() => { setVerificationSent(false); setViewMode('login'); }} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50">
+                  Return to Login
+               </button>
+             </div>
+          ) : (
+            <>
+              {/* --- VIEW: FORGOT PASSWORD --- */}
+              {viewMode === 'forgot' && (
+                 <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-right-4 duration-300">
+                   <button onClick={() => setViewMode('login')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 text-sm font-bold transition-colors"><ArrowLeft size={16}/> Back to Login</button>
+                   <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center text-indigo-400 mb-6 border border-indigo-500/20">
+                      <KeyRound size={32} />
+                   </div>
+                   <h2 className="text-3xl font-bold mb-2">Reset Password</h2>
+                   <p className="text-gray-400 mb-8">Enter your email and we'll send you a link to get back into your account.</p>
+                   
+                   <form onSubmit={handleForgotPassword} className="space-y-4">
+                     <div className="group">
+                        <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400 transition-colors">Email Address</label>
+                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50 focus-within:shadow-[0_0_15px_rgba(99,102,241,0.15)]">
+                          <Mail size={18} className="text-gray-500 mr-3"/>
+                          <input type="email" placeholder="you@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required />
+                        </div>
                      </div>
-                     <h2 className="text-2xl font-bold mb-2">Parent Verification</h2>
-                     <p className="text-gray-400 mb-8 text-sm">We sent a 6-digit code to <span className="text-white font-mono bg-white/10 px-2 py-0.5 rounded">{formData.parentEmail}</span></p>
-                     
-                     <div className="relative mb-6">
-                        <input className="w-full bg-black/40 border border-gray-700 rounded-xl py-5 text-center text-3xl tracking-[1em] font-mono text-white focus:border-orange-500 focus:shadow-[0_0_20px_rgba(249,115,22,0.2)] outline-none transition-all" placeholder="000000" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} />
-                     </div>
-                     
-                     <button onClick={handleVerifyOTP} disabled={loading} className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-900/50">{loading ? 'Verifying...' : 'Complete Registration'}</button>
-                     <button onClick={() => setShowVerify(false)} className="mt-6 text-gray-500 text-sm hover:text-white transition-colors">Change Parent Email</button>
-                  </div>
-               ) : (
-                  <>
-                    <div className="flex justify-between items-center mb-8">
-                      {step > 1 ? <button onClick={handleBack} className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"><ArrowLeft size={20}/></button> : <div></div>}
-                      <StepIndicator />
-                      <div className="w-8"></div> 
-                    </div>
+                     <button type="submit" disabled={loading} className="w-full bg-white text-black font-bold py-4 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex justify-center items-center shadow-lg shadow-white/10">
+                        {loading ? <Loader2 className="animate-spin"/> : 'Send Reset Link'}
+                     </button>
+                   </form>
+                 </div>
+              )}
 
-                    {step === 1 && (
-                      <div className="animate-in slide-in-from-right-8 duration-500">
-                        <h2 className="text-3xl font-bold mb-2">Who are you?</h2>
-                        <p className="text-gray-400 mb-8">Choose how you want to use Teenverse.</p>
-                        <div className="grid gap-4">
-                          {['freelancer', 'client'].map((r) => (
-                             <button 
-                                key={r}
-                                onClick={() => updateField('role', r)}
-                                className={`p-6 rounded-2xl border transition-all text-left relative overflow-hidden group ${formData.role === r ? 'border-indigo-500 bg-indigo-500/10 shadow-[0_0_20px_rgba(99,102,241,0.15)]' : 'border-gray-700 bg-white/5 hover:border-gray-600'}`}
-                             >
-                                <div className="flex justify-between items-start mb-2 relative z-10">
-                                   <div className={`p-3 rounded-xl ${formData.role === r ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400'}`}>
-                                      {r === 'freelancer' ? <User size={24}/> : <Briefcase size={24}/>}
-                                   </div>
-                                   {formData.role === r && <div className="bg-indigo-500 text-white p-1 rounded-full"><Check size={14}/></div>}
-                                </div>
-                                <h3 className="text-xl font-bold capitalize relative z-10">{r}</h3>
-                                <p className="text-sm text-gray-400 mt-1 relative z-10">{r === 'freelancer' ? 'I am a teen looking for work.' : 'I want to hire talent.'}</p>
-                             </button>
-                          ))}
+              {/* --- VIEW: LOGIN --- */}
+              {viewMode === 'login' && (
+                <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+                   <h2 className="text-3xl font-bold mb-2">Welcome Back</h2>
+                   <p className="text-gray-400 mb-8">Enter your credentials to access your workspace.</p>
+                   
+                   <div className="space-y-5">
+                      <div className="group">
+                        <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400 transition-colors">Email</label>
+                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50 focus-within:shadow-[0_0_15px_rgba(99,102,241,0.15)]">
+                          <Mail size={18} className="text-gray-500 mr-3"/>
+                          <input type="email" placeholder="name@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} />
                         </div>
                       </div>
-                    )}
 
-                    {step === 2 && (
-                       <div className="animate-in slide-in-from-right-8 duration-500 space-y-5">
-                         <div>
-                            <h2 className="text-3xl font-bold mb-2">Credentials</h2>
-                            <p className="text-gray-400 mb-6">Secure your account.</p>
+                      <div className="group">
+                        <div className="flex justify-between items-center mb-2">
+                           <label className="text-xs font-bold text-gray-500 uppercase ml-1 group-focus-within:text-indigo-400 transition-colors">Password</label>
+                           <button onClick={() => setViewMode('forgot')} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button>
+                        </div>
+                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50 focus-within:shadow-[0_0_15px_rgba(99,102,241,0.15)]">
+                          <Lock size={18} className="text-gray-500 mr-3"/>
+                          <input 
+                            type={showPassword ? "text" : "password"} 
+                            placeholder="••••••••" 
+                            className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" 
+                            value={formData.password} 
+                            onChange={(e) => updateField('password', e.target.value)} 
+                          />
+                          <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">
+                            {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
+                          </button>
+                        </div>
+                      </div>
+                   </div>
+                   
+                   <button onClick={handleFinalSubmit} disabled={loading} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 flex justify-center items-center gap-2 hover:scale-[1.02] active:scale-[0.98]">
+                      {loading ? <Loader2 className="animate-spin"/> : 'Log In'}
+                   </button>
+
+                   <div className="flex items-center gap-4 my-8">
+                     <div className="h-px bg-white/10 flex-1"></div>
+                     <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Or continue with</span>
+                     <div className="h-px bg-white/10 flex-1"></div>
+                   </div>
+
+                   <div className="flex gap-3">
+                      <SocialButton icon={<GoogleIcon />} onClick={() => handleSocialLogin('google')} label="Google" />
+                      <SocialButton icon={<GithubIcon />} onClick={() => handleSocialLogin('github')} label="GitHub" />
+                   </div>
+
+                   <p className="mt-8 text-center text-gray-500 text-sm">
+                     Don't have an account? <button onClick={() => setViewMode('signup')} className="text-white font-bold hover:underline">Sign Up</button>
+                   </p>
+                </div>
+              )}
+
+              {/* --- VIEW: SIGNUP --- */}
+              {viewMode === 'signup' && (
+                <div className="max-w-md mx-auto w-full">
+                   {showVerify ? (
+                      <div className="text-center animate-in zoom-in duration-300">
+                         {/* PARENT OTP VERIFICATION UI */}
+                         <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.2)]">
+                            <ShieldAlert size={40} />
+                         </div>
+                         <h2 className="text-2xl font-bold mb-2">Parent Verification</h2>
+                         <p className="text-gray-400 mb-8 text-sm">We sent a 6-digit code to <span className="text-white font-mono bg-white/10 px-2 py-0.5 rounded">{formData.parentEmail}</span></p>
+                         
+                         <div className="relative mb-6">
+                            <input className="w-full bg-black/40 border border-gray-700 rounded-xl py-5 text-center text-3xl tracking-[1em] font-mono text-white focus:border-orange-500 focus:shadow-[0_0_20px_rgba(249,115,22,0.2)] outline-none transition-all" placeholder="000000" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} />
                          </div>
                          
-                         <div className="group">
-                           <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400">Email</label>
-                           <input type="email" value={formData.email} onChange={(e) => updateField('email', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 focus:bg-black/50 outline-none transition-all" placeholder="name@example.com"/>
-                         </div>
-                         
-                         <div className="group">
-                           <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400">Password</label>
-                           <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50">
-                             <input 
-                               type={showPassword ? "text" : "password"} 
-                               value={formData.password} 
-                               onChange={(e) => updateField('password', e.target.value)} 
-                               className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" 
-                               placeholder="••••••••"
-                             />
-                             <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
+                         <button onClick={handleVerifyOTP} disabled={loading} className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-900/50">{loading ? 'Verifying...' : 'Complete Registration'}</button>
+                         <button onClick={() => setShowVerify(false)} className="mt-6 text-gray-500 text-sm hover:text-white transition-colors">Change Parent Email</button>
+                      </div>
+                   ) : (
+                      <>
+                        <div className="flex justify-between items-center mb-8">
+                          {step > 1 ? <button onClick={handleBack} className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"><ArrowLeft size={20}/></button> : <div></div>}
+                          <StepIndicator />
+                          <div className="w-8"></div> 
+                        </div>
+
+                        {/* STEP 1: ROLE */}
+                        {step === 1 && (
+                          <div className="animate-in slide-in-from-right-8 duration-500">
+                            <h2 className="text-3xl font-bold mb-2">Who are you?</h2>
+                            <p className="text-gray-400 mb-8">Choose how you want to use Teenverse.</p>
+                            <div className="grid gap-4">
+                              {['freelancer', 'client'].map((r) => (
+                                 <button 
+                                    key={r}
+                                    onClick={() => updateField('role', r)}
+                                    className={`p-6 rounded-2xl border transition-all text-left relative overflow-hidden group ${formData.role === r ? 'border-indigo-500 bg-indigo-500/10 shadow-[0_0_20px_rgba(99,102,241,0.15)]' : 'border-gray-700 bg-white/5 hover:border-gray-600'}`}
+                                 >
+                                    <div className="flex justify-between items-start mb-2 relative z-10">
+                                       <div className={`p-3 rounded-xl ${formData.role === r ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                                          {r === 'freelancer' ? <User size={24}/> : <Briefcase size={24}/>}
+                                       </div>
+                                       {formData.role === r && <div className="bg-indigo-500 text-white p-1 rounded-full"><Check size={14}/></div>}
+                                    </div>
+                                    <h3 className="text-xl font-bold capitalize relative z-10">{r}</h3>
+                                    <p className="text-sm text-gray-400 mt-1 relative z-10">{r === 'freelancer' ? 'I am a teen looking for work.' : 'I want to hire talent.'}</p>
+                                 </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* STEP 2: CREDENTIALS */}
+                        {step === 2 && (
+                           <div className="animate-in slide-in-from-right-8 duration-500 space-y-5">
+                             <div>
+                                <h2 className="text-3xl font-bold mb-2">Credentials</h2>
+                                <p className="text-gray-400 mb-6">Secure your account.</p>
+                             </div>
+                             
+                             <div className="group">
+                               <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400">Email</label>
+                               <input type="email" value={formData.email} onChange={(e) => updateField('email', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 focus:bg-black/50 outline-none transition-all" placeholder="name@example.com"/>
+                             </div>
+                             
+                             <div className="group">
+                               <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400">Password</label>
+                               <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50">
+                                 <input 
+                                   type={showPassword ? "text" : "password"} 
+                                   value={formData.password} 
+                                   onChange={(e) => updateField('password', e.target.value)} 
+                                   className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" 
+                                   placeholder="••••••••"
+                                 />
+                                 <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
+                               </div>
+                             </div>
                            </div>
-                         </div>
-                       </div>
-                    )}
+                        )}
 
-                    {step === 3 && (
-                       <div className="animate-in slide-in-from-right-8 duration-500 space-y-5">
-                         <div>
-                            <h2 className="text-3xl font-bold mb-2">Personal Info</h2>
-                            <p className="text-gray-400 mb-6">Tell us about yourself.</p>
-                         </div>
-                         <div className="group">
-                            <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Full Name</label>
-                            <input value={formData.name} onChange={(e) => updateField('name', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/>
-                         </div>
-                         <div className="flex gap-4">
-                            <div className="flex-1 group">
-                               <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Phone</label>
-                               <input value={formData.phone} onChange={(e) => updateField('phone', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/>
-                            </div>
-                            <div className="flex-1 group">
-                               <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Country</label>
-                               <input value={formData.nationality} onChange={(e) => updateField('nationality', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/>
-                            </div>
-                         </div>
-                       </div>
-                    )}
+                        {/* STEP 3: PERSONAL & PHONE */}
+                        {step === 3 && (
+                           <div className="animate-in slide-in-from-right-8 duration-500 space-y-5">
+                             <div>
+                                <h2 className="text-3xl font-bold mb-2">Personal Info</h2>
+                                <p className="text-gray-400 mb-6">Tell us about yourself.</p>
+                             </div>
+                             <div className="group">
+                                <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Full Name</label>
+                                <input value={formData.name} onChange={(e) => updateField('name', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/>
+                             </div>
+                             <div className="flex gap-4">
+                                <div className="flex-1 group">
+                                   <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Phone (India)</label>
+                                   <input 
+                                     type="tel"
+                                     maxLength={10}
+                                     value={formData.phone} 
+                                     onChange={(e) => updateField('phone', e.target.value.replace(/\D/g, ''))} // Numeric only
+                                     className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"
+                                     placeholder="9876543210"
+                                   />
+                                </div>
+                                <div className="flex-1 group">
+                                   <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Country</label>
+                                   <input value={formData.nationality} onChange={(e) => updateField('nationality', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/>
+                                </div>
+                             </div>
+                           </div>
+                        )}
 
-                    {step === 4 && (
-                       <div className="animate-in slide-in-from-right-8 duration-500">
-                         <h2 className="text-3xl font-bold mb-2">Final Step</h2>
-                         <p className="text-gray-400 mb-6">Almost there!</p>
-                         <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
-                            {formData.role === 'freelancer' ? (
-                               <>
-                                  <div className="bg-black/30 p-4 rounded-xl border border-gray-700/50">
-                                     <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Date of Birth</label>
-                                     <input type="date" value={formData.dob} onChange={(e) => updateField('dob', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none"/>
-                                     {age !== null && <div className={`text-xs mt-2 font-bold px-2 py-1 inline-block rounded ${isMinor ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>Age: {age} {isMinor && "(Parent Verification Required)"}</div>}
-                                  </div>
-                                  {isMinor && (
-                                     <div className="bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl animate-in slide-in-from-top-2">
-                                        <div className="flex gap-2 items-center mb-2 text-orange-400"><ShieldAlert size={16}/><span className="text-xs font-bold uppercase">Guardian Email Required</span></div>
-                                        <input type="email" placeholder="Parent's Email Address" value={formData.parentEmail} onChange={(e) => updateField('parentEmail', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white focus:border-orange-500 outline-none"/>
-                                     </div>
-                                  )}
-                                  <div>
-                                     <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Upload ID (Optional for now)</label>
-                                     <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-700 border-dashed rounded-xl cursor-pointer hover:bg-white/5 hover:border-indigo-500 transition-all group">
-                                        <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-400 group-hover:text-indigo-400"><UploadCloud className="w-8 h-8 mb-3" /><p className="text-sm"><span className="font-semibold">{file ? file.name : "Click to upload ID"}</span></p></div>
-                                        <input type="file" className="hidden" onChange={(e) => setFile(e.target.files[0])} />
-                                     </label>
-                                  </div>
-                               </>
-                            ) : (
-                               <div><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Organization Name</label><input placeholder="Company Name (Optional)" onChange={(e) => updateField('org', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none"/></div>
-                            )}
+                        {/* STEP 4: FINAL */}
+                        {step === 4 && (
+                           <div className="animate-in slide-in-from-right-8 duration-500">
+                             <h2 className="text-3xl font-bold mb-2">Final Step</h2>
+                             <p className="text-gray-400 mb-6">Almost there!</p>
+                             <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                                {formData.role === 'freelancer' ? (
+                                   <>
+                                      <div className="bg-black/30 p-4 rounded-xl border border-gray-700/50">
+                                         <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Date of Birth</label>
+                                         <input type="date" value={formData.dob} onChange={(e) => updateField('dob', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none"/>
+                                         {age !== null && <div className={`text-xs mt-2 font-bold px-2 py-1 inline-block rounded ${isMinor ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>Age: {age} {isMinor && "(Parent Verification Required)"}</div>}
+                                      </div>
+                                      {isMinor && (
+                                         <div className="bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl animate-in slide-in-from-top-2">
+                                            <div className="flex gap-2 items-center mb-2 text-orange-400"><ShieldAlert size={16}/><span className="text-xs font-bold uppercase">Guardian Email Required</span></div>
+                                            <input type="email" placeholder="Parent's Email Address" value={formData.parentEmail} onChange={(e) => updateField('parentEmail', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white focus:border-orange-500 outline-none"/>
+                                         </div>
+                                      )}
+                                      <div>
+                                         <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Upload ID (Optional for now)</label>
+                                         <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-700 border-dashed rounded-xl cursor-pointer hover:bg-white/5 hover:border-indigo-500 transition-all group">
+                                            <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-400 group-hover:text-indigo-400"><UploadCloud className="w-8 h-8 mb-3" /><p className="text-sm"><span className="font-semibold">{file ? file.name : "Click to upload ID"}</span></p></div>
+                                            <input type="file" className="hidden" onChange={(e) => setFile(e.target.files[0])} />
+                                         </label>
+                                      </div>
+                                   </>
+                                ) : (
+                                   <div><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Organization Name</label><input placeholder="Company Name (Optional)" onChange={(e) => updateField('org', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none"/></div>
+                                )}
 
-                            {/* TERMS CHECKBOX */}
-                            <div className="flex items-start gap-3 mt-6 p-3 bg-white/5 rounded-xl border border-white/5">
-                                <input 
-                                    type="checkbox" 
-                                    id="terms" 
-                                    checked={agreedToTerms}
-                                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                                    className="mt-1 w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-gray-700"
-                                />
-                                <label htmlFor="terms" className="text-xs text-gray-400 leading-relaxed cursor-pointer select-none">
-                                    I agree to the <button type="button" onClick={(e) => handleLegalClick(e, 'terms')} className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold">Terms of Service</button> and <button type="button" onClick={(e) => handleLegalClick(e, 'privacy')} className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold">Privacy Policy</button>.
-                                </label>
-                            </div>
-                         </div>
-                       </div>
-                    )}
+                                {/* TERMS CHECKBOX */}
+                                <div className="flex items-start gap-3 mt-6 p-3 bg-white/5 rounded-xl border border-white/5">
+                                    <input 
+                                        type="checkbox" 
+                                        id="terms" 
+                                        checked={agreedToTerms}
+                                        onChange={(e) => setAgreedToTerms(e.target.checked)}
+                                        className="mt-1 w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-gray-700"
+                                    />
+                                    <label htmlFor="terms" className="text-xs text-gray-400 leading-relaxed cursor-pointer select-none">
+                                        I agree to the <button type="button" onClick={(e) => handleLegalClick(e, 'terms')} className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold">Terms of Service</button> and <button type="button" onClick={(e) => handleLegalClick(e, 'privacy')} className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold">Privacy Policy</button>.
+                                    </label>
+                                </div>
+                             </div>
+                           </div>
+                        )}
 
-                    <div className="mt-8 pt-6 border-t border-white/10 flex justify-end">
-                       {step < 4 ? (
-                          <button onClick={handleNext} className="bg-white text-black hover:bg-gray-200 px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all">Next <ChevronRight size={18}/></button>
-                       ) : (
-                          <button onClick={handleFinalSubmit} disabled={loading} className="bg-indigo-600 text-white hover:bg-indigo-500 px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-900/50">{loading ? <Loader2 className="animate-spin"/> : 'Create Account'}</button>
-                       )}
-                    </div>
-                    
-                    <div className="mt-8 text-center">
-                       <button onClick={() => setViewMode('login')} className="text-gray-500 text-sm hover:text-white transition-colors">Already have an account? Log In</button>
-                    </div>
-                  </>
-               )}
-            </div>
+                        <div className="mt-8 pt-6 border-t border-white/10 flex justify-end">
+                           {step < 4 ? (
+                              <button onClick={handleNext} disabled={loading} className="bg-white text-black hover:bg-gray-200 px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50">
+                                {loading ? <Loader2 className="animate-spin" size={18}/> : <>Next <ChevronRight size={18}/></>}
+                              </button>
+                           ) : (
+                              <button onClick={handleFinalSubmit} disabled={loading} className="bg-indigo-600 text-white hover:bg-indigo-500 px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-900/50 disabled:opacity-50">{loading ? <Loader2 className="animate-spin"/> : 'Create Account'}</button>
+                           )}
+                        </div>
+                        
+                        <div className="mt-8 text-center">
+                           <button onClick={() => setViewMode('login')} className="text-gray-500 text-sm hover:text-white transition-colors">Already have an account? Log In</button>
+                        </div>
+                      </>
+                   )}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
