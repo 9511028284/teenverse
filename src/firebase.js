@@ -8,7 +8,7 @@ import { getAuth } from "firebase/auth";
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyDLUg6OeBQFYLWYL9c1ChclIoJQHbN1XwA",
-  authDomain: "teenversehub.in",
+  authDomain: "www.teenversehub.in",
   projectId: "teenverse-1d91f",
   storageBucket: "teenverse-1d91f.firebasestorage.app",
   messagingSenderId: "285272738566",
