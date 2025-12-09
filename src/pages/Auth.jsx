@@ -22,7 +22,7 @@ import emailjs from '@emailjs/browser';
 
 // --- CONFIGURATION ---
 const EMAIL_CONFIG = {
-  SERVICE_ID: "service_mf8vcvm",
+  SERVICE_ID: "service_yhvj30u",
   TEMPLATE_ID: "template_nr1rd2n",
   PUBLIC_KEY: "ZOft8l1SLf-HFiV"
 };
