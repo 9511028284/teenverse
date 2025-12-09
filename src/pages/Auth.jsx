@@ -7,7 +7,9 @@ import {
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signInWithPopup, 
+  // signInWithPopup, // REMOVED
+  signInWithRedirect, // ADDED
+  getRedirectResult,  // ADDED
   sendPasswordResetEmail,
   GoogleAuthProvider, 
   GithubAuthProvider, 
@@ -58,7 +60,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [showVerify, setShowVerify] = useState(false);
   const [otp, setOtp] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState(null);
-  const [agreedToTerms, setAgreedToTerms] = useState(false); // New state for Checkbox
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const [formData, setFormData] = useState({
     role: 'freelancer', 
@@ -76,6 +78,45 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   const [age, setAge] = useState(null);
   const [isMinor, setIsMinor] = useState(false);
+
+  // --- NEW: HANDLE REDIRECT RESULT (Mobile Fix) ---
+  useEffect(() => {
+    const checkRedirect = async () => {
+      setLoading(true);
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const user = result.user;
+          console.log("Redirect login successful:", user.email);
+
+          // Check if user exists in Supabase
+          const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.uid).single();
+          const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.uid).single();
+
+          if (freelancerData || clientData) {
+            onLogin(`Welcome back ${user.displayName || ''}!`);
+          } else {
+            // New user via Social Login - Create basic profile
+            await supabase.from('freelancers').insert([{
+               id: user.uid,
+               email: user.email,
+               name: user.displayName,
+               unlocked_skills: []
+            }]);
+            alert("Account created! Please update your profile details in settings.");
+            onSignUpSuccess();
+          }
+        }
+      } catch (err) {
+        console.error("Redirect Error:", err);
+        // alert("Login failed: " + err.message); // Optional: Uncomment to show errors
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkRedirect();
+  }, [onLogin, onSignUpSuccess]);
+  // ------------------------------------------------
 
   useEffect(() => {
     if (formData.dob) {
@@ -103,11 +144,10 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   const handleBack = () => setStep(prev => prev - 1);
 
-  // --- SAFE NAVIGATION HANDLER ---
   const handleLegalClick = (e, page) => {
-    e.preventDefault(); // <--- THIS PREVENTS THE REDIRECT BUG
+    e.preventDefault(); 
     e.stopPropagation();
-    setView(page); // 'terms' or 'privacy'
+    setView(page); 
   };
 
   const handleForgotPassword = async (e) => {
@@ -125,6 +165,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
+  // --- UPDATED: SOCIAL LOGIN HANDLER ---
   const handleSocialLogin = async (providerName) => {
     setLoading(true);
     try {
@@ -137,34 +178,21 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         default: return;
       }
       
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.uid).single();
-      const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.uid).single();
-
-      if (freelancerData || clientData) {
-        onLogin(`Welcome back ${user.displayName || ''}!`);
-      } else {
-        alert("Account created! Please update your profile details in settings.");
-        await supabase.from('freelancers').insert([{
-           id: user.uid,
-           email: user.email,
-           name: user.displayName,
-           unlocked_skills: []
-        }]);
-        onSignUpSuccess();
-      }
+      // Use signInWithRedirect instead of Popup for better mobile support
+      await signInWithRedirect(auth, provider);
+      
+      // NOTE: The code below this line will NOT run immediately because 
+      // the page redirects. The logic is now handled in the useEffect above.
+      
     } catch (err) {
       console.error(err);
       alert("Social Login Failed: " + err.message);
-    } finally {
       setLoading(false);
     }
   };
+  // -------------------------------------
 
   const handleFinalSubmit = async () => {
-    // Check Terms Agreement
     if (viewMode !== 'login' && !agreedToTerms) {
         return alert("You must agree to the Terms & Privacy Policy to continue.");
     }
@@ -243,7 +271,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   const SocialButton = ({ icon, onClick, label }) => (
     <button 
-      type="button" // Important: Prevents form submission
+      type="button" 
       onClick={onClick}
       className="flex-1 bg-white/5 border border-white/10 hover:border-indigo-500/50 hover:bg-white/10 p-3 rounded-xl flex justify-center items-center transition-all duration-300 group relative overflow-hidden"
       title={label}
@@ -290,6 +318,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         {/* RIGHT PANEL: FORMS */}
         <div className="flex-1 p-8 md:p-12 overflow-y-auto relative flex flex-col justify-center bg-gradient-to-b from-transparent to-black/40">
           
+          {/* SHOW LOADER IF REDIRECT IS PROCESSING */}
+          {loading && (
+             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm rounded-3xl">
+                <Loader2 size={40} className="animate-spin text-indigo-500" />
+             </div>
+          )}
+
           {/* --- VIEW: FORGOT PASSWORD --- */}
           {viewMode === 'forgot' && (
              <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-right-4 duration-300">
@@ -504,7 +539,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                <div><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Organization Name</label><input placeholder="Company Name (Optional)" onChange={(e) => updateField('org', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none"/></div>
                             )}
 
-                            {/* TERMS CHECKBOX (NEW) */}
+                            {/* TERMS CHECKBOX */}
                             <div className="flex items-start gap-3 mt-6 p-3 bg-white/5 rounded-xl border border-white/5">
                                 <input 
                                     type="checkbox" 
