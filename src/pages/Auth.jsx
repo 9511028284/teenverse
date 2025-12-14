@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, UploadCloud, ShieldAlert, Mail, ArrowRight, ArrowLeft, 
   User, Briefcase, Check, ChevronRight, Loader2, Lock, 
-  Eye, EyeOff, KeyRound, Sparkles, FileText, MailCheck
+  Eye, EyeOff, KeyRound, Sparkles, FileText, MailCheck, Scale
 } from 'lucide-react';
 import { 
   createUserWithEmailAndPassword, 
@@ -28,6 +28,9 @@ const EMAIL_CONFIG = {
   PUBLIC_KEY: "_ZOft8l1SLf_-HFiV"
 };
 
+// LEGAL: Version control for the consent text. Change this if you update your Terms.
+const CONSENT_VERSION = "v1.0_TEENVERSE_PARENT_AGREEMENT_2025";
+
 const styles = `
   @keyframes gradient-xy {
     0%, 100% { background-position: 0% 50%; }
@@ -43,6 +46,9 @@ const styles = `
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.5); border-radius: 10px; }
 `;
 
 // --- ICONS ---
@@ -51,12 +57,12 @@ const GithubIcon = () => (<svg viewBox="0 0 24 24" className="w-5 h-5 fill-curre
 
 const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   // --- STATE ---
-  const [viewMode, setViewMode] = useState('login'); 
+  const [viewMode, setViewMode] = useState('login');
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Verification States
   const [showVerify, setShowVerify] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
@@ -64,9 +70,12 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [otp, setOtp] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  
+  // LEGAL: PARENT CONSENT
+  const [parentAgreed, setParentAgreed] = useState(false); 
 
   // New State for Social Login flow
-  const [socialUser, setSocialUser] = useState(null); 
+  const [socialUser, setSocialUser] = useState(null);
 
   const [formData, setFormData] = useState({
     role: 'freelancer', 
@@ -93,35 +102,22 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         const result = await getRedirectResult(auth);
         if (result) {
           const user = result.user;
-          
-          // Check if user exists in DB
           const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.uid).single();
           const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.uid).single();
 
           if (freelancerData || clientData) {
-            // User exists -> Go to Dashboard
             onLogin(`Welcome back ${user.displayName || ''}!`);
           } else {
-            // --- NEW USER FROM GOOGLE: START ONBOARDING ---
             console.log("New Social User found. Starting onboarding...");
-            
-            // 1. Save the Auth object temporarily
             setSocialUser(user);
-            
-            // 2. Pre-fill known data
             setFormData(prev => ({
               ...prev,
               email: user.email,
               name: user.displayName || '',
-              role: 'freelancer' // Default role
+              role: 'freelancer'
             }));
-
-            // 3. Switch to Signup Mode
             setViewMode('signup');
-            
-            // 4. Start at Step 1 (Role Selection)
             setStep(1);
-            
             alert("Please complete your profile details to finish signing up.");
           }
         }
@@ -155,35 +151,28 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   // --- HANDLE NEXT WITH SKIPPING PASSWORD STEP ---
   const handleNext = async () => {
-    // STEP 1: ROLE SELECTION
     if (step === 1) {
-        // If social login, SKIP Step 2 (Password) and go to Step 3
         if (socialUser) {
-          setStep(3);
+          setStep(3); 
         } else {
           setStep(2);
         }
         return;
     }
     
-    // STEP 2: CREDENTIALS (Skipped for Google users)
     if (step === 2) {
         if (!formData.email || !formData.password) return alert("Please fill in credentials");
         setStep(prev => prev + 1);
         return;
     }
 
-    // STEP 3: PERSONAL INFO & VALIDATION
     if (step === 3) {
         if (!formData.name || !formData.phone) return alert("Please fill in personal details");
-
-        // Phone Validation
         const phoneRegex = /^[6-9]\d{9}$/;
         if (!phoneRegex.test(formData.phone)) {
             return alert("Invalid Phone Number. Please enter a valid 10-digit mobile number starting with 6-9.");
         }
 
-        // Duplicate Check
         setLoading(true);
         try {
             const { data: fData } = await supabase.from('freelancers').select('phone').eq('phone', formData.phone).single();
@@ -191,7 +180,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
             if (fData || cData) {
                 setLoading(false);
-                return alert("This phone number is already registered with another account.");
+                return alert("This phone number is already registered.");
             }
             
             setLoading(false);
@@ -205,7 +194,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   const handleBack = () => {
     if (step === 3 && socialUser) {
-      setStep(1); // Go back to Role if social user
+      setStep(1);
     } else {
       setStep(prev => prev - 1);
     }
@@ -259,7 +248,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     setLoading(true);
     try {
       if (viewMode === 'login') {
-        // --- LOGIN LOGIC ---
         const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
         const user = userCredential.user;
         if (!user.emailVerified) {
@@ -268,24 +256,43 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         }
         onLogin('Welcome back!');
       } else {
-        // --- SIGNUP LOGIC (BOTH SOCIAL AND EMAIL) ---
-        if (formData.role === 'freelancer' && age < 13) throw new Error("You must be at least 13 years old to join.");
-        
-        // Parent Verification
+        // --- SIGNUP LOGIC (LEGAL CHECKS) ---
+        if (formData.role === 'freelancer') {
+            if (!formData.dob) {
+                setLoading(false);
+                return alert("Date of Birth is legally required to determine age eligibility.");
+            }
+            if (!file) {
+                setLoading(false);
+                return alert("ID Proof upload is MANDATORY for all freelancers for safety and KYC purposes.");
+            }
+            if (age < 13) {
+                setLoading(false);
+                throw new Error("You must be at least 13 years old to join TeenVerse.");
+            }
+        }
+
         if (formData.role === 'freelancer' && isMinor) {
-           if (!formData.parentEmail) throw new Error("Parent email is required for minors.");
+           if (!formData.parentEmail) {
+               setLoading(false);
+               throw new Error("Parent email is required for users under 18.");
+           }
+           
            const code = Math.floor(100000 + Math.random() * 900000).toString();
            setGeneratedOtp(code);
+           
            await emailjs.send(EMAIL_CONFIG.SERVICE_ID, EMAIL_CONFIG.TEMPLATE_ID, {
                email: formData.parentEmail,
                child_name: formData.name,
                otp: code,
-               message: "Please verify your child's Teenverse account."
+               message: "Please verify your child's Teenverse account. By verifying, you consent to them working on our platform."
            }, EMAIL_CONFIG.PUBLIC_KEY);
+
            setShowVerify(true);
            setLoading(false);
            return; 
         }
+
         await completeSignup();
       }
     } catch (err) {
@@ -296,6 +303,12 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
+    
+    // LEGAL CHECK: Explicit Consent
+    if (!parentAgreed) {
+        return alert("Parent/Guardian must explicitly consent to the terms by checking the box.");
+    }
+
     if (otp === generatedOtp) {
       setLoading(true);
       try {
@@ -310,21 +323,28 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   const completeSignup = async () => {
+    // --- LEGAL: CAPTURE FORENSIC DATA (IP & UA) ---
+    // We fetch the public IP to store as proof of who clicked "Agree"
+    let clientIp = 'Unknown';
+    try {
+        const ipRes = await fetch('https://api.ipify.org?format=json');
+        const ipData = await ipRes.json();
+        clientIp = ipData.ip || 'Unknown';
+    } catch (ipError) {
+        console.warn("Could not fetch IP for legal audit log", ipError);
+    }
+    const userAgent = window.navigator.userAgent; 
+    // ----------------------------------------------
+
     let uid = "";
-    
-    // 1. Authenticate (Create User or Use Existing Social User)
     if (socialUser) {
-      // User is already authenticated via Google
-      uid = socialUser.uid; 
-      // Note: We skip email verification for Google users as they are usually trusted
+      uid = socialUser.uid;
     } else {
-      // Standard Email/Password Signup
       const cred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
       uid = cred.user.uid;
       await sendEmailVerification(cred.user);
     }
 
-    // 2. Upload ID Proof
     let fileUrl = "";
     if (file) {
       const fileName = `id_${uid}_${Date.now()}`;
@@ -333,21 +353,38 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       fileUrl = res.data.publicUrl;
     }
 
-    // 3. Save to Database
     const table = formData.role === 'client' ? 'clients' : 'freelancers';
+    
+    // LEGAL: Storing Forensics
+    const consentMetadata = isMinor ? {
+        parent_consent_timestamp: new Date().toISOString(),
+        parent_consent_verified: true,
+        parent_email: formData.parentEmail,
+        // *** FORENSIC EVIDENCE FIELDS ***
+        parent_consent_ip: clientIp,
+        parent_consent_user_agent: userAgent,
+        parent_consent_version: CONSENT_VERSION
+    } : {};
+
     const dbData = formData.role === 'client' 
-       ? { id: uid, name: formData.name, email: formData.email, phone: formData.phone, nationality: formData.nationality, id_proof_url: fileUrl, is_organisation: formData.org }
-       : { id: uid, name: formData.name, email: formData.email, phone: formData.phone, nationality: formData.nationality, id_proof_url: fileUrl, dob: formData.dob, age: age, gender: formData.gender, upi: formData.upi, parent_email: isMinor ? formData.parentEmail : null, is_parent_verified: isMinor, unlocked_skills: [] };
+       ? { 
+           id: uid, name: formData.name, email: formData.email, phone: formData.phone, 
+           nationality: formData.nationality, id_proof_url: fileUrl, is_organisation: formData.org 
+         }
+       : { 
+           id: uid, name: formData.name, email: formData.email, phone: formData.phone, 
+           nationality: formData.nationality, id_proof_url: fileUrl, dob: formData.dob, 
+           age: age, gender: formData.gender, upi: formData.upi, 
+           is_parent_verified: isMinor, unlocked_skills: [],
+           ...consentMetadata 
+         };
     
     const { error } = await supabase.from(table).insert([dbData]);
     if (error) throw error;
 
-    // 4. Handle Post-Signup Flow
     if (socialUser) {
-      // Social users go straight to dashboard
-      onSignUpSuccess(); 
+      onSignUpSuccess();
     } else {
-      // Email users must verify first
       await signOut(auth);
       setLoading(false);
       setVerificationSent(true);
@@ -398,12 +435,11 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
             <p className="text-indigo-200/60 mt-4 text-lg">Your skills. Your rules. Your money.</p>
           </div>
           <div className="relative z-10">
-            <div className="flex -space-x-4 mb-4">
-              {[1,2,3,4].map(i => (
-                <div key={i} className="w-10 h-10 rounded-full border-2 border-[#161b2c] bg-gray-700 flex items-center justify-center text-xs font-bold bg-cover bg-center" style={{backgroundImage: `url(https://i.pravatar.cc/100?img=${i+10})`}}></div>
-              ))}
-            </div>
-            <p className="text-sm text-gray-400 font-medium">Join 15,000+ other teens.</p>
+             {/* Intermediary Disclaimer */}
+             <div className="mt-8 pt-6 border-t border-white/10 text-[10px] text-gray-500 leading-tight">
+               <p className="mb-2"><Scale size={10} className="inline mr-1"/> Legal Compliance:</p>
+               <p>TeenVerseHub is a technology intermediary and marketplace. We do not directly employ freelancers. All work must be digital and non-hazardous.</p>
+             </div>
           </div>
         </div>
 
@@ -427,10 +463,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                <div className="bg-white/5 border border-white/10 rounded-lg py-2 px-4 inline-block mb-6 font-mono text-indigo-300">
                  {formData.email}
                </div>
-               <p className="text-gray-400 text-sm mb-8 leading-relaxed">
-                 Click the link in the email to activate your account.<br/>
-                 You cannot log in until you verify.
-               </p>
                <button onClick={() => { setVerificationSent(false); setViewMode('login'); }} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50">
                   Return to Login
                </button>
@@ -441,22 +473,17 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
               {viewMode === 'forgot' && (
                  <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-right-4 duration-300">
                    <button onClick={() => setViewMode('login')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 text-sm font-bold transition-colors"><ArrowLeft size={16}/> Back to Login</button>
-                   <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center text-indigo-400 mb-6 border border-indigo-500/20">
-                      <KeyRound size={32} />
-                   </div>
                    <h2 className="text-3xl font-bold mb-2">Reset Password</h2>
-                   <p className="text-gray-400 mb-8">Enter your email and we'll send you a link to get back into your account.</p>
-                   
                    <form onSubmit={handleForgotPassword} className="space-y-4">
                      <div className="group">
-                        <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400 transition-colors">Email Address</label>
-                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50 focus-within:shadow-[0_0_15px_rgba(99,102,241,0.15)]">
+                        <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email Address</label>
+                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
                           <Mail size={18} className="text-gray-500 mr-3"/>
                           <input type="email" placeholder="you@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required />
                         </div>
                      </div>
-                     <button type="submit" disabled={loading} className="w-full bg-white text-black font-bold py-4 rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex justify-center items-center shadow-lg shadow-white/10">
-                        {loading ? <Loader2 className="animate-spin"/> : 'Send Reset Link'}
+                     <button type="submit" disabled={loading} className="w-full bg-white text-black font-bold py-4 rounded-xl transition-all flex justify-center items-center shadow-lg shadow-white/10">
+                         {loading ? <Loader2 className="animate-spin"/> : 'Send Reset Link'}
                      </button>
                    </form>
                  </div>
@@ -470,8 +497,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                    
                    <div className="space-y-5">
                       <div className="group">
-                        <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400 transition-colors">Email</label>
-                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50 focus-within:shadow-[0_0_15px_rgba(99,102,241,0.15)]">
+                        <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email</label>
+                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
                           <Mail size={18} className="text-gray-500 mr-3"/>
                           <input type="email" placeholder="name@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} />
                         </div>
@@ -479,26 +506,20 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
                       <div className="group">
                         <div className="flex justify-between items-center mb-2">
-                           <label className="text-xs font-bold text-gray-500 uppercase ml-1 group-focus-within:text-indigo-400 transition-colors">Password</label>
+                           <label className="text-xs font-bold text-gray-500 uppercase ml-1">Password</label>
                            <button onClick={() => setViewMode('forgot')} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button>
                         </div>
-                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50 focus-within:shadow-[0_0_15px_rgba(99,102,241,0.15)]">
+                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
                           <Lock size={18} className="text-gray-500 mr-3"/>
-                          <input 
-                            type={showPassword ? "text" : "password"} 
-                            placeholder="••••••••" 
-                            className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" 
-                            value={formData.password} 
-                            onChange={(e) => updateField('password', e.target.value)} 
-                          />
+                          <input type={showPassword ? "text" : "password"} placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} />
                           <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">
-                            {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
+                              {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
                           </button>
                         </div>
                       </div>
                    </div>
                    
-                   <button onClick={handleFinalSubmit} disabled={loading} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 flex justify-center items-center gap-2 hover:scale-[1.02] active:scale-[0.98]">
+                   <button onClick={handleFinalSubmit} disabled={loading} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 flex justify-center items-center gap-2">
                       {loading ? <Loader2 className="animate-spin"/> : 'Log In'}
                    </button>
 
@@ -521,25 +542,43 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
               {/* --- VIEW: SIGNUP --- */}
               {viewMode === 'signup' && (
-                <div className="max-w-md mx-auto w-full">
+                 <div className="max-w-md mx-auto w-full">
                    {showVerify ? (
                       <div className="text-center animate-in zoom-in duration-300">
-                         {/* PARENT OTP VERIFICATION UI */}
+                         {/* LEGAL: PARENT VERIFICATION UI (ENHANCED) */}
                          <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.2)]">
                             <ShieldAlert size={40} />
                          </div>
-                         <h2 className="text-2xl font-bold mb-2">Parent Verification</h2>
-                         <p className="text-gray-400 mb-8 text-sm">We sent a 6-digit code to <span className="text-white font-mono bg-white/10 px-2 py-0.5 rounded">{formData.parentEmail}</span></p>
+                  
+                         <h2 className="text-2xl font-bold mb-2">Guardian Consent Required</h2>
+                         <p className="text-gray-400 mb-6 text-sm">We sent a 6-digit code to <span className="text-white font-mono bg-white/10 px-2 py-0.5 rounded">{formData.parentEmail}</span></p>
                          
                          <div className="relative mb-6">
                             <input className="w-full bg-black/40 border border-gray-700 rounded-xl py-5 text-center text-3xl tracking-[1em] font-mono text-white focus:border-orange-500 focus:shadow-[0_0_20px_rgba(249,115,22,0.2)] outline-none transition-all" placeholder="000000" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} />
                          </div>
-                         
-                         <button onClick={handleVerifyOTP} disabled={loading} className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-900/50">{loading ? 'Verifying...' : 'Complete Registration'}</button>
+
+                         {/* LEGAL: EXPLICIT CONSENT CHECKBOX */}
+                         <div className="mb-8 text-left bg-orange-500/5 p-4 rounded-xl border border-orange-500/20">
+                            <label className="flex items-start gap-3 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    className="mt-1 w-5 h-5 rounded border-gray-600 bg-black text-orange-600 focus:ring-orange-500"
+                                    checked={parentAgreed}
+                                    onChange={(e) => setParentAgreed(e.target.checked)}
+                                />
+                                <span className="text-xs text-gray-300 leading-relaxed">
+                                    <span className="font-bold text-orange-400">LEGAL DECLARATION:</span> I am the parent/legal guardian of the above child. 
+                                    I consent to my child using TeenVerseHub for non-hazardous digital services and receiving payments. 
+                                    I have reviewed the platform Terms.
+                                </span>
+                            </label>
+                         </div>
+                      
+                         <button onClick={handleVerifyOTP} disabled={loading} className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-900/50">{loading ? 'Verifying...' : 'Verify & Consent'}</button>
                          <button onClick={() => setShowVerify(false)} className="mt-6 text-gray-500 text-sm hover:text-white transition-colors">Change Parent Email</button>
                       </div>
                    ) : (
-                      <>
+                   <>
                         <div className="flex justify-between items-center mb-8">
                           {step > 1 ? <button onClick={handleBack} className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"><ArrowLeft size={20}/></button> : <div></div>}
                           <StepIndicator />
@@ -579,23 +618,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                 <h2 className="text-3xl font-bold mb-2">Credentials</h2>
                                 <p className="text-gray-400 mb-6">Secure your account.</p>
                              </div>
-                             
                              <div className="group">
-                               <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400">Email</label>
+                               <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email</label>
                                <input type="email" value={formData.email} onChange={(e) => updateField('email', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 focus:bg-black/50 outline-none transition-all" placeholder="name@example.com"/>
                              </div>
-                             
                              <div className="group">
-                               <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block group-focus-within:text-indigo-400">Password</label>
+                               <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Password</label>
                                <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50">
-                                 <input 
-                                   type={showPassword ? "text" : "password"} 
-                                   value={formData.password} 
-                                   onChange={(e) => updateField('password', e.target.value)} 
-                                   className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" 
-                                   placeholder="••••••••"
-                                 />
-                                 <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
+                                  <input type={showPassword ? "text" : "password"} value={formData.password} onChange={(e) => updateField('password', e.target.value)} className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" placeholder="••••••••"/>
+                                  <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
                                </div>
                              </div>
                            </div>
@@ -615,14 +646,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                              <div className="flex gap-4">
                                 <div className="flex-1 group">
                                    <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Phone (India)</label>
-                                   <input 
-                                     type="tel"
-                                     maxLength={10}
-                                     value={formData.phone} 
-                                     onChange={(e) => updateField('phone', e.target.value.replace(/\D/g, ''))} // Numeric only
-                                     className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"
-                                     placeholder="9876543210"
-                                   />
+                                   <input type="tel" maxLength={10} value={formData.phone} onChange={(e) => updateField('phone', e.target.value.replace(/\D/g, ''))} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all" placeholder="9876543210"/>
                                 </div>
                                 <div className="flex-1 group">
                                    <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Country</label>
@@ -641,22 +665,26 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                 {formData.role === 'freelancer' ? (
                                    <>
                                       <div className="bg-black/30 p-4 rounded-xl border border-gray-700/50">
-                                         <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Date of Birth</label>
+                                         <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Date of Birth <span className="text-red-500">*</span></label>
                                          <input type="date" value={formData.dob} onChange={(e) => updateField('dob', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none"/>
                                          {age !== null && <div className={`text-xs mt-2 font-bold px-2 py-1 inline-block rounded ${isMinor ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>Age: {age} {isMinor && "(Parent Verification Required)"}</div>}
                                       </div>
+          
                                       {isMinor && (
                                          <div className="bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl animate-in slide-in-from-top-2">
                                             <div className="flex gap-2 items-center mb-2 text-orange-400"><ShieldAlert size={16}/><span className="text-xs font-bold uppercase">Guardian Email Required</span></div>
                                             <input type="email" placeholder="Parent's Email Address" value={formData.parentEmail} onChange={(e) => updateField('parentEmail', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white focus:border-orange-500 outline-none"/>
                                          </div>
                                       )}
+                          
                                       <div>
-                                         <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Upload ID (Optional for now)</label>
+                                         {/* LEGAL: Mandatory ID Upload */}
+                                         <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Upload ID (Mandatory) <span className="text-red-500">*</span></label>
                                          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-700 border-dashed rounded-xl cursor-pointer hover:bg-white/5 hover:border-indigo-500 transition-all group">
-                                            <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-400 group-hover:text-indigo-400"><UploadCloud className="w-8 h-8 mb-3" /><p className="text-sm"><span className="font-semibold">{file ? file.name : "Click to upload ID"}</span></p></div>
+                                            <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-400 group-hover:text-indigo-400"><UploadCloud className="w-8 h-8 mb-3" /><p className="text-sm"><span className="font-semibold">{file ? file.name : "Click to upload School ID/Aadhaar"}</span></p></div>
                                             <input type="file" className="hidden" onChange={(e) => setFile(e.target.files[0])} />
                                          </label>
+                                         <p className="text-[10px] text-gray-500 mt-2 ml-1">Required for age verification & KYC. Data is encrypted.</p>
                                       </div>
                                    </>
                                 ) : (
@@ -685,26 +713,4 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                               <button onClick={handleNext} disabled={loading} className="bg-white text-black hover:bg-gray-200 px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50">
                                 {loading ? <Loader2 className="animate-spin" size={18}/> : <>Next <ChevronRight size={18}/></>}
                               </button>
-                           ) : (
-                              <button onClick={handleFinalSubmit} disabled={loading} className="bg-indigo-600 text-white hover:bg-indigo-500 px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-900/50 disabled:opacity-50">{loading ? <Loader2 className="animate-spin"/> : 'Create Account'}</button>
-                           )}
-                        </div>
                         
-                        <div className="mt-8 text-center">
-                           {!socialUser && (
-                              <button onClick={() => setViewMode('login')} className="text-gray-500 text-sm hover:text-white transition-colors">Already have an account? Log In</button>
-                           )}
-                        </div>
-                      </>
-                   )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default Auth;
