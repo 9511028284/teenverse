@@ -28,9 +28,6 @@ const EMAIL_CONFIG = {
   PUBLIC_KEY: "_ZOft8l1SLf_-HFiV"
 };
 
-// LEGAL: Version control for the consent text. Change this if you update your Terms.
-const CONSENT_VERSION = "v1.0_TEENVERSE_PARENT_AGREEMENT_2025";
-
 const styles = `
   @keyframes gradient-xy {
     0%, 100% { background-position: 0% 50%; }
@@ -46,6 +43,7 @@ const styles = `
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
+  /* Custom Scrollbar */
   .custom-scrollbar::-webkit-scrollbar { width: 6px; }
   .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
   .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.5); border-radius: 10px; }
@@ -102,12 +100,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         const result = await getRedirectResult(auth);
         if (result) {
           const user = result.user;
+          
+          // Check if user exists in DB
           const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.uid).single();
           const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.uid).single();
 
           if (freelancerData || clientData) {
             onLogin(`Welcome back ${user.displayName || ''}!`);
           } else {
+            // --- NEW USER FROM GOOGLE: START ONBOARDING ---
             console.log("New Social User found. Starting onboarding...");
             setSocialUser(user);
             setFormData(prev => ({
@@ -151,21 +152,24 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   // --- HANDLE NEXT WITH SKIPPING PASSWORD STEP ---
   const handleNext = async () => {
+    // STEP 1: ROLE SELECTION
     if (step === 1) {
         if (socialUser) {
-          setStep(3); 
+          setStep(3); // Skip password for social
         } else {
           setStep(2);
         }
         return;
     }
     
+    // STEP 2: CREDENTIALS (Skipped for Google users)
     if (step === 2) {
         if (!formData.email || !formData.password) return alert("Please fill in credentials");
         setStep(prev => prev + 1);
         return;
     }
 
+    // STEP 3: PERSONAL INFO & VALIDATION
     if (step === 3) {
         if (!formData.name || !formData.phone) return alert("Please fill in personal details");
         const phoneRegex = /^[6-9]\d{9}$/;
@@ -240,6 +244,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
+  // --- SUBMIT HANDLER (LEGAL VALIDATIONS) ---
   const handleFinalSubmit = async () => {
     if (viewMode !== 'login' && !agreedToTerms) {
         return alert("You must agree to the Terms & Privacy Policy to continue.");
@@ -248,6 +253,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     setLoading(true);
     try {
       if (viewMode === 'login') {
+        // --- LOGIN LOGIC ---
         const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
         const user = userCredential.user;
         if (!user.emailVerified) {
@@ -256,7 +262,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         }
         onLogin('Welcome back!');
       } else {
-        // --- SIGNUP LOGIC (LEGAL CHECKS) ---
+        // --- SIGNUP LOGIC ---
+        
+        // LEGAL: Mandatory ID and DOB checks
         if (formData.role === 'freelancer') {
             if (!formData.dob) {
                 setLoading(false);
@@ -272,6 +280,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
             }
         }
 
+        // Parent Verification Trigger
         if (formData.role === 'freelancer' && isMinor) {
            if (!formData.parentEmail) {
                setLoading(false);
@@ -301,6 +310,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
+  // --- PARENT VERIFICATION (UPDATED LEGAL) ---
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     
@@ -323,20 +333,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   const completeSignup = async () => {
-    // --- LEGAL: CAPTURE FORENSIC DATA (IP & UA) ---
-    // We fetch the public IP to store as proof of who clicked "Agree"
-    let clientIp = 'Unknown';
-    try {
-        const ipRes = await fetch('https://api.ipify.org?format=json');
-        const ipData = await ipRes.json();
-        clientIp = ipData.ip || 'Unknown';
-    } catch (ipError) {
-        console.warn("Could not fetch IP for legal audit log", ipError);
-    }
-    const userAgent = window.navigator.userAgent; 
-    // ----------------------------------------------
-
     let uid = "";
+    // 1. Authenticate
     if (socialUser) {
       uid = socialUser.uid;
     } else {
@@ -345,6 +343,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       await sendEmailVerification(cred.user);
     }
 
+    // 2. Upload ID Proof (MANDATORY NOW)
     let fileUrl = "";
     if (file) {
       const fileName = `id_${uid}_${Date.now()}`;
@@ -353,17 +352,14 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       fileUrl = res.data.publicUrl;
     }
 
+    // 3. Save to Database
     const table = formData.role === 'client' ? 'clients' : 'freelancers';
     
-    // LEGAL: Storing Forensics
+    // LEGAL: Storing Parent Consent Metadata
     const consentMetadata = isMinor ? {
         parent_consent_timestamp: new Date().toISOString(),
         parent_consent_verified: true,
-        parent_email: formData.parentEmail,
-        // *** FORENSIC EVIDENCE FIELDS ***
-        parent_consent_ip: clientIp,
-        parent_consent_user_agent: userAgent,
-        parent_consent_version: CONSENT_VERSION
+        parent_email: formData.parentEmail
     } : {};
 
     const dbData = formData.role === 'client' 
@@ -376,12 +372,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
            nationality: formData.nationality, id_proof_url: fileUrl, dob: formData.dob, 
            age: age, gender: formData.gender, upi: formData.upi, 
            is_parent_verified: isMinor, unlocked_skills: [],
-           ...consentMetadata 
+           ...consentMetadata // Store the legal consent proof
          };
     
     const { error } = await supabase.from(table).insert([dbData]);
     if (error) throw error;
 
+    // 4. Handle Post-Signup Flow
     if (socialUser) {
       onSignUpSuccess();
     } else {
@@ -713,4 +710,199 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                               <button onClick={handleNext} disabled={loading} className="bg-white text-black hover:bg-gray-200 px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50">
                                 {loading ? <Loader2 className="animate-spin" size={18}/> : <>Next <ChevronRight size={18}/></>}
                               </button>
+                           ) : (
+                              <button onClick={handleFinalSubmit} disabled={loading} className="bg-indigo-600 text-white hover:bg-indigo-500 px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-900/50 disabled:opacity-50">{loading ? <Loader2 className="animate-spin"/> : 'Create Account'}</button>
+                           )}
+                        </div>
                         
+                        <div className="mt-8 text-center">
+                           {!socialUser && (
+                              <button onClick={() => setViewMode('login')} className="text-gray-500 text-sm hover:text-white transition-colors">Already have an account? Log In</button>
+                           )}
+                        </div>
+                      </>
+                   )}
+                 </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Auth;
+LEGAL GAPS YOU MUST FIX (IMPORTANT)
+
+These are not coding bugs, but legal-risk issues.
+
+
+---
+
+❌ ISSUE 1: Parent consent is NOT legally explicit enough
+
+What you do now:
+
+OTP sent to parent email
+
+Parent enters OTP
+
+
+Legal problem:
+
+❌ OTP alone does NOT explicitly prove consent
+❌ Parent never agrees to terms related to minor work & payments
+
+🔧 REQUIRED FIX (VERY IMPORTANT)
+
+Add one explicit parent consent statement during OTP verification:
+
+Example (must be visible to parent):
+
+> “I am the parent/legal guardian of the above child.
+I consent to my child using TeenVerseHub for non-hazardous digital services and receiving payments through my bank account.”
+
+
+
+Add checkbox + timestamp.
+
+📌 Without this, parent can later deny consent legally.
+
+
+---
+
+❌ ISSUE 2: Parent is NOT agreeing to Terms
+
+Right now:
+
+Child agrees to Terms
+
+Parent only verifies OTP
+
+
+Legal risk:
+
+A contract with a minor is void unless guardian consents.
+
+🔧 FIX:
+
+During parent verification:
+
+Show Parent Consent Agreement
+
+Store:
+
+parent_consented = true
+
+parent_consent_time
+
+ip_address
+
+
+
+This makes your agreement court-defensible.
+
+
+---
+
+❌ ISSUE 3: ID upload is OPTIONAL (this is risky)
+
+<label>Upload ID (Optional for now)</label>
+
+Risk:
+
+Fake DOB
+
+Fake accounts
+
+Gateway questions later
+
+
+🔧 FIX (recommended):
+
+Make ID upload:
+
+Mandatory for freelancers
+
+Mandatory for minors
+
+Optional only for clients
+
+
+You don’t need Aadhaar — even school ID is fine.
+
+
+---
+
+❌ ISSUE 4: Social login skips guardian verification (CRITICAL)
+
+This is the most serious legal bug.
+
+Current behavior:
+
+Google login
+
+User goes straight to onboarding
+
+Guardian flow depends on DOB step
+
+
+Risk:
+
+A minor could:
+
+Use Google account
+
+Enter fake DOB (18+)
+
+Bypass parent consent
+
+
+🔧 FIX (MANDATORY):
+
+After social login:
+
+1. Force DOB entry
+
+
+2. Lock account until DOB verified
+
+
+3. Trigger guardian flow if minor
+
+
+4. Block dashboard access until done
+
+
+
+No exception for Google users.
+
+
+---
+
+🟡 OPTIONAL BUT STRONGLY RECOMMENDED LEGAL IMPROVEMENTS
+
+🔹 Add “Intermediary Disclaimer” on signup page
+
+Small text like:
+
+> “TeenVerseHub is a marketplace platform and does not directly employ freelancers.”
+
+
+
+This protects you under IT Act safe harbor.
+
+
+---
+
+🔹 Add “Non-hazardous work only” notice
+
+Especially for minors:
+
+> “Only digital and non-hazardous services are allowed.”
+
+
+
+This protects against child labour allegations.
+
