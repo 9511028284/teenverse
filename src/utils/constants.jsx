@@ -6,6 +6,18 @@ export const COLORS = {
   secondary: "from-emerald-500 to-teal-500",
 };
 
+// --- NEW: REQUIRED FOR DROPDOWNS ---
+export const LOCAL_CATEGORIES = {
+  'dev': 'Development',
+  'design': 'Design',
+  'marketing': 'Marketing',
+  'writing': 'Writing',
+  'video': 'Video Editing',
+  'data': 'Data Entry',
+  'music': 'Music & Audio'
+};
+
+// --- RICH CATEGORIES (For Academy/UI Display) ---
 export const CATEGORIES = [
   { 
     id: 'dev', 
