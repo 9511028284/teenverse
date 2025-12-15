@@ -48,6 +48,10 @@ const styles = `
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
+<<<<<<< HEAD
+=======
+  /* Custom Scrollbar */
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
   .custom-scrollbar::-webkit-scrollbar { width: 6px; }
   .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
   .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.5); border-radius: 10px; }
@@ -74,6 +78,11 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [otpExpiry, setOtpExpiry] = useState(null); // Added Expiry
   
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+<<<<<<< HEAD
+=======
+  
+  // LEGAL: PARENT CONSENT
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
   const [parentAgreed, setParentAgreed] = useState(false); 
 
   // New State for Social Login flow
@@ -110,6 +119,11 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
           if (freelancerData || clientData) {
             onLogin(`Welcome back ${user.displayName || ''}!`);
           } else {
+<<<<<<< HEAD
+=======
+            // --- NEW USER FROM GOOGLE: START ONBOARDING ---
+            console.log("New Social User found. Starting onboarding...");
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
             setSocialUser(user);
             setFormData(prev => ({
               ...prev,
@@ -166,8 +180,16 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   const handleNext = async () => {
     if (step === 1) {
+<<<<<<< HEAD
         if (socialUser) setStep(3); 
         else setStep(2);
+=======
+        if (socialUser) {
+          setStep(3); // Skip password for social
+        } else {
+          setStep(2);
+        }
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
         return;
     }
     
@@ -204,8 +226,16 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   const handleBack = () => {
+<<<<<<< HEAD
     if (step === 3 && socialUser) setStep(1);
     else setStep(prev => prev - 1);
+=======
+    if (step === 3 && socialUser) {
+      setStep(1);
+    } else {
+      setStep(prev => prev - 1);
+    }
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
   };
 
   const handleLegalClick = (e, page) => {
@@ -248,6 +278,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
+  // --- SUBMIT HANDLER (LEGAL VALIDATIONS) ---
   const handleFinalSubmit = async () => {
     if (viewMode !== 'login' && !agreedToTerms) {
         return alert("You must agree to the Terms & Privacy Policy to continue.");
@@ -269,6 +300,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         onLogin('Welcome back!');
       } else {
         // --- SIGNUP LOGIC ---
+<<<<<<< HEAD
         if (formData.role === 'freelancer') {
             if (!formData.dob) {
                 setLoading(false);
@@ -285,18 +317,36 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                 return alert("Invalid file type. Please upload JPG, PNG or PDF only.");
             }
 
+=======
+        
+        // LEGAL: Mandatory ID and DOB checks
+        if (formData.role === 'freelancer') {
+            if (!formData.dob) {
+                setLoading(false);
+                return alert("Date of Birth is legally required to determine age eligibility.");
+            }
+            if (!file) {
+                setLoading(false);
+                return alert("ID Proof upload is MANDATORY for all freelancers for safety and KYC purposes.");
+            }
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
             if (age < 13) {
                 setLoading(false);
                 throw new Error("You must be at least 13 years old to join TeenVerse.");
             }
         }
 
+<<<<<<< HEAD
+=======
+        // Parent Verification Trigger
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
         if (formData.role === 'freelancer' && isMinor) {
            if (!formData.parentEmail) {
                setLoading(false);
                throw new Error("Parent email is required for users under 18.");
            }
            
+<<<<<<< HEAD
            if (!checkOtpRateLimit()) {
              setLoading(false);
              return;
@@ -306,15 +356,22 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
            setGeneratedOtp(code);
            // SECURITY: OTP Expiry (5 Mins)
            setOtpExpiry(Date.now() + 5 * 60 * 1000);
+=======
+           const code = Math.floor(100000 + Math.random() * 900000).toString();
+           setGeneratedOtp(code);
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
            
            await emailjs.send(EMAIL_CONFIG.SERVICE_ID, EMAIL_CONFIG.TEMPLATE_ID, {
                email: formData.parentEmail,
                child_name: formData.name,
                otp: code,
-               message: "Please verify your child's Teenverse account."
+               message: "Please verify your child's Teenverse account. By verifying, you consent to them working on our platform."
            }, EMAIL_CONFIG.PUBLIC_KEY);
 
+<<<<<<< HEAD
            localStorage.setItem('last_otp_sent', Date.now().toString());
+=======
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
            setShowVerify(true);
            setLoading(false);
            return; 
@@ -328,13 +385,21 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
+  // --- PARENT VERIFICATION (UPDATED LEGAL) ---
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
+<<<<<<< HEAD
     if (!parentAgreed) return alert("Parent/Guardian must explicitly consent to the terms.");
     
     // SECURITY: OTP Expiry Check
     if (Date.now() > otpExpiry) {
         return alert("OTP has expired. Please request a new one.");
+=======
+    
+    // LEGAL CHECK: Explicit Consent
+    if (!parentAgreed) {
+        return alert("Parent/Guardian must explicitly consent to the terms by checking the box.");
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
     }
 
     if (otp === generatedOtp) {
@@ -352,6 +417,10 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   const completeSignup = async () => {
     let uid = "";
+<<<<<<< HEAD
+=======
+    // 1. Authenticate
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
     if (socialUser) {
       uid = socialUser.uid;
     } else {
@@ -360,8 +429,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       await sendEmailVerification(cred.user);
     }
 
+<<<<<<< HEAD
     // --- SECURE FILE UPLOAD ---
     let filePath = ""; 
+=======
+    // 2. Upload ID Proof (MANDATORY NOW)
+    let fileUrl = "";
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
     if (file) {
       try {
         const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1200, useWebWorker: true, fileType: "image/jpeg" };
@@ -406,6 +480,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     // --- DB INSERT ---
     const table = formData.role === 'client' ? 'clients' : 'freelancers';
     
+<<<<<<< HEAD
     const dbData = formData.role === 'client' 
        ? { 
            id: uid, name: formData.name, email: formData.email, phone: formData.phone, 
@@ -417,6 +492,26 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
            age: age, gender: formData.gender, upi: formData.upi, 
            is_parent_verified: isMinor, unlocked_skills: []
            // Note: Metadata is now stored via Edge Function in 'parent_consents' table
+=======
+    // LEGAL: Storing Parent Consent Metadata
+    const consentMetadata = isMinor ? {
+        parent_consent_timestamp: new Date().toISOString(),
+        parent_consent_verified: true,
+        parent_email: formData.parentEmail
+    } : {};
+
+    const dbData = formData.role === 'client' 
+       ? { 
+           id: uid, name: formData.name, email: formData.email, phone: formData.phone, 
+           nationality: formData.nationality, id_proof_url: fileUrl, is_organisation: formData.org 
+         }
+       : { 
+           id: uid, name: formData.name, email: formData.email, phone: formData.phone, 
+           nationality: formData.nationality, id_proof_url: fileUrl, dob: formData.dob, 
+           age: age, gender: formData.gender, upi: formData.upi, 
+           is_parent_verified: isMinor, unlocked_skills: [],
+           ...consentMetadata // Store the legal consent proof
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
          };
     
     const { error } = await supabase.from(table).insert([dbData]);
@@ -482,7 +577,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
             <p className="text-indigo-200/60 mt-4 text-lg">Your skills. Your rules. Your money.</p>
           </div>
           <div className="relative z-10">
+<<<<<<< HEAD
              <LegalFooter mobile={false} />
+=======
+             {/* Intermediary Disclaimer */}
+             <div className="mt-8 pt-6 border-t border-white/10 text-[10px] text-gray-500 leading-tight">
+               <p className="mb-2"><Scale size={10} className="inline mr-1"/> Legal Compliance:</p>
+               <p>TeenVerseHub is a technology intermediary and marketplace. We do not directly employ freelancers. All work must be digital and non-hazardous.</p>
+             </div>
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
           </div>
         </div>
 
@@ -588,6 +691,10 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                  <div className="max-w-md mx-auto w-full">
                    {showVerify ? (
                       <div className="text-center animate-in zoom-in duration-300">
+<<<<<<< HEAD
+=======
+                         {/* LEGAL: PARENT VERIFICATION UI (ENHANCED) */}
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
                          <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.2)]">
                             <ShieldAlert size={40} />
                          </div>
@@ -599,6 +706,10 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                             <input className="w-full bg-black/40 border border-gray-700 rounded-xl py-5 text-center text-3xl tracking-[1em] font-mono text-white focus:border-orange-500 focus:shadow-[0_0_20px_rgba(249,115,22,0.2)] outline-none transition-all" placeholder="000000" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} />
                          </div>
 
+<<<<<<< HEAD
+=======
+                         {/* LEGAL: EXPLICIT CONSENT CHECKBOX */}
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
                          <div className="mb-8 text-left bg-orange-500/5 p-4 rounded-xl border border-orange-500/20">
                             <label className="flex items-start gap-3 cursor-pointer">
                                 <input 
@@ -719,12 +830,20 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                       )}
                           
                                       <div>
+<<<<<<< HEAD
+=======
+                                         {/* LEGAL: Mandatory ID Upload */}
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
                                          <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Upload ID (Mandatory) <span className="text-red-500">*</span></label>
                                          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-700 border-dashed rounded-xl cursor-pointer hover:bg-white/5 hover:border-indigo-500 transition-all group">
                                             <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-400 group-hover:text-indigo-400"><UploadCloud className="w-8 h-8 mb-3" /><p className="text-sm"><span className="font-semibold">{file ? file.name : "Click to upload School ID/Aadhaar"}</span></p></div>
                                             <input type="file" className="hidden" onChange={(e) => setFile(e.target.files[0])} />
                                          </label>
+<<<<<<< HEAD
                                          <p className="text-[10px] text-gray-500 mt-2 ml-1">Required for age verification. Data is encrypted.</p>
+=======
+                                         <p className="text-[10px] text-gray-500 mt-2 ml-1">Required for age verification & KYC. Data is encrypted.</p>
+>>>>>>> 192ba8678d4aaa7a5589585c820d522527a4e682
                                       </div>
                                    </>
                                 ) : (
@@ -777,3 +896,176 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 };
 
 export default Auth;
+LEGAL GAPS YOU MUST FIX (IMPORTANT)
+
+These are not coding bugs, but legal-risk issues.
+
+
+---
+
+❌ ISSUE 1: Parent consent is NOT legally explicit enough
+
+What you do now:
+
+OTP sent to parent email
+
+Parent enters OTP
+
+
+Legal problem:
+
+❌ OTP alone does NOT explicitly prove consent
+❌ Parent never agrees to terms related to minor work & payments
+
+🔧 REQUIRED FIX (VERY IMPORTANT)
+
+Add one explicit parent consent statement during OTP verification:
+
+Example (must be visible to parent):
+
+> “I am the parent/legal guardian of the above child.
+I consent to my child using TeenVerseHub for non-hazardous digital services and receiving payments through my bank account.”
+
+
+
+Add checkbox + timestamp.
+
+📌 Without this, parent can later deny consent legally.
+
+
+---
+
+❌ ISSUE 2: Parent is NOT agreeing to Terms
+
+Right now:
+
+Child agrees to Terms
+
+Parent only verifies OTP
+
+
+Legal risk:
+
+A contract with a minor is void unless guardian consents.
+
+🔧 FIX:
+
+During parent verification:
+
+Show Parent Consent Agreement
+
+Store:
+
+parent_consented = true
+
+parent_consent_time
+
+ip_address
+
+
+
+This makes your agreement court-defensible.
+
+
+---
+
+❌ ISSUE 3: ID upload is OPTIONAL (this is risky)
+
+<label>Upload ID (Optional for now)</label>
+
+Risk:
+
+Fake DOB
+
+Fake accounts
+
+Gateway questions later
+
+
+🔧 FIX (recommended):
+
+Make ID upload:
+
+Mandatory for freelancers
+
+Mandatory for minors
+
+Optional only for clients
+
+
+You don’t need Aadhaar — even school ID is fine.
+
+
+---
+
+❌ ISSUE 4: Social login skips guardian verification (CRITICAL)
+
+This is the most serious legal bug.
+
+Current behavior:
+
+Google login
+
+User goes straight to onboarding
+
+Guardian flow depends on DOB step
+
+
+Risk:
+
+A minor could:
+
+Use Google account
+
+Enter fake DOB (18+)
+
+Bypass parent consent
+
+
+🔧 FIX (MANDATORY):
+
+After social login:
+
+1. Force DOB entry
+
+
+2. Lock account until DOB verified
+
+
+3. Trigger guardian flow if minor
+
+
+4. Block dashboard access until done
+
+
+
+No exception for Google users.
+
+
+---
+
+🟡 OPTIONAL BUT STRONGLY RECOMMENDED LEGAL IMPROVEMENTS
+
+🔹 Add “Intermediary Disclaimer” on signup page
+
+Small text like:
+
+> “TeenVerseHub is a marketplace platform and does not directly employ freelancers.”
+
+
+
+This protects you under IT Act safe harbor.
+
+
+---
+
+🔹 Add “Non-hazardous work only” notice
+
+Especially for minors:
+
+> “Only digital and non-hazardous services are allowed.”
+
+
+
+This protects against child labour allegations.
+
