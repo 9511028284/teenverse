@@ -3,8 +3,11 @@ import {
   Rocket, Menu, LayoutDashboard, Briefcase, FileText, MessageSquare, BookOpen, Sparkles, Settings, LogOut, 
   Award, Sun, Moon, Bell, Search, Filter, PlusCircle, Zap, Lock, Check, Clock, Trash2, ThumbsUp, CreditCard, 
   Receipt, X, CheckCircle, Package, Save, Share2, Download, 
-  Trophy, Unlock, Swords, Heart, Crown, ShieldCheck, FileCheck, Maximize2, Minimize2, User, ListChecks, ChevronRight
+  Trophy, Unlock, Swords, Heart, Crown, ShieldCheck, FileCheck, Maximize2, Minimize2, User, ListChecks, ChevronRight, Eye
 } from 'lucide-react';
+
+// --- NEW: Re-added Supabase for Storage Operations ---
+import { supabase } from '../supabase'; 
 
 import { CATEGORIES, COLORS, QUIZZES, BATTLES, PRICING_PLANS } from '../utils/constants';
 import Button from '../components/ui/Button';
@@ -23,6 +26,8 @@ import Portfolio from '../components/dashboard/Portfolio';
 import ProfileCard from '../components/dashboard/ProfileCard';
 import Records from '../components/dashboard/Records';
 import SettingsComp from '../components/dashboard/SettingsComp';
+// --- NEW: Import Timeline ---
+import OrderTimeline from '../components/dashboard/OrderTimeline';
 
 // Import New Refactored Components
 import * as api from '../services/dashboard.api';
@@ -31,8 +36,6 @@ import CreateServiceModal from '../components/modals/CreateServiceModal';
 import ApplyJobModal from '../components/modals/ApplyJobModal';
 import PaymentModal from '../components/modals/PaymentModal';
 
-import html2canvas from 'html2canvas';
-
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
   const isClient = user?.type === 'client';
   
@@ -40,7 +43,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [tab, setTab] = useState('overview');
   const [menuOpen, setMenuOpen] = useState(false);
   const [zenMode, setZenMode] = useState(false);
-  const [isLoading, setIsLoading] = useState(true); // NEW: Global Loading State
+  const [isLoading, setIsLoading] = useState(true);
 
   // Data States
   const [jobs, setJobs] = useState([]);
@@ -55,6 +58,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [modal, setModal] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [activeChat, setActiveChat] = useState(null);
+  
+  // --- NEW: States for Hybrid Delivery ---
+  const [timelineApp, setTimelineApp] = useState(null);
+  const [viewWorkApp, setViewWorkApp] = useState(null);
+
   const lastNotificationId = useRef(null);
   
   const [searchTerm, setSearchTerm] = useState("");
@@ -92,7 +100,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     let isMounted = true;
 
     const loadData = async () => {
-      // Only show full loading spinner on first load if data is empty
       if (jobs.length === 0) setIsLoading(true);
 
       const { services, jobs: jobsData, applications: appsData, notifications: notifsData, referralCount, error } = 
@@ -105,7 +112,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         setNotifications(notifsData);
         setReferralStats({ count: referralCount, earnings: referralCount * 50 });
 
-        // Calculate Earnings
         const total = appsData.reduce((acc, curr) => {
           if (curr.status === 'Paid') {
             const amount = Number(curr.bid_amount) || 0;
@@ -115,7 +121,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         }, 0);
         setTotalEarnings(total);
 
-        // Handle Toast for New Notifications
         if (notifsData.length > 0) {
           const latest = notifsData[0];
           if (lastNotificationId.current && latest.id !== lastNotificationId.current) {
@@ -131,12 +136,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     };
 
     loadData();
-    
-    // Optional: Keep a slower poll for notifications only, or rely on real-time subscriptions later
-    // For now, we removed the aggressive 5s interval for performance.
-    
     return () => { isMounted = false; };
-  }, [user, isClient, showToast]); // Removed 'jobs.length' to prevent loops
+  }, [user, isClient, showToast]); 
 
   // --- ACTION HANDLERS ---
 
@@ -149,127 +150,75 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const handlePostJob = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
+    const budget = parseFloat(formData.get('budget'));
+    const title = formData.get('title');
+    
+    if (budget < 100) { showToast("Minimum budget is ₹100", "error"); return; }
+    if (title.length < 5) { showToast("Job title is too short", "error"); return; }
+
     const jobData = { 
-        client_id: user.id, 
-        client_name: user.name, 
-        title: formData.get('title'), 
-        budget: formData.get('budget'), 
-        job_type: 'Fixed', 
-        duration: formData.get('duration'), 
-        tags: formData.get('tags'), 
-        description: formData.get('description'), 
-        category: formData.get('category') || 'dev' 
+        client_id: user.id, client_name: user.name, title: title, budget: budget, 
+        job_type: 'Fixed', duration: formData.get('duration'), tags: formData.get('tags'), 
+        description: formData.get('description'), category: formData.get('category') || 'dev' 
     };
 
     const { error } = await api.createJob(jobData);
-    if (error) { 
-      showToast(error.message, 'error');
-    } else { 
-      showToast('Job Posted!'); 
-      setModal(null); 
-      setJobs([jobData, ...jobs]); // Optimistic update
-    }
+    if (error) { showToast(error.message, 'error'); } 
+    else { showToast('Job Posted!'); setModal(null); setJobs([jobData, ...jobs]); }
   };
 
   const handleDeleteJob = async (id) => {
     if(!window.confirm("Are you sure you want to delete this job?")) return;
     const { error } = await api.deleteJob(id);
     if (error) { showToast(error.message, 'error'); } 
-    else { 
-      showToast('Job Deleted');
-      setJobs(jobs.filter(j => j.id !== id)); 
-    }
+    else { showToast('Job Deleted'); setJobs(jobs.filter(j => j.id !== id)); }
   };
 
   const handleCreateService = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const serviceData = {
-      freelancer_id: user.id,
-      freelancer_name: user.name,
-      title: formData.get('title'),
-      description: formData.get('description'),
-      price: formData.get('price'),
-      delivery_time: formData.get('delivery_time'),
-      category: formData.get('category')
+      freelancer_id: user.id, freelancer_name: user.name, title: formData.get('title'),
+      description: formData.get('description'), price: formData.get('price'),
+      delivery_time: formData.get('delivery_time'), category: formData.get('category')
     };
 
     const { error } = await api.createService(serviceData);
     if (error) { showToast(error.message, 'error'); } 
-    else { 
-      showToast('Gig Created Successfully!'); 
-      setModal(null);
-      setServices([serviceData, ...services]); 
-    }
+    else { showToast('Gig Created Successfully!'); setModal(null); setServices([serviceData, ...services]); }
   };
 
   const handleDeleteService = async (id) => {
     if(!window.confirm("Delete this gig?")) return;
     const { error } = await api.deleteService(id);
     if (error) { showToast(error.message, 'error'); } 
-    else { 
-      showToast('Service Deleted');
-      setServices(services.filter(s => s.id !== id)); 
-    }
+    else { showToast('Service Deleted'); setServices(services.filter(s => s.id !== id)); }
   };
 
   const handleApplyJob = async (e) => {
     e.preventDefault();
     if (parentMode) { showToast("Parent Mode Active", "error"); return; }
-    
     if (!isClient && selectedJob) {
       const jobCategory = selectedJob.category || 'dev';
       if (!unlockedSkills.includes(jobCategory)) {
         showToast(`Locked! Pass the ${jobCategory} quiz in Academy first.`, "error");
-        setModal('quiz-locked');
-        return;
+        setModal('quiz-locked'); return;
       }
     }
-
     if (applications.some(app => app.job_id === selectedJob.id && app.freelancer_id === user.id)) { 
-      showToast("Already applied!", "error");
-      return; 
+      showToast("Already applied!", "error"); return; 
     }
 
     const formData = new FormData(e.target);
     const appData = { 
-      job_id: selectedJob.id, 
-      freelancer_id: user.id, 
-      freelancer_name: user.name, 
-      client_id: selectedJob.client_id, 
-      cover_letter: formData.get('cover_letter'), 
+      job_id: selectedJob.id, freelancer_id: user.id, freelancer_name: user.name, 
+      client_id: selectedJob.client_id, cover_letter: formData.get('cover_letter'), 
       bid_amount: formData.get('bid_amount') 
     };
 
     const { error } = await api.applyForJob(appData, selectedJob.title);
     if (error) { showToast(error.message, 'error'); } 
-    else { 
-      showToast('Applied successfully!'); 
-      setModal(null); 
-      // Ideally refresh apps here
-    }
-  };
-
-  const processPayment = async () => {
-    if (!paymentModal) return;
-    const { appId, amount, freelancerId } = paymentModal;
-
-    const { error } = await api.processPayment(appId, amount, freelancerId);
-    
-    if (error) { showToast(error.message, 'error'); } 
-    else { 
-      showToast("Payment Successful!", "success"); 
-      setApplications(apps => apps.map(a => a.id === appId ? { ...a, status: 'Paid' } : a)); 
-      setPaymentModal(null);
-    }
-  };
-
-  const updateStatus = async (appId, status, freelancerId) => {
-    const { error } = await api.updateApplicationStatus(appId, status, freelancerId);
-    if(error) { showToast(error.message, 'error'); return; }
-    
-    showToast(`Marked as ${status}`);
-    setApplications(applications.map(a => a.id === appId ? { ...a, status } : a));
+    else { showToast('Applied successfully!'); setModal(null); }
   };
 
   const handleUpdateProfile = async (e) => {
@@ -278,23 +227,153 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     const cleanUpdates = { name: profileForm.name, phone: profileForm.phone, nationality: profileForm.nationality };
     
     if (!isClient) {
-        cleanUpdates.age = profileForm.age;
-        cleanUpdates.qualification = profileForm.qualification;
-        cleanUpdates.specialty = profileForm.specialty;
-        cleanUpdates.services = profileForm.services;
+        cleanUpdates.age = profileForm.age; cleanUpdates.qualification = profileForm.qualification;
+        cleanUpdates.specialty = profileForm.specialty; cleanUpdates.services = profileForm.services;
         cleanUpdates.upi = profileForm.upi;
-    } else { 
-        cleanUpdates.is_organisation = profileForm.is_organisation;
-    }
+    } else { cleanUpdates.is_organisation = profileForm.is_organisation; }
 
     const { error } = await api.updateUserProfile(user.id, cleanUpdates, tableName);
     if (error) { showToast(error.message, 'error'); } 
     else { showToast("Profile updated!"); setUser({ ...user, ...cleanUpdates }); }
   };
 
-  // --- FEATURE HANDLERS (Unchanged Logic, just clean up) ---
+  // --- NEW: STRICT ORDER FLOW LOGIC ---
+
+  // 1. Accept Application -> Start Order
+  const handleAcceptApplication = async (app) => {
+    const timestamp = new Date().toISOString();
+    
+    // Update Local State Optimistically
+    const updatedApps = applications.map(a => 
+      a.id === app.id ? { ...a, status: 'Accepted', started_at: timestamp } : a
+    );
+    setApplications(updatedApps);
+  
+    // Update DB (Manually using supabase here for flexibility with timestamps)
+    const { error } = await supabase.from('applications')
+      .update({ status: 'Accepted', started_at: timestamp })
+      .eq('id', app.id);
+    
+    if (error) {
+      showToast("Error accepting: " + error.message, 'error');
+    } else {
+      showToast("Freelancer hired! Order started.", 'success');
+      // Send notification
+      await supabase.from('notifications').insert([{
+        user_id: app.freelancer_id,
+        message: `🎉 You've been hired for: ${app.jobs?.title || 'Project'}`
+      }]);
+    }
+  };
+
+  // 2. Submit Work -> Hybrid Delivery
+  const handleSubmitWork = async (e) => {
+    e.preventDefault();
+    setModal(null);
+    showToast("Uploading work...", "info");
+  
+    const formData = new FormData(e.target);
+    const workLink = formData.get('work_link');
+    const message = formData.get('message');
+    const files = e.target.files.files; // File input
+    
+    let uploadedUrls = [];
+  
+    // A. File Upload Logic
+    if (files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const filePath = `${user.id}/${Date.now()}_${file.name}`;
+        const { data, error } = await supabase.storage.from('project-files').upload(filePath, file);
+        if (!error) {
+          const { data: publicUrl } = supabase.storage.from('project-files').getPublicUrl(filePath);
+          uploadedUrls.push(publicUrl.publicUrl);
+        }
+      }
+    }
+  
+    const timestamp = new Date().toISOString();
+    
+    // DB Update
+    const { error } = await supabase.from('applications').update({
+      status: 'Submitted',
+      submitted_at: timestamp,
+      work_link: workLink,
+      work_message: message,
+      work_files: uploadedUrls
+    }).eq('id', selectedJob.id);
+  
+    if (error) {
+      showToast("Submission failed: " + error.message, "error");
+    } else {
+      showToast("Work Submitted Successfully!", "success");
+      setApplications(apps => apps.map(a => a.id === selectedJob.id ? { ...a, status: 'Submitted', submitted_at: timestamp } : a));
+      
+      await supabase.from('notifications').insert([{
+        user_id: selectedJob.client_id,
+        message: `📦 Work submitted for: ${selectedJob.jobs?.title}`
+      }]);
+    }
+  };
+
+  // 3. Approve Work -> Completed
+  const handleApproveWork = async (app) => {
+    const timestamp = new Date().toISOString();
+    const { error } = await supabase.from('applications')
+      .update({ status: 'Completed', completed_at: timestamp })
+      .eq('id', app.id);
+  
+    if (!error) {
+      setApplications(apps => apps.map(a => a.id === app.id ? { ...a, status: 'Completed' } : a));
+      showToast("Work Approved! Please release payment.", "success");
+      setViewWorkApp(null);
+    }
+  };
+
+  // 4. Final Payment Wrapper
+  const handleFinalPayment = async (app) => {
+    if (parentMode) { showToast("Parent Mode: Payments Locked.", "error"); return; }
+    if (app.status !== 'Completed') { showToast("Approve work first.", "error"); return; }
+    setPaymentModal({ appId: app.id, amount: app.bid_amount, freelancerId: app.freelancer_id });
+  };
+  
+  // 5. Processing the Payment (Callback from Modal)
+  const processPayment = async () => {
+    if (!paymentModal) return;
+    const { appId, amount, freelancerId } = paymentModal;
+
+    // Use existing API but it updates status to 'Paid'
+    const { error } = await api.processPayment(appId, amount, freelancerId);
+    
+    if (error) { showToast(error.message, 'error'); } 
+    else { 
+      // Update local state to Paid and add paid_at timestamp locally for UI (DB handles it via trigger or separate update if needed, keeping it simple here)
+      setApplications(apps => apps.map(a => a.id === appId ? { ...a, status: 'Paid', paid_at: new Date().toISOString() } : a)); 
+      showToast("Payment Successful!", "success"); 
+      setPaymentModal(null);
+    }
+  };
+
+  // Master Action Handler passed to Applications Component
+  const handleAppAction = (action, app) => {
+    if (action === 'accept') handleAcceptApplication(app);
+    if (action === 'reject') updateStatus(app.id, 'Rejected', app.freelancer_id);
+    if (action === 'submit') { setSelectedJob(app); setModal('submit_work'); }
+    if (action === 'view_submission') setViewWorkApp(app);
+    if (action === 'approve') handleApproveWork(app);
+    if (action === 'pay') handleFinalPayment(app);
+  };
+
+  // --- FEATURE HANDLERS ---
   
   const initiatePayment = (appId, amount, freelancerId) => setPaymentModal({ appId, amount, freelancerId });
+
+  const updateStatus = async (appId, status, freelancerId) => {
+    const { error } = await api.updateApplicationStatus(appId, status, freelancerId);
+    if(error) { showToast(error.message, 'error'); return; }
+    showToast(`Marked as ${status}`);
+    setApplications(applications.map(a => a.id === appId ? { ...a, status } : a));
+  };
 
   const handleQuizSelection = async (categoryId, answer) => {
     const correctAnswer = SAFE_QUIZZES[categoryId]?.answer;
@@ -306,12 +385,9 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         const newSkills = [...unlockedSkills, categoryId];
         setUnlockedSkills(newSkills);
         setBadges([...badges, 'Skill Unlocked']);
-        
-        await api.unlockSkill(user.id, newSkills); // Use API
+        await api.unlockSkill(user.id, newSkills); 
         setUser({ ...user, unlockedSkills: newSkills });
-        
-        setModal(null); 
-        setQuizState({ selected: null, status: 'idle' });
+        setModal(null); setQuizState({ selected: null, status: 'idle' });
         showToast("🎉 Skill Unlocked! +500 XP", "success");
       }, 1500);
     } else {
@@ -342,7 +418,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     if (profileCardRef.current) {
       try {
         showToast("Generating image...", "info");
-        const canvas = await html2canvas(profileCardRef.current, { backgroundColor: null, scale: 2, useCORS: true });
+        const html2canvas = (await import('html2canvas')).default;
+        const canvas = await html2canvas(profileCardRef.current, { backgroundColor: null, scale: 2, useCORS: true, logging: false });
         const image = canvas.toDataURL("image/png");
         const link = document.createElement("a");
         link.href = image;
@@ -496,7 +573,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                  <SidebarItem id="jobs" icon={Briefcase} label={isClient ? 'Browse Services' : 'Find Jobs'} />
                  {isClient && <SidebarItem id="posted-jobs" icon={ListChecks} label="My Listings" />}
                  {!isClient && <SidebarItem id="my-services" icon={Package} label="My Gigs" />}
-                 <SidebarItem id="applications" icon={FileText} label="Applications" />
+                 {/* Applications now handle "Orders" too */}
+                 <SidebarItem id="applications" icon={FileText} label="Orders & Jobs" />
                  <SidebarItem id="messages" icon={MessageSquare} label="Messages" />
                  
                  {!isClient && (
@@ -585,26 +663,31 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                <div className="animate-fade-in-up">
                  {tab === 'overview' && (
                    <Overview 
-                      user={user} 
-                      isClient={isClient} 
-                      totalEarnings={totalEarnings} 
+                      user={user} isClient={isClient} totalEarnings={totalEarnings} 
                       jobsCount={isClient ? jobs.length : applications.length} 
-                      badgesCount={badges.length} 
-                      setTab={setTab}
-                      referralCount={referralStats.count} 
-                      referralEarnings={referralStats.earnings} 
+                      badgesCount={badges.length} setTab={setTab}
+                      referralCount={referralStats.count} referralEarnings={referralStats.earnings} 
                    />
                  )}
                  {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} parentMode={parentMode} />}
                  {tab === 'posted-jobs' && isClient && <ClientPostedJobs jobs={jobs} setModal={setModal} handleDeleteJob={handleDeleteJob} />}
                  {tab === 'my-services' && !isClient && <MyServices services={services} setModal={setModal} handleDeleteService={handleDeleteService} />}
-                 {tab === 'applications' && <Applications applications={applications} isClient={isClient} updateStatus={updateStatus} initiatePayment={initiatePayment} parentMode={parentMode} />}
+                 
+                 {/* --- NEW: UPDATED APPLICATIONS COMPONENT WITH HYBRID ACTIONS --- */}
+                 {tab === 'applications' && (
+                    <Applications 
+                      applications={applications} 
+                      isClient={isClient} 
+                      parentMode={parentMode}
+                      onAction={handleAppAction} // Use the new Master Handler
+                      onViewTimeline={(app) => setTimelineApp(app)} // Trigger Timeline Modal
+                    />
+                 )}
+                 
                  {tab === 'messages' && <div className="bg-white dark:bg-[#1E293B] rounded-3xl border border-gray-200 dark:border-white/5 shadow-sm overflow-hidden h-[calc(100vh-180px)]"><ChatSystem user={user} activeChat={activeChat} setActiveChat={setActiveChat} parentMode={parentMode} /></div>}
                  {tab === 'academy' && !isClient && <Academy unlockedSkills={unlockedSkills} setModal={setModal} quizzes={SAFE_QUIZZES} />}
                  {tab === 'portfolio' && !isClient && <Portfolio rawPortfolioText={rawPortfolioText} setRawPortfolioText={setRawPortfolioText} handleAiGenerate={handleAiGenerate} isAiLoading={isAiLoading} portfolioItems={portfolioItems} />}
-                 {tab === 'profile-card' && !isClient && (
-                    <ProfileCard ref={profileCardRef} user={user} unlockedSkills={unlockedSkills} badges={badges} userLevel={userLevel} applications={applications} handleDownloadCard={handleDownloadCard} showToast={showToast} />
-                 )}
+                 {tab === 'profile-card' && !isClient && <ProfileCard ref={profileCardRef} user={user} unlockedSkills={unlockedSkills} badges={badges} userLevel={userLevel} applications={applications} handleDownloadCard={handleDownloadCard} showToast={showToast} />}
                  {tab === 'records' && <Records applications={applications} />}
                  {tab === 'settings' && <SettingsComp profileForm={profileForm} setProfileForm={setProfileForm} isClient={isClient} handleUpdateProfile={handleUpdateProfile} parentMode={parentMode} setParentMode={setParentMode} />}
                </div>
@@ -613,16 +696,94 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       </main>
 
       {/* --- MODALS --- */}
-      {modal === 'post-job' && (
-        <PostJobModal onClose={() => setModal(null)} onSubmit={handlePostJob} />
+      {modal === 'post-job' && <PostJobModal onClose={() => setModal(null)} onSubmit={handlePostJob} />}
+      {modal === 'create-service' && <CreateServiceModal onClose={() => setModal(null)} onSubmit={handleCreateService} />}
+      {modal === 'apply-job' && <ApplyJobModal onClose={() => setModal(null)} onSubmit={handleApplyJob} job={selectedJob} />}
+
+      {/* --- NEW: HYBRID DELIVERY MODALS --- */}
+      
+      {/* 1. TIMELINE MODAL */}
+      {timelineApp && (
+        <Modal title={`Project Timeline: ${timelineApp.jobs?.title}`} onClose={() => setTimelineApp(null)}>
+          <OrderTimeline application={timelineApp} />
+          <div className="mt-4 text-center">
+              <span className="text-xs bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-gray-500">
+                  Order ID: #{timelineApp.id}
+              </span>
+          </div>
+        </Modal>
       )}
 
-      {modal === 'create-service' && (
-        <CreateServiceModal onClose={() => setModal(null)} onSubmit={handleCreateService} />
+      {/* 2. SUBMIT WORK MODAL (Freelancer) */}
+      {modal === 'submit_work' && (
+        <Modal title="Deliver Your Work" onClose={() => setModal(null)}>
+          <form onSubmit={handleSubmitWork} className="space-y-4">
+            <div className="bg-indigo-50 p-4 rounded-xl text-indigo-800 text-sm mb-4">
+              <strong>Instructions:</strong> Provide a link to your work (Drive/GitHub) OR upload files directly.
+            </div>
+            
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">External Link (Recommended)</label>
+              <input name="work_link" type="url" placeholder="https://drive.google.com/..." className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white"/>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Message</label>
+              <textarea name="message" rows="3" className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white" placeholder="Describe what you did..."></textarea>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Or Upload Files (Max 5MB)</label>
+              <input type="file" name="files" multiple className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+            </div>
+
+            <Button className="w-full py-3 shadow-lg shadow-indigo-500/20">Submit Delivery</Button>
+          </form>
+        </Modal>
       )}
 
-      {modal === 'apply-job' && (
-        <ApplyJobModal onClose={() => setModal(null)} onSubmit={handleApplyJob} job={selectedJob} />
+      {/* 3. VIEW WORK MODAL (Client) */}
+      {viewWorkApp && (
+        <Modal title="Review Delivery" onClose={() => setViewWorkApp(null)}>
+          <div className="space-y-6">
+              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
+                <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Freelancer Note</h4>
+                <p className="text-gray-800 dark:text-gray-200 text-sm italic">"{viewWorkApp.work_message || 'No message provided'}"</p>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-gray-400 uppercase">Deliverables</h4>
+                
+                {/* Link */}
+                {viewWorkApp.work_link && (
+                  <a href={viewWorkApp.work_link} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 border border-indigo-100 rounded-xl hover:bg-indigo-50 transition-colors group">
+                      <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600"><Package size={20}/></div>
+                      <div className="flex-1">
+                        <p className="font-bold text-indigo-700 text-sm">External Project Link</p>
+                        <p className="text-xs text-indigo-400 truncate">{viewWorkApp.work_link}</p>
+                      </div>
+                      <Eye size={16} className="text-gray-400 group-hover:text-indigo-600"/>
+                  </a>
+                )}
+
+                {/* Files */}
+                {viewWorkApp.work_files && viewWorkApp.work_files.map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-600"><FileText size={20}/></div>
+                      <div className="flex-1">
+                        <p className="font-bold text-gray-700 text-sm">Attached File {i+1}</p>
+                      </div>
+                      <Eye size={16} className="text-gray-400"/>
+                  </a>
+                ))}
+              </div>
+
+              <div className="pt-4 border-t border-gray-100 flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={() => setViewWorkApp(null)}>Close</Button>
+                <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleApproveWork(viewWorkApp)}>Approve Work</Button>
+              </div>
+          </div>
+        </Modal>
       )}
 
       {modal === 'quiz-locked' && (
