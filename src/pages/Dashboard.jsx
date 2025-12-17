@@ -6,16 +6,17 @@ import {
   Trophy, Unlock, Swords, Heart, Crown, ShieldCheck, FileCheck, Maximize2, Minimize2, User, ListChecks, ChevronRight, Eye
 } from 'lucide-react';
 
-// --- NEW: Re-added Supabase for Storage Operations ---
-import { supabase } from '../supabase'; 
-
+// --- SUPABASE INTEGRATION ---
+import { supabase } from '../supabase';
 import { CATEGORIES, COLORS, QUIZZES, BATTLES, PRICING_PLANS } from '../utils/constants';
+
+// UI Components
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Modal from '../components/ui/Modal';
-import ChatSystem from '../components/features/ChatSystem';
 
-// Import Sub-Components
+// Features
+import ChatSystem from '../components/features/ChatSystem';
 import Overview from '../components/dashboard/Overview';
 import Jobs from '../components/dashboard/Jobs';
 import MyServices from '../components/dashboard/MyServices';
@@ -26,26 +27,54 @@ import Portfolio from '../components/dashboard/Portfolio';
 import ProfileCard from '../components/dashboard/ProfileCard';
 import Records from '../components/dashboard/Records';
 import SettingsComp from '../components/dashboard/SettingsComp';
-// --- NEW: Import Timeline ---
 import OrderTimeline from '../components/dashboard/OrderTimeline';
 
-// Import New Refactored Components
+// Services & Modals
 import * as api from '../services/dashboard.api';
 import PostJobModal from '../components/modals/PostJobModal';
 import CreateServiceModal from '../components/modals/CreateServiceModal';
 import ApplyJobModal from '../components/modals/ApplyJobModal';
 import PaymentModal from '../components/modals/PaymentModal';
 
+import html2canvas from 'html2canvas'; // Ensure this is installed: npm install html2canvas
+
+// --- HELPER COMPONENT: BADGE ITEM ---
+const BadgeItem = ({ name, iconName }) => {
+  const IconMap = { ShieldCheck, FileCheck, Rocket, Award, Briefcase, Lock };
+  const Icon = IconMap[iconName] || Award;
+
+  const colors = {
+    trust: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
+    fun: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800",
+    skill: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800",
+    work: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800",
+    safety: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
+  };
+
+  let cat = 'fun';
+  if (['Verified Teen', 'Parent Approved', 'KYC Completed'].includes(name)) cat = 'trust';
+  if (['First Gig', 'Rising Talent'].includes(name)) cat = 'work';
+  if (['Skill Certified', 'Academy Graduate'].includes(name)) cat = 'skill';
+  if (['Safe User', 'Community Safe'].includes(name)) cat = 'safety';
+
+  return (
+    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wider ${colors[cat]}`}>
+      <Icon size={12} />
+      {name}
+    </div>
+  );
+};
+
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
   const isClient = user?.type === 'client';
-  
-  // UI & Tab States
+
+  // --- UI & TAB STATES ---
   const [tab, setTab] = useState('overview');
   const [menuOpen, setMenuOpen] = useState(false);
   const [zenMode, setZenMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Data States
+  // --- DATA STATES ---
   const [jobs, setJobs] = useState([]);
   const [services, setServices] = useState([]); 
   const [applications, setApplications] = useState([]);
@@ -53,39 +82,38 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [referralStats, setReferralStats] = useState({ count: 0, earnings: 0 });
   const [totalEarnings, setTotalEarnings] = useState(0);
 
-  // Interaction States
+  // --- INTERACTION STATES ---
   const [showNotifications, setShowNotifications] = useState(false); 
   const [modal, setModal] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [activeChat, setActiveChat] = useState(null);
   
-  // --- NEW: States for Hybrid Delivery ---
+  // --- HYBRID DELIVERY STATES ---
   const [timelineApp, setTimelineApp] = useState(null);
   const [viewWorkApp, setViewWorkApp] = useState(null);
 
   const lastNotificationId = useRef(null);
-  
   const [searchTerm, setSearchTerm] = useState("");
   const [profileForm, setProfileForm] = useState(user ? { ...user } : {});
   const [paymentModal, setPaymentModal] = useState(null);
-  
-  // Feature States
+
+  // --- FEATURE STATES ---
   const [parentMode, setParentMode] = useState(false);
   const [unlockedSkills, setUnlockedSkills] = useState(user?.unlockedSkills || []);
-  const [badges, setBadges] = useState(user?.badges || ['Verified']);
+  const [badges, setBadges] = useState([]); // Initialize empty
   const [portfolioItems, setPortfolioItems] = useState([]);
   const [rawPortfolioText, setRawPortfolioText] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [activeBattles, setActiveBattles] = useState(BATTLES || []); 
+  const [activeBattles, setActiveBattles] = useState(BATTLES || []);
   const [quizState, setQuizState] = useState({ selected : null, status: 'idle'});
 
   const SAFE_QUIZZES = QUIZZES || {};
   const profileCardRef = useRef(null);
 
-  // Derived Values
-  const currentXP = unlockedSkills.length * 500;
+  // --- DERIVED VALUES ---
+  const currentXP = unlockedSkills.length * 500 + (badges.length * 200); // Badges add XP
   const nextLevelXP = (Math.floor(currentXP / 2000) + 1) * 2000;
-  const progressPercent = (currentXP / nextLevelXP) * 100;
+  const progressPercent = Math.min((currentXP / nextLevelXP) * 100, 100);
   const userLevel = Math.floor(currentXP / 2000) + 1;
 
   const filteredJobs = jobs.filter(job => 
@@ -94,7 +122,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     (job.tags?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
-  // --- REFACTORED DATA FETCHING ---
+  // --- DATA FETCHING ---
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
@@ -102,6 +130,18 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     const loadData = async () => {
       if (jobs.length === 0) setIsLoading(true);
 
+      // 1. Fetch Badges
+      const { data: badgeData } = await supabase
+        .from('user_badges')
+        .select('badge_name, badges(icon)') // Assumes foreign key relationship is set
+        .eq('user_id', user.id);
+      
+      const formattedBadges = badgeData?.map(b => ({
+        name: b.badge_name,
+        icon: b.badges?.icon || 'Award'
+      })) || [];
+
+      // 2. Fetch Dashboard Data
       const { services, jobs: jobsData, applications: appsData, notifications: notifsData, referralCount, error } = 
         await api.fetchDashboardData(user);
 
@@ -110,8 +150,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         setJobs(jobsData);
         setApplications(appsData);
         setNotifications(notifsData);
+        setBadges(formattedBadges); // Set Badges
         setReferralStats({ count: referralCount, earnings: referralCount * 50 });
 
+        // Calculate Earnings (4% platform fee logic)
         const total = appsData.reduce((acc, curr) => {
           if (curr.status === 'Paid') {
             const amount = Number(curr.bid_amount) || 0;
@@ -121,6 +163,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         }, 0);
         setTotalEarnings(total);
 
+        // Toast for new notifications
         if (notifsData.length > 0) {
           const latest = notifsData[0];
           if (lastNotificationId.current && latest.id !== lastNotificationId.current) {
@@ -131,13 +174,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       } else if (error) {
         showToast("Failed to load dashboard data", "error");
       }
-      
       setIsLoading(false);
     };
 
     loadData();
     return () => { isMounted = false; };
-  }, [user, isClient, showToast]); 
+  }, [user, isClient, showToast]);
 
   // --- ACTION HANDLERS ---
 
@@ -152,7 +194,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     const formData = new FormData(e.target);
     const budget = parseFloat(formData.get('budget'));
     const title = formData.get('title');
-    
+
     if (budget < 100) { showToast("Minimum budget is ₹100", "error"); return; }
     if (title.length < 5) { showToast("Job title is too short", "error"); return; }
 
@@ -182,7 +224,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       description: formData.get('description'), price: formData.get('price'),
       delivery_time: formData.get('delivery_time'), category: formData.get('category')
     };
-
     const { error } = await api.createService(serviceData);
     if (error) { showToast(error.message, 'error'); } 
     else { showToast('Gig Created Successfully!'); setModal(null); setServices([serviceData, ...services]); }
@@ -198,13 +239,16 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const handleApplyJob = async (e) => {
     e.preventDefault();
     if (parentMode) { showToast("Parent Mode Active", "error"); return; }
+    
     if (!isClient && selectedJob) {
       const jobCategory = selectedJob.category || 'dev';
       if (!unlockedSkills.includes(jobCategory)) {
         showToast(`Locked! Pass the ${jobCategory} quiz in Academy first.`, "error");
-        setModal('quiz-locked'); return;
+        setModal('quiz-locked');
+        return;
       }
     }
+
     if (applications.some(app => app.job_id === selectedJob.id && app.freelancer_id === user.id)) { 
       showToast("Already applied!", "error"); return; 
     }
@@ -215,54 +259,32 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       client_id: selectedJob.client_id, cover_letter: formData.get('cover_letter'), 
       bid_amount: formData.get('bid_amount') 
     };
-
     const { error } = await api.applyForJob(appData, selectedJob.title);
     if (error) { showToast(error.message, 'error'); } 
     else { showToast('Applied successfully!'); setModal(null); }
   };
 
-  const handleUpdateProfile = async (e) => {
-    e.preventDefault();
-    const tableName = isClient ? 'clients' : 'freelancers';
-    const cleanUpdates = { name: profileForm.name, phone: profileForm.phone, nationality: profileForm.nationality };
-    
-    if (!isClient) {
-        cleanUpdates.age = profileForm.age; cleanUpdates.qualification = profileForm.qualification;
-        cleanUpdates.specialty = profileForm.specialty; cleanUpdates.services = profileForm.services;
-        cleanUpdates.upi = profileForm.upi;
-    } else { cleanUpdates.is_organisation = profileForm.is_organisation; }
-
-    const { error } = await api.updateUserProfile(user.id, cleanUpdates, tableName);
-    if (error) { showToast(error.message, 'error'); } 
-    else { showToast("Profile updated!"); setUser({ ...user, ...cleanUpdates }); }
-  };
-
-  // --- NEW: STRICT ORDER FLOW LOGIC ---
+  // --- HYBRID ORDER FLOW LOGIC ---
+  // Visualize the order flow state machine to understand transitions.
+  
 
   // 1. Accept Application -> Start Order
   const handleAcceptApplication = async (app) => {
     const timestamp = new Date().toISOString();
     
     // Update Local State Optimistically
-    const updatedApps = applications.map(a => 
-      a.id === app.id ? { ...a, status: 'Accepted', started_at: timestamp } : a
-    );
-    setApplications(updatedApps);
+    setApplications(apps => apps.map(a => a.id === app.id ? { ...a, status: 'Accepted', started_at: timestamp } : a));
   
-    // Update DB (Manually using supabase here for flexibility with timestamps)
-    const { error } = await supabase.from('applications')
-      .update({ status: 'Accepted', started_at: timestamp })
-      .eq('id', app.id);
-    
+    [cite_start]// Call Secure Edge Function [cite: 90]
+    const { data, error } = await supabase.functions.invoke('order-manager', {
+      body: { action: 'ACCEPT_APPLICATION', appId: app.id }
+    });
+
     if (error) {
       showToast("Error accepting: " + error.message, 'error');
+      // Revert state if needed (optional)
     } else {
       showToast("Freelancer hired! Order started.", 'success');
-      // Send notification
-      await supabase.from('notifications').insert([{
-        user_id: app.freelancer_id,
-        message: `🎉 You've been hired for: ${app.jobs?.title || 'Project'}`
-      }]);
     }
   };
 
@@ -275,16 +297,16 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     const formData = new FormData(e.target);
     const workLink = formData.get('work_link');
     const message = formData.get('message');
-    const files = e.target.files.files; // File input
+    const files = e.target.files; 
     
     let uploadedUrls = [];
-  
+    
     // A. File Upload Logic
     if (files.length > 0) {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const filePath = `${user.id}/${Date.now()}_${file.name}`;
-        const { data, error } = await supabase.storage.from('project-files').upload(filePath, file);
+        const { error } = await supabase.storage.from('project-files').upload(filePath, file);
         if (!error) {
           const { data: publicUrl } = supabase.storage.from('project-files').getPublicUrl(filePath);
           uploadedUrls.push(publicUrl.publicUrl);
@@ -294,39 +316,38 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   
     const timestamp = new Date().toISOString();
     
-    // DB Update
-    const { error } = await supabase.from('applications').update({
-      status: 'Submitted',
-      submitted_at: timestamp,
-      work_link: workLink,
-      work_message: message,
-      work_files: uploadedUrls
-    }).eq('id', selectedJob.id);
-  
+    const { data, error } = await supabase.functions.invoke('order-manager', {
+      body: { 
+        action: 'SUBMIT_WORK', 
+        appId: selectedJob.id,
+        payload: {
+          work_link: workLink,
+          message: message,
+          files: uploadedUrls 
+        }
+      }
+    });
+
     if (error) {
       showToast("Submission failed: " + error.message, "error");
     } else {
       showToast("Work Submitted Successfully!", "success");
       setApplications(apps => apps.map(a => a.id === selectedJob.id ? { ...a, status: 'Submitted', submitted_at: timestamp } : a));
-      
-      await supabase.from('notifications').insert([{
-        user_id: selectedJob.client_id,
-        message: `📦 Work submitted for: ${selectedJob.jobs?.title}`
-      }]);
     }
   };
 
   // 3. Approve Work -> Completed
   const handleApproveWork = async (app) => {
-    const timestamp = new Date().toISOString();
-    const { error } = await supabase.from('applications')
-      .update({ status: 'Completed', completed_at: timestamp })
-      .eq('id', app.id);
-  
+    const { data, error } = await supabase.functions.invoke('order-manager', {
+      body: { action: 'APPROVE_WORK', appId: app.id }
+    });
+      
     if (!error) {
       setApplications(apps => apps.map(a => a.id === app.id ? { ...a, status: 'Completed' } : a));
       showToast("Work Approved! Please release payment.", "success");
       setViewWorkApp(null);
+    } else {
+      showToast(error.message, 'error');
     }
   };
 
@@ -336,25 +357,33 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     if (app.status !== 'Completed') { showToast("Approve work first.", "error"); return; }
     setPaymentModal({ appId: app.id, amount: app.bid_amount, freelancerId: app.freelancer_id });
   };
-  
-  // 5. Processing the Payment (Callback from Modal)
+
+  // 5. Processing the Payment
   const processPayment = async () => {
     if (!paymentModal) return;
     const { appId, amount, freelancerId } = paymentModal;
 
-    // Use existing API but it updates status to 'Paid'
     const { error } = await api.processPayment(appId, amount, freelancerId);
     
-    if (error) { showToast(error.message, 'error'); } 
-    else { 
-      // Update local state to Paid and add paid_at timestamp locally for UI (DB handles it via trigger or separate update if needed, keeping it simple here)
-      setApplications(apps => apps.map(a => a.id === appId ? { ...a, status: 'Paid', paid_at: new Date().toISOString() } : a)); 
-      showToast("Payment Successful!", "success"); 
-      setPaymentModal(null);
+    if (error) { 
+        showToast(error.message, 'error'); 
+    } else { 
+        showToast("Payment Successful!", "success"); 
+        // Update local state to Paid
+        setApplications(apps => apps.map(a => a.id === appId ? { ...a, status: 'Paid', paid_at: new Date().toISOString() } : a));
+        setPaymentModal(null);
+        
+        // --- BADGE CHECK TRIGGER ---
+        // If first job, grant badge locally (DB trigger handles backend)
+        const paidApps = applications.filter(a => a.status === 'Paid');
+        if (paidApps.length === 0) {
+           showToast("🏆 BADGE UNLOCKED: First Gig!", "success");
+           setBadges([...badges, { name: 'First Gig', icon: 'Briefcase' }]);
+        }
     }
   };
 
-  // Master Action Handler passed to Applications Component
+  // --- MASTER ACTION HANDLER ---
   const handleAppAction = (action, app) => {
     if (action === 'accept') handleAcceptApplication(app);
     if (action === 'reject') updateStatus(app.id, 'Rejected', app.freelancer_id);
@@ -364,10 +393,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     if (action === 'pay') handleFinalPayment(app);
   };
 
-  // --- FEATURE HANDLERS ---
-  
-  const initiatePayment = (appId, amount, freelancerId) => setPaymentModal({ appId, amount, freelancerId });
-
   const updateStatus = async (appId, status, freelancerId) => {
     const { error } = await api.updateApplicationStatus(appId, status, freelancerId);
     if(error) { showToast(error.message, 'error'); return; }
@@ -375,18 +400,60 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     setApplications(applications.map(a => a.id === appId ? { ...a, status } : a));
   };
 
-  const handleQuizSelection = async (categoryId, answer) => {
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    const tableName = isClient ? 'clients' : 'freelancers';
+    const cleanUpdates = { name: profileForm.name, phone: profileForm.phone, nationality: profileForm.nationality };
+    if (!isClient) {
+        cleanUpdates.age = profileForm.age; cleanUpdates.qualification = profileForm.qualification;
+        cleanUpdates.specialty = profileForm.specialty; cleanUpdates.services = profileForm.services;
+        cleanUpdates.upi = profileForm.upi;
+    } else { cleanUpdates.is_organisation = profileForm.is_organisation; }
+
+    const { error } = await api.updateUserProfile(user.id, cleanUpdates, tableName);
+    if (error) { showToast(error.message, 'error'); } 
+    else { showToast("Profile updated!"); setUser({ ...user, ...cleanUpdates }); }
+  };
+
+  // --- QUIZ & AI HANDLERS ---
+ const handleQuizSelection = async (categoryId, answer) => {
     const correctAnswer = SAFE_QUIZZES[categoryId]?.answer;
     if (!correctAnswer) return;
+    
+    // 1. Show Visual Feedback (Green/Red)
     setQuizState({ selected: answer, status: answer === correctAnswer ? 'correct' : 'incorrect' });
     
     if (answer === correctAnswer) {
       setTimeout(async () => {
+        // 2. Update Skills (Unlock the Category)
         const newSkills = [...unlockedSkills, categoryId];
         setUnlockedSkills(newSkills);
-        setBadges([...badges, 'Skill Unlocked']);
         await api.unlockSkill(user.id, newSkills); 
         setUser({ ...user, unlockedSkills: newSkills });
+
+        // --- FIX STARTS HERE ---
+        // 3. Check if they already have the 'Skill Certified' badge
+        const hasBadge = badges.some(b => b.name === 'Skill Certified');
+
+        if (!hasBadge) {
+            // A. Add to UI immediately (so they see it now)
+            const newBadge = { name: 'Skill Certified', icon: 'Award' };
+            setBadges(prev => [...prev, newBadge]);
+
+            // B. SAVE TO DATABASE (so it stays forever) 
+            const { error } = await supabase
+                .from('user_badges')
+                .insert({
+                    user_id: user.id,
+                    badge_name: 'Skill Certified'
+                });
+            
+            if (error) {
+                showToast("Failed to save badge:", error);
+                // Optional: Revert UI if save fails, but for badges it's usually fine to ignore
+            }
+        }
+        // --- FIX ENDS HERE ---
         setModal(null); setQuizState({ selected: null, status: 'idle' });
         showToast("🎉 Skill Unlocked! +500 XP", "success");
       }, 1500);
@@ -407,18 +474,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }, 1500);
   };
 
-  const handleJoinBattle = () => !parentMode && showToast("Battle Joined!");
-  const handleVote = (bid, eid) => {
-     if (parentMode) return;
-     setActiveBattles(activeBattles.map(b => b.id === bid ? { ...b, entries: b.entries.map(e => e.id === eid ? {...e, votes: e.votes + 1} : e) } : b));
-     showToast("Voted!");
-  };
-
   const handleDownloadCard = async () => {
     if (profileCardRef.current) {
       try {
         showToast("Generating image...", "info");
-        const html2canvas = (await import('html2canvas')).default;
         const canvas = await html2canvas(profileCardRef.current, { backgroundColor: null, scale: 2, useCORS: true, logging: false });
         const image = canvas.toDataURL("image/png");
         const link = document.createElement("a");
@@ -431,24 +490,14 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   };
 
   // --- RENDER HELPERS ---
-  
   const SidebarItem = ({ id, icon: Icon, label, color }) => (
     <button 
       onClick={() => {setTab(id); setMenuOpen(false);}} 
-      className={`
-        group relative w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-medium transition-all duration-300
-        ${tab === id 
-          ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30 ring-1 ring-white/20' 
-          : 'text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-white/5 hover:text-indigo-600 dark:hover:text-white'
-        }
-      `}
+      className={`group relative w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-medium transition-all duration-300 ${tab === id ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30 ring-1 ring-white/20' : 'text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-white/5 hover:text-indigo-600 dark:hover:text-white'}`}
     >
       <Icon size={18} className={`transition-transform duration-300 group-hover:scale-110 ${tab === id ? 'text-white' : color || ''}`} />
       {!zenMode && (
-        <>
-          <span className="flex-1 text-left">{label}</span>
-          {tab === id && <ChevronRight size={14} className="opacity-80 animate-pulse"/>}
-        </>
+        <> <span className="flex-1 text-left">{label}</span> {tab === id && <ChevronRight size={14} className="opacity-80 animate-pulse"/>} </>
       )}
     </button>
   );
@@ -489,33 +538,14 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       </div>
 
       {/* --- SIDEBAR --- */}
-      <aside className={`
-          fixed md:static inset-y-0 left-0 z-50 transform 
-          ${menuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 
-          transition-all duration-300 ease-in-out
-          flex flex-col h-screen 
-          ${zenMode ? 'md:w-24' : 'md:w-80'}
-      `}>
-        <div className={`
-            flex flex-col h-full m-0 md:m-4 rounded-none md:rounded-3xl 
-            bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-xl 
-            border-r md:border border-gray-200 dark:border-white/5 
-            shadow-2xl md:shadow-xl overflow-hidden
-        `}>
+      <aside className={`fixed md:static inset-y-0 left-0 z-50 transform ${menuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-all duration-300 ease-in-out flex flex-col h-screen ${zenMode ? 'md:w-24' : 'md:w-80'}`}>
+        <div className={`flex flex-col h-full m-0 md:m-4 rounded-none md:rounded-3xl bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-xl border-r md:border border-gray-200 dark:border-white/5 shadow-2xl md:shadow-xl overflow-hidden`}>
           {/* Header */}
           <div className="p-6 pb-2 flex items-center justify-between shrink-0">
-             <a href="https://teenverse.vercel.app">
-              <div className={`flex items-center gap-3 transition-all duration-300 ${zenMode ? 'justify-center w-full' : ''}`}>
-               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 shrink-0">
-                 <Rocket size={20} className="fill-white/20"/>
-               </div>
-               {!zenMode && (
-                 <span className="font-bold text-xl tracking-tight text-gray-900 dark:text-white">
-                   Teen<span className="text-indigo-600">VerseHub</span>
-                 </span>
-               )}
+             <div className={`flex items-center gap-3 transition-all duration-300 ${zenMode ? 'justify-center w-full' : ''}`}>
+               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 shrink-0"><Rocket size={20} className="fill-white/20"/></div>
+               {!zenMode && <span className="font-bold text-xl tracking-tight text-gray-900 dark:text-white">Teen<span className="text-indigo-600">VerseHub</span></span>}
              </div>
-             </a>
              <button onClick={() => setMenuOpen(false)} className="md:hidden text-gray-400 hover:text-red-500"><X size={24}/></button>
           </div>
 
@@ -525,30 +555,30 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                <div className="flex items-center gap-3 mb-3">
                   <div className="relative">
                      <div className="w-12 h-12 rounded-full bg-white dark:bg-gray-800 p-0.5 ring-2 ring-indigo-100 dark:ring-indigo-900 overflow-hidden">
-                        <div className="w-full h-full rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
-                           {user.name ? user.name[0] : <User size={20}/>}
-                        </div>
+                        <div className="w-full h-full rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">{user.name ? user.name[0] : <User size={20}/>}</div>
                      </div>
-                     <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm border-2 border-white dark:border-gray-900">
-                         Lv.{userLevel}
-                     </div>
+                     <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm border-2 border-white dark:border-gray-900">Lv.{userLevel}</div>
                   </div>
                   <div className="overflow-hidden">
-                    <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">
-                        {user.name?.split(' ')[0] || 'User'} 
-                       {badges.length > 0 && <Award size={12} className="text-amber-500 fill-amber-500"/>}
-                    </h3>
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">{user.name?.split(' ')[0] || 'User'} {badges.some(b => b.name === 'Verified Teen') && <ShieldCheck size={12} className="text-blue-500"/>}</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.type} Account</p>
                   </div>
                </div>
+               {/* NEW: BADGE DISPLAY AREA */}
+               <div className="flex flex-wrap gap-1.5 mb-3">
+                  {badges.length > 0 ? (
+                    badges.slice(0, 3).map((b, i) => (
+                      <BadgeItem key={i} name={b.name} iconName={b.icon} />
+                    ))
+                  ) : (
+                    <span className="text-[10px] text-gray-400 italic">No badges earned yet.</span>
+                  )}
+                  {badges.length > 3 && <span className="text-[10px] text-gray-400">+{badges.length - 3} more</span>}
+               </div>
+               
                <div className="space-y-1">
-                 <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    <span>XP Progress</span>
-                    <span>{Math.round(progressPercent)}%</span>
-                 </div>
-                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-gradient-to-r from-indigo-500 to-violet-500 h-full rounded-full transition-all duration-500" style={{width: `${progressPercent}%`}}></div>
-                 </div>
+                 <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-wider"><span>XP Progress</span><span>{Math.round(progressPercent)}%</span></div>
+                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden"><div className="bg-gradient-to-r from-indigo-500 to-violet-500 h-full rounded-full transition-all duration-500" style={{width: `${progressPercent}%`}}></div></div>
                </div>
             </div>
           )}
@@ -573,7 +603,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                  <SidebarItem id="jobs" icon={Briefcase} label={isClient ? 'Browse Services' : 'Find Jobs'} />
                  {isClient && <SidebarItem id="posted-jobs" icon={ListChecks} label="My Listings" />}
                  {!isClient && <SidebarItem id="my-services" icon={Package} label="My Gigs" />}
-                 {/* Applications now handle "Orders" too */}
                  <SidebarItem id="applications" icon={FileText} label="Orders & Jobs" />
                  <SidebarItem id="messages" icon={MessageSquare} label="Messages" />
                  
@@ -594,12 +623,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
           <div className="p-4 border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/20">
              <div className="flex gap-2">
-                <button onClick={() => setZenMode(!zenMode)} className="flex-1 flex items-center justify-center p-2 rounded-xl text-gray-500 hover:bg-white dark:hover:bg-white/10 transition-colors">
-                  {zenMode ? <Maximize2 size={18}/> : <Minimize2 size={18}/>}
-                </button>
-                <button onClick={onLogout} className="flex-1 flex items-center justify-center p-2 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                   <LogOut size={18}/>
-                </button>
+                <button onClick={() => setZenMode(!zenMode)} className="flex-1 flex items-center justify-center p-2 rounded-xl text-gray-500 hover:bg-white dark:hover:bg-white/10 transition-colors">{zenMode ? <Maximize2 size={18}/> : <Minimize2 size={18}/>}</button>
+                <button onClick={onLogout} className="flex-1 flex items-center justify-center p-2 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><LogOut size={18}/></button>
              </div>
           </div>
         </div>
@@ -608,48 +633,43 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       {/* --- MAIN CONTENT --- */}
       <main className="flex-1 flex flex-col min-w-0 relative z-10">
          
-         {/* Glass Header */}
+         {/* Header */}
          <header className="sticky top-0 z-30 px-6 py-4">
             <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-xl border border-gray-200/50 dark:border-white/5 rounded-2xl shadow-sm px-6 py-3 flex justify-between items-center">
-               
                <div className="flex items-center gap-4">
                   <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl"><Menu/></button>
                   <div className="flex items-center gap-3">
-                     <div className="hidden sm:flex w-10 h-10 rounded-xl bg-gray-50 dark:bg-white/5 items-center justify-center border border-gray-100 dark:border-white/5">
-                        {getTabIcon()}
-                     </div>
+                    <div className="hidden sm:flex w-10 h-10 rounded-xl bg-gray-50 dark:bg-white/5 items-center justify-center border border-gray-100 dark:border-white/5">{getTabIcon()}</div>
                      <div>
                         <h2 className="text-lg font-bold text-gray-900 dark:text-white capitalize leading-none">{tab.replace('-', ' ')}</h2>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Welcome back, {user.name?.split(' ')[0]}</p>
                      </div>
                   </div>
                </div>
-
                <div className="flex items-center gap-3">
                   <div className="hidden md:flex items-center gap-1 bg-gray-100 dark:bg-black/30 p-1 rounded-full">
                      <button onClick={() => !darkMode && toggleTheme()} className={`p-2 rounded-full transition-all ${!darkMode ? 'bg-white shadow-sm text-amber-500' : 'text-gray-400'}`}><Sun size={18}/></button>
                      <button onClick={() => darkMode && toggleTheme()} className={`p-2 rounded-full transition-all ${darkMode ? 'bg-gray-800 shadow-sm text-indigo-400' : 'text-gray-400'}`}><Moon size={18}/></button>
                   </div>
-
                   <div className="relative">
                     <button onClick={() => setShowNotifications(!showNotifications)} className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-gray-50 text-gray-500 dark:text-gray-400 transition-colors">
                       <Bell size={20}/>
                       {notifications.length > 0 && <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#0F172A]"></span>}
                     </button>
                     {showNotifications && (
-                      <div className="absolute right-0 top-12 w-80 bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden animate-fade-in z-50">
+                       <div className="absolute right-0 top-12 w-80 bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden animate-fade-in z-50">
                           <div className="p-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-white/5">
                              <span className="font-bold text-sm dark:text-white">Notifications</span>
                              <button onClick={handleClearNotifications} className="text-xs font-medium text-indigo-500 hover:text-indigo-600">Clear All</button>
                           </div>
                           <div className="max-h-64 overflow-y-auto">
-                              {notifications.length === 0 ? <div className="p-8 text-center text-gray-400 text-xs">No new alerts</div> : notifications.map(n => (
+                           {notifications.length === 0 ? <div className="p-8 text-center text-gray-400 text-xs">No new alerts</div> : notifications.map(n => (
                                <div key={n.id} className="p-3 border-b border-gray-50 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 text-xs text-gray-600 dark:text-gray-300 flex gap-2">
                                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0"></div>
                                    {n.message}
                                </div>
                              ))}
-                           </div>
+                          </div>
                       </div>
                     )}
                   </div>
@@ -662,25 +682,20 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
             <div className="max-w-7xl mx-auto">
                <div className="animate-fade-in-up">
                  {tab === 'overview' && (
-                   <Overview 
-                      user={user} isClient={isClient} totalEarnings={totalEarnings} 
-                      jobsCount={isClient ? jobs.length : applications.length} 
-                      badgesCount={badges.length} setTab={setTab}
-                      referralCount={referralStats.count} referralEarnings={referralStats.earnings} 
-                   />
+                    <Overview user={user} isClient={isClient} totalEarnings={totalEarnings} jobsCount={isClient ? jobs.length : applications.length} badgesCount={badges.length} setTab={setTab} referralCount={referralStats.count} referralEarnings={referralStats.earnings} />
                  )}
                  {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} parentMode={parentMode} />}
                  {tab === 'posted-jobs' && isClient && <ClientPostedJobs jobs={jobs} setModal={setModal} handleDeleteJob={handleDeleteJob} />}
                  {tab === 'my-services' && !isClient && <MyServices services={services} setModal={setModal} handleDeleteService={handleDeleteService} />}
                  
-                 {/* --- NEW: UPDATED APPLICATIONS COMPONENT WITH HYBRID ACTIONS --- */}
+                 {/* --- HYBRID APPLICATIONS (With Master Handler) --- */}
                  {tab === 'applications' && (
                     <Applications 
-                      applications={applications} 
-                      isClient={isClient} 
-                      parentMode={parentMode}
-                      onAction={handleAppAction} // Use the new Master Handler
-                      onViewTimeline={(app) => setTimelineApp(app)} // Trigger Timeline Modal
+                        applications={applications} 
+                        isClient={isClient} 
+                        parentMode={parentMode}
+                        onAction={handleAppAction} 
+                        onViewTimeline={(app) => setTimelineApp(app)}
                     />
                  )}
                  
@@ -700,16 +715,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       {modal === 'create-service' && <CreateServiceModal onClose={() => setModal(null)} onSubmit={handleCreateService} />}
       {modal === 'apply-job' && <ApplyJobModal onClose={() => setModal(null)} onSubmit={handleApplyJob} job={selectedJob} />}
 
-      {/* --- NEW: HYBRID DELIVERY MODALS --- */}
-      
       {/* 1. TIMELINE MODAL */}
       {timelineApp && (
         <Modal title={`Project Timeline: ${timelineApp.jobs?.title}`} onClose={() => setTimelineApp(null)}>
           <OrderTimeline application={timelineApp} />
           <div className="mt-4 text-center">
-              <span className="text-xs bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-gray-500">
-                  Order ID: #{timelineApp.id}
-              </span>
+              <span className="text-xs bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-gray-500">Order ID: #{timelineApp.id}</span>
           </div>
         </Modal>
       )}
@@ -718,25 +729,19 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       {modal === 'submit_work' && (
         <Modal title="Deliver Your Work" onClose={() => setModal(null)}>
           <form onSubmit={handleSubmitWork} className="space-y-4">
-            <div className="bg-indigo-50 p-4 rounded-xl text-indigo-800 text-sm mb-4">
-              <strong>Instructions:</strong> Provide a link to your work (Drive/GitHub) OR upload files directly.
-            </div>
-            
+            <div className="bg-indigo-50 p-4 rounded-xl text-indigo-800 text-sm mb-4"><strong>Instructions:</strong> Provide a link to your work (Drive/GitHub) OR upload files directly.</div>
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">External Link (Recommended)</label>
               <input name="work_link" type="url" placeholder="https://drive.google.com/..." className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white"/>
             </div>
-
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Message</label>
               <textarea name="message" rows="3" className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white" placeholder="Describe what you did..."></textarea>
             </div>
-
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Or Upload Files (Max 5MB)</label>
               <input type="file" name="files" multiple className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
             </div>
-
             <Button className="w-full py-3 shadow-lg shadow-indigo-500/20">Submit Delivery</Button>
           </form>
         </Modal>
@@ -753,26 +758,17 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-gray-400 uppercase">Deliverables</h4>
-                
-                {/* Link */}
                 {viewWorkApp.work_link && (
                   <a href={viewWorkApp.work_link} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 border border-indigo-100 rounded-xl hover:bg-indigo-50 transition-colors group">
                       <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600"><Package size={20}/></div>
-                      <div className="flex-1">
-                        <p className="font-bold text-indigo-700 text-sm">External Project Link</p>
-                        <p className="text-xs text-indigo-400 truncate">{viewWorkApp.work_link}</p>
-                      </div>
+                      <div className="flex-1"><p className="font-bold text-indigo-700 text-sm">External Project Link</p><p className="text-xs text-indigo-400 truncate">{viewWorkApp.work_link}</p></div>
                       <Eye size={16} className="text-gray-400 group-hover:text-indigo-600"/>
                   </a>
                 )}
-
-                {/* Files */}
                 {viewWorkApp.work_files && viewWorkApp.work_files.map((url, i) => (
                   <a key={i} href={url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
                       <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-600"><FileText size={20}/></div>
-                      <div className="flex-1">
-                        <p className="font-bold text-gray-700 text-sm">Attached File {i+1}</p>
-                      </div>
+                      <div className="flex-1"><p className="font-bold text-gray-700 text-sm">Attached File {i+1}</p></div>
                       <Eye size={16} className="text-gray-400"/>
                   </a>
                 ))}
@@ -789,9 +785,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       {modal === 'quiz-locked' && (
          <Modal title="Skill Locked" onClose={() => setModal(null)}>
             <div className="text-center py-8">
-               <div className="w-20 h-20 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400">
-                  <Lock size={40}/>
-               </div>
+               <div className="w-20 h-20 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400"><Lock size={40}/></div>
                <h3 className="text-xl font-bold dark:text-white mb-2">Access Denied</h3>
                <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-xs mx-auto">You need to prove your skills in the Academy before applying to this category.</p>
                <Button onClick={() => {setModal(null); setTab('academy');}} className="w-full py-3">Go to Academy</Button>
@@ -805,17 +799,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                <h3 className="text-lg font-bold text-center dark:text-white px-4">{SAFE_QUIZZES[key].question}</h3>
                <div className="space-y-3">
                   {SAFE_QUIZZES[key].options.map((opt, i) => (
-                     <button 
-                        key={i}
-                        onClick={() => handleQuizSelection(key, opt)}
-                        disabled={quizState.status !== 'idle'}
-                        className={`w-full p-4 rounded-xl text-left border-2 transition-all font-medium flex items-center justify-between
-                           ${quizState.selected === opt 
-                              ? (quizState.status === 'correct' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-red-50 border-red-500 text-red-700')
-                              : 'bg-white border-gray-100 hover:border-indigo-500 hover:shadow-md dark:bg-[#020617] dark:border-white/10 dark:text-gray-300'
-                           }
-                        `}
-                     >
+                     <button key={i} onClick={() => handleQuizSelection(key, opt)} disabled={quizState.status !== 'idle'} className={`w-full p-4 rounded-xl text-left border-2 transition-all font-medium flex items-center justify-between ${quizState.selected === opt ? (quizState.status === 'correct' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-red-50 border-red-500 text-red-700') : 'bg-white border-gray-100 hover:border-indigo-500 hover:shadow-md dark:bg-[#020617] dark:border-white/10 dark:text-gray-300'}`}>
                         {opt}
                         {quizState.selected === opt && (quizState.status === 'correct' ? <CheckCircle size={20}/> : <X size={20}/>)}
                      </button>
@@ -826,9 +810,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
          </Modal>
       ))}
 
-      {paymentModal && (
-        <PaymentModal onClose={() => setPaymentModal(null)} onConfirm={processPayment} paymentData={paymentModal} />
-      )}
+      {paymentModal && <PaymentModal onClose={() => setPaymentModal(null)} onConfirm={processPayment} paymentData={paymentModal} />}
 
     </div>
   );

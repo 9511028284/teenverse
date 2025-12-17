@@ -159,3 +159,23 @@ export const updateUserProfile = async (userId, updates, table) => {
 export const unlockSkill = async (userId, newSkills) => {
   return await supabase.from('freelancers').update({ unlocked_skills: newSkills }).eq('id', userId);
 };
+
+
+export const checkAndGrantFirstGigBadge = async (userId) => {
+  // 1. Check count
+  const { count } = await supabase
+    .from('applications')
+    .select('*', { count: 'exact', head: true })
+    .eq('freelancer_id', userId)
+    .eq('status', 'Paid');
+
+  // 2. Grant if it's the first one
+  if (count === 1) {
+    await supabase.from('user_badges').insert({
+      user_id: userId,
+      badge_name: 'First Gig'
+    });
+    return true; // Return true to trigger a confetti or toast in UI
+  }
+  return false;
+};
