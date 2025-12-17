@@ -302,36 +302,17 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
              return;
            }
 
-           //const code = Math.floor(100000 + Math.random() * 900000).toString();
-           //setGeneratedOtp(code);
+           const code = Math.floor(100000 + Math.random() * 900000).toString();
+           setGeneratedOtp(code);
            // SECURITY: OTP Expiry (5 Mins)
-           //setOtpExpiry(Date.now() + 5 * 60 * 1000);
+           setOtpExpiry(Date.now() + 5 * 60 * 1000);
            
-           //await emailjs.send(EMAIL_CONFIG.SERVICE_ID, EMAIL_CONFIG.TEMPLATE_ID, {
-              // email: formData.parentEmail,
-              // child_name: formData.name,
-               //otp: code,
-              // message: "Please verify your child's Teenverse account."
-          // }, EMAIL_CONFIG.PUBLIC_KEY);
-
-           // --- SECURE BACKEND CALL ---
-const { data, error } = await supabase.functions.invoke('send-parent-otp', {
-  body: { 
-    parentEmail: formData.parentEmail, 
-    childName: formData.name 
-  }
-});
-
-if (error || !data.success) {
-  setLoading(false);
-  return alert("Failed to send verification code. " + (error?.message || data?.error));
-}
-
-// We no longer store the OTP in the frontend state!
-// Just show the verify UI.
-localStorage.setItem('last_otp_sent', Date.now().toString());
-setShowVerify(true);
-setLoading(false);
+           await emailjs.send(EMAIL_CONFIG.SERVICE_ID, EMAIL_CONFIG.TEMPLATE_ID, {
+               email: formData.parentEmail,
+               child_name: formData.name,
+               otp: code,
+               message: "Please verify your child's Teenverse account."
+           }, EMAIL_CONFIG.PUBLIC_KEY);
 
            localStorage.setItem('last_otp_sent', Date.now().toString());
            setShowVerify(true);
@@ -349,31 +330,25 @@ setLoading(false);
 
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
-    if (!parentAgreed) return alert("Parent/Guardian must explicitly consent.");
+    if (!parentAgreed) return alert("Parent/Guardian must explicitly consent to the terms.");
     
-    setLoading(true);
-
-    try {
-        // Call the Database RPC to verify
-        const { data: isValid, error } = await supabase.rpc('verify_parent_otp', {
-            p_email: formData.parentEmail,
-            p_code: otp // The code user typed in the input
-        });
-
-        if (error) throw error;
-
-        if (isValid) {
-            // Success! Proceed to signup
-            await completeSignup();
-        } else {
-            setLoading(false);
-            alert("Invalid or expired code. Please try again.");
-        }
-    } catch (err) {
-        setLoading(false);
-        alert("Verification failed: " + err.message);
+    // SECURITY: OTP Expiry Check
+    if (Date.now() > otpExpiry) {
+        return alert("OTP has expired. Please request a new one.");
     }
-};
+
+    if (otp === generatedOtp) {
+      setLoading(true);
+      try {
+        await completeSignup();
+      } catch (err) {
+        alert(err.message);
+        setLoading(false);
+      }
+    } else {
+      alert("Invalid Code");
+    }
+  };
 
   const completeSignup = async () => {
     let uid = "";
@@ -579,7 +554,7 @@ setLoading(false);
                         </div>
                         <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
                           <Lock size={18} className="text-gray-500 mr-3"/>
-                          <input type={showPassword ? "text" : "password"} placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} />
+                          <input type={showPassword ? "text" : "password"} placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} />
                           <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">
                               {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
                           </button>
@@ -691,7 +666,7 @@ setLoading(false);
                              <div className="group">
                                <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Password</label>
                                <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50">
-                                  <input type={showPassword ? "text" : "password"} value={formData.password} onChange={(e) => updateField('password', e.target.value)} className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" placeholder="••••••••"/>
+                                  <input type={showPassword ? "text" : "password"} value={formData.password} onChange={(e) => updateField('password', e.target.value)} className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"/>
                                   <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
                                </div>
                              </div>
