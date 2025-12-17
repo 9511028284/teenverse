@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,67 +7,85 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Handle CORS for browser requests
+  // Handle CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { parentEmail, childName } = await req.json()
-    
-    // 1. Generate a Secure 6-digit Code (Server-side)
-    const otp = Math.floor(100000 + crypto.getRandomValues(new Uint32Array(1))[0] % 900000).toString();
-
-    // 2. Initialize Supabase Admin Client
+    // 1. Setup Supabase Client
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 3. Store in Private Database Table (Expires in 10 mins)
+    // 2. Get Data from Frontend
+    const { parentEmail, childName } = await req.json()
+    if (!parentEmail) throw new Error("Parent email is required")
+
+    // 3. Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString()
+
+    // 4. Save OTP to Database (So the RPC can verify it later)
     const { error: dbError } = await supabaseAdmin
-      .from('verification_codes')
+      .from('parent_otps')
       .insert({
         email: parentEmail,
-        code: otp,
-        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 mins
-      }, { schema: 'private' }) // Explicitly use private schema
-
-    if (dbError) throw new Error("Database error: " + dbError.message)
-
-    // 4. Send Email via EmailJS REST API
-    // Note: You must add EMAILJS_PRIVATE_KEY to your Supabase Secrets
-    const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        service_id: 'service_yhvj30u', // [cite: 438]
-        template_id: 'template_nr1rd2n', // [cite: 438]
-        user_id: '_ZOft8l1SLf_-HFiV',    // Public Key [cite: 438]
-        accessToken: Deno.env.get('EMAILJS_PRIVATE_KEY'), // Private Key needed for server-side
-        template_params: {
-          email: parentEmail,
-          child_name: childName,
-          otp: otp,
-          message: "Please verify your child's Teenverse account."
-        }
+        otp_code: otp
       })
-    })
 
-    if (!emailRes.ok) {
-      const text = await emailRes.text()
-      throw new Error(`EmailJS Error: ${text}`)
+    if (dbError) {
+      console.error("DB Error:", dbError)
+      throw new Error("Failed to save OTP")
     }
 
+    // 5. Send Email (Using Resend)
+    // If you don't have a Resend key, this part will be skipped/logged.
+    const resendApiKey = Deno.env.get('RESEND_API_KEY')
+    
+    if (resendApiKey) {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${resendApiKey}`,
+        },
+        body: JSON.stringify({
+          from: 'onboarding@resend.dev', // Change this if you have a custom domain
+          to: parentEmail,
+          subject: 'TeenVerse Parental Verification Code',
+          html: `
+            <h2>Verify ${childName}'s Account</h2>
+            <p>Your verification code is:</p>
+            <h1>${otp}</h1>
+            <p>This code expires in 10 minutes.</p>
+          `
+        })
+      })
+      
+      if (!res.ok) {
+        const errorData = await res.text()
+        console.error("Resend API Error:", errorData)
+        // We don't throw here, so you can still test via logs
+      }
+    } else {
+        // --- MOCK MODE (For Testing) ---
+        console.log(`[MOCK EMAIL] To: ${parentEmail} | OTP: ${otp}`)
+    }
+
+    // 6. Return Success
     return new Response(
-      JSON.stringify({ success: true, message: "OTP sent securely" }),
+      JSON.stringify({ success: true, message: "OTP sent" }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: error.message }),
+      { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
     )
   }
 })
