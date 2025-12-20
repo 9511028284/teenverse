@@ -302,36 +302,17 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
              return;
            }
 
-           //const code = Math.floor(100000 + Math.random() * 900000).toString();
-           //setGeneratedOtp(code);
+           const code = Math.floor(100000 + Math.random() * 900000).toString();
+           setGeneratedOtp(code);
            // SECURITY: OTP Expiry (5 Mins)
-           //setOtpExpiry(Date.now() + 5 * 60 * 1000);
+           setOtpExpiry(Date.now() + 5 * 60 * 1000);
            
-           //await emailjs.send(EMAIL_CONFIG.SERVICE_ID, EMAIL_CONFIG.TEMPLATE_ID, {
-              // email: formData.parentEmail,
-              // child_name: formData.name,
-               //otp: code,
-              // message: "Please verify your child's Teenverse account."
-          // }, EMAIL_CONFIG.PUBLIC_KEY);
-
-           // --- SECURE BACKEND CALL ---
-const { data, error } = await supabase.functions.invoke('send-parent-otp', {
-  body: { 
-    parentEmail: formData.parentEmail, 
-    childName: formData.name 
-  }
-});
-
-if (error || !data.success) {
-  setLoading(false);
-  return alert("Failed to send verification code. " + (error?.message || data?.error));
-}
-
-// We no longer store the OTP in the frontend state!
-// Just show the verify UI.
-localStorage.setItem('last_otp_sent', Date.now().toString());
-setShowVerify(true);
-setLoading(false);
+           await emailjs.send(EMAIL_CONFIG.SERVICE_ID, EMAIL_CONFIG.TEMPLATE_ID, {
+               email: formData.parentEmail,
+               child_name: formData.name,
+               otp: code,
+               message: "Please verify your child's Teenverse account."
+           }, EMAIL_CONFIG.PUBLIC_KEY);
 
            localStorage.setItem('last_otp_sent', Date.now().toString());
            setShowVerify(true);
@@ -349,31 +330,25 @@ setLoading(false);
 
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
-    if (!parentAgreed) return alert("Parent/Guardian must explicitly consent.");
+    if (!parentAgreed) return alert("Parent/Guardian must explicitly consent to the terms.");
     
-    setLoading(true);
-
-    try {
-        // Call the Database RPC to verify
-        const { data: isValid, error } = await supabase.rpc('verify_parent_otp', {
-            p_email: formData.parentEmail,
-            p_code: otp // The code user typed in the input
-        });
-
-        if (error) throw error;
-
-        if (isValid) {
-            // Success! Proceed to signup
-            await completeSignup();
-        } else {
-            setLoading(false);
-            alert("Invalid or expired code. Please try again.");
-        }
-    } catch (err) {
-        setLoading(false);
-        alert("Verification failed: " + err.message);
+    // SECURITY: OTP Expiry Check
+    if (Date.now() > otpExpiry) {
+        return alert("OTP has expired. Please request a new one.");
     }
-};
+
+    if (otp === generatedOtp) {
+      setLoading(true);
+      try {
+        await completeSignup();
+      } catch (err) {
+        alert(err.message);
+        setLoading(false);
+      }
+    } else {
+      alert("Invalid Code");
+    }
+  };
 
   const completeSignup = async () => {
     let uid = "";
