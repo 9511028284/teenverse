@@ -84,15 +84,22 @@ const AdminDashboard = ({ onLogout }) => {
       }
   };
   
-  const handleBanUser = async (id, table) => {
-    if(!window.confirm("Ban this user? This cannot be undone.")) return;
-    const { error } = await supabase.from(table).delete().eq('id', id);
+ // AdminPage.txt (Refactored)
+const handleBanUser = async (id, table) => {
+    if(!window.confirm("Ban this user? They will be marked as banned but data preserved.")) return;
+
+    // Update instead of Delete
+    const { error } = await supabase
+        .from(table)
+        .update({ status: 'banned' }) // Ensure your DB has this column
+        .eq('id', id);
+
     if (error) showToast(error.message, 'error');
     else {
-      showToast("User banned and deleted");
-      fetchData();
+        showToast("User banned successfully");
+        fetchData();
     }
-  };
+};
   
   const handleDeleteJob = async (id) => {
        if(!window.confirm("Admin: Delete this job?")) return;
