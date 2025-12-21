@@ -7,7 +7,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Handle CORS for browser requests
+  // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -15,59 +15,71 @@ serve(async (req) => {
   try {
     const { parentEmail, childName } = await req.json()
     
-    // 1. Generate a Secure 6-digit Code (Server-side)
-    const otp = Math.floor(100000 + crypto.getRandomValues(new Uint32Array(1))[0] % 900000).toString();
-
-    // 2. Initialize Supabase Admin Client
-    const supabaseAdmin = createClient(
+    // 1. Init Supabase Admin (Bypass RLS)
+    const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // 3. Store in Private Database Table (Expires in 10 mins)
-    const { error: dbError } = await supabaseAdmin
-      .from('verification_codes')
-      .insert({
-        email: parentEmail,
-        code: otp,
-        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 mins
-      }, { schema: 'private' }) // Explicitly use private schema
+    // 2. Generate Safe OTP (Server-Side)
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // 3. Store in your 'parent_otps' table
+    const { error: dbError } = await supabase
+      .from('parent_otps')
+      .insert({ email: parentEmail, otp_code: otp })
 
-    if (dbError) throw new Error("Database error: " + dbError.message)
+    if (dbError) {
+        console.error("Database Error:", dbError);
+        return new Response(JSON.stringify({ error: "Database Error: " + dbError.message }), { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+            status: 500 
+        })
+    }
 
-    // 4. Send Email via EmailJS REST API
-    // Note: You must add EMAILJS_PRIVATE_KEY to your Supabase Secrets
+    // 4. Send Email via EmailJS (Backend Sending)
+    // Log keys existence (for debugging, do not log actual values)
+    console.log("Attempting to send email...");
+    console.log("Service ID set:", !!Deno.env.get('EMAILJS_SERVICE_ID'));
+    console.log("Template ID set:", !!Deno.env.get('EMAILJS_TEMPLATE_ID'));
+
     const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        service_id: 'service_yhvj30u', // [cite: 438]
-        template_id: 'template_nr1rd2n', // [cite: 438]
-        user_id: '_ZOft8l1SLf_-HFiV',    // Public Key [cite: 438]
-        accessToken: Deno.env.get('EMAILJS_PRIVATE_KEY'), // Private Key needed for server-side
+        service_id: Deno.env.get('EMAILJS_SERVICE_ID'),
+        template_id: Deno.env.get('EMAILJS_TEMPLATE_ID'),
+        user_id: Deno.env.get('EMAILJS_PUBLIC_KEY'),
+        accessToken: Deno.env.get('EMAILJS_PRIVATE_KEY'),
         template_params: {
           email: parentEmail,
           child_name: childName,
           otp: otp,
-          message: "Please verify your child's Teenverse account."
+          message: "Verify your child's Teenverse account."
         }
       })
     })
 
     if (!emailRes.ok) {
-      const text = await emailRes.text()
-      throw new Error(`EmailJS Error: ${text}`)
+       // --- CRITICAL FIX: READ THE REAL ERROR ---
+       const errorText = await emailRes.text();
+       console.error("EmailJS Failed:", errorText);
+       
+       return new Response(JSON.stringify({ error: "EmailJS Error: " + errorText }), { 
+           headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+           status: 500 
+       })
     }
 
-    return new Response(
-      JSON.stringify({ success: true, message: "OTP sent securely" }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return new Response(JSON.stringify({ message: "OTP Sent Successfully" }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+    })
 
-  } catch (error) {
-    return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+  } catch (err) {
+    return new Response(JSON.stringify({ error: "Unexpected Error: " + err.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500
+    })
   }
 })

@@ -19,19 +19,11 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase';
 import { supabase } from '../supabase';
-import emailjs from '@emailjs/browser';
 import imageCompression from 'browser-image-compression';
-
-// --- CONFIGURATION ---
-const EMAIL_CONFIG = {
-  SERVICE_ID: "service_yhvj30u",
-  TEMPLATE_ID: "template_nr1rd2n",
-  PUBLIC_KEY: "_ZOft8l1SLf_-HFiV"
-};
 
 // LEGAL: Version control for the consent text.
 const CONSENT_VERSION = "v1.0_TEENVERSE_PARENT_AGREEMENT_2025";
-const LEGACY_CUTOFF_DATE = new Date('2025-12-16T00:00:00'); 
+const LEGACY_CUTOFF_DATE = new Date('2025-12-16T00:00:00');
 
 const styles = `
   @keyframes gradient-xy {
@@ -70,11 +62,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [verificationSent, setVerificationSent] = useState(false);
   
   const [otp, setOtp] = useState('');
-  const [generatedOtp, setGeneratedOtp] = useState(null);
-  const [otpExpiry, setOtpExpiry] = useState(null); // Added Expiry
   
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [parentAgreed, setParentAgreed] = useState(false); 
+  const [parentAgreed, setParentAgreed] = useState(false);
 
   // New State for Social Login flow
   const [socialUser, setSocialUser] = useState(null);
@@ -166,7 +156,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   const handleNext = async () => {
     if (step === 1) {
-        if (socialUser) setStep(3); 
+        if (socialUser) setStep(3);
         else setStep(2);
         return;
     }
@@ -211,7 +201,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const handleLegalClick = (e, page) => {
     e.preventDefault(); 
     e.stopPropagation();
-    setView(page); 
+    setView(page);
   };
 
   const handleForgotPassword = async (e) => {
@@ -248,6 +238,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
+  // --- UPDATED: Secure Submit Logic ---
   const handleFinalSubmit = async () => {
     if (viewMode !== 'login' && !agreedToTerms) {
         return alert("You must agree to the Terms & Privacy Policy to continue.");
@@ -261,7 +252,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
         const creationTime = new Date(user.metadata.creationTime);
         const isLegacyUser = creationTime < LEGACY_CUTOFF_DATE;
-
         if (!user.emailVerified && !isLegacyUser) {
             await signOut(auth);
             throw new Error("Please verify your email address before logging in. Check your inbox.");
@@ -302,17 +292,19 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
              return;
            }
 
-           const code = Math.floor(100000 + Math.random() * 900000).toString();
-           setGeneratedOtp(code);
-           // SECURITY: OTP Expiry (5 Mins)
-           setOtpExpiry(Date.now() + 5 * 60 * 1000);
-           
-           await emailjs.send(EMAIL_CONFIG.SERVICE_ID, EMAIL_CONFIG.TEMPLATE_ID, {
-               email: formData.parentEmail,
-               child_name: formData.name,
-               otp: code,
-               message: "Please verify your child's Teenverse account."
-           }, EMAIL_CONFIG.PUBLIC_KEY);
+           // --- SECURITY UPGRADE: Server-Side OTP ---
+           // We call the secure Edge Function instead of generating locally
+           const { error } = await supabase.functions.invoke('send-parent-otp', {
+              body: { 
+                parentEmail: formData.parentEmail, 
+                childName: formData.name 
+              }
+           });
+
+           if (error) {
+               console.error(error);
+               throw new Error("Failed to send verification code. Please try again.");
+           }
 
            localStorage.setItem('last_otp_sent', Date.now().toString());
            setShowVerify(true);
@@ -328,25 +320,33 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
+  // --- UPDATED: Secure Verify Logic ---
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     if (!parentAgreed) return alert("Parent/Guardian must explicitly consent to the terms.");
     
-    // SECURITY: OTP Expiry Check
-    if (Date.now() > otpExpiry) {
-        return alert("OTP has expired. Please request a new one.");
+    setLoading(true);
+
+    // --- SECURITY UPGRADE: Verify via Edge Function ---
+    // We send the OTP to the server to check against the database
+    const { data, error } = await supabase.functions.invoke('verify-parent-otp', {
+        body: { 
+            parentEmail: formData.parentEmail, 
+            otp: otp 
+        }
+    });
+
+    if (error || !data || !data.success) {
+        setLoading(false);
+        return alert("Invalid or Expired Code. Please check and try again.");
     }
 
-    if (otp === generatedOtp) {
-      setLoading(true);
-      try {
+    // If successful, proceed to create account
+    try {
         await completeSignup();
-      } catch (err) {
+    } catch (err) {
         alert(err.message);
         setLoading(false);
-      }
-    } else {
-      alert("Invalid Code");
     }
   };
 
@@ -361,7 +361,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
 
     // --- SECURE FILE UPLOAD ---
-    let filePath = ""; 
+    let filePath = "";
     if (file) {
       try {
         const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1200, useWebWorker: true, fileType: "image/jpeg" };
@@ -371,7 +371,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         const { data: uploadData, error: uploadError } = await supabase.storage
             .from('id_proofs')
             .upload(fileName, compressedFile);
-            
         if (uploadError) throw uploadError;
         filePath = uploadData.path; 
 
@@ -385,25 +384,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       }
     }
 
-    // --- CRITICAL: CALL EDGE FUNCTION FOR CONSENT LOGGING ---
-    if (isMinor) {
-        const { error: logError } = await supabase.functions.invoke('log-parent-consent', {
-            body: {
-                user_id: uid,
-                parent_email: formData.parentEmail,
-                consent_version: CONSENT_VERSION
-            }
-        });
-        
-        if (logError) {
-             // If audit logging fails, we must fail the signup for legal safety
-             await signOut(auth); // Force logout
-             setLoading(false);
-             throw new Error("Unable to verify legal consent server-side. Please try again.");
-        }
-    }
-
-    // --- DB INSERT ---
+    // --- STEP 1: CREATE DATABASE PROFILE ---
     const table = formData.role === 'client' ? 'clients' : 'freelancers';
     
     const dbData = formData.role === 'client' 
@@ -416,11 +397,38 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
            nationality: formData.nationality, id_proof_url: filePath, dob: formData.dob, 
            age: age, gender: formData.gender, upi: formData.upi, 
            is_parent_verified: isMinor, unlocked_skills: []
-           // Note: Metadata is now stored via Edge Function in 'parent_consents' table
          };
     
+    // --- DATABASE INSERT WITH ROLLBACK ---
     const { error } = await supabase.from(table).insert([dbData]);
-    if (error) throw error;
+    if (error) {
+        // CRITICAL ROLLBACK: If DB fails, delete the Auth user.
+        console.error("DB Insert Failed. Rolling back Auth user.", error);
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+            await currentUser.delete().catch(delErr => console.error("Rollback failed", delErr));
+        }
+        throw new Error("Account creation failed. Please try again.");
+    }
+
+    // --- STEP 2: LOG CONSENT VIA EDGE FUNCTION ---
+    if (isMinor) {
+        const { error: logError } = await supabase.functions.invoke('log-parent-consent', {
+            body: {
+                user_id: uid,
+                parent_email: formData.parentEmail,
+                consent_version: CONSENT_VERSION
+            }
+        });
+
+        if (logError) {
+             console.error("Consent Log Failed:", logError);
+             // Fail-safe: If legal logging fails, we must rollback (logout)
+             await signOut(auth);
+             setLoading(false);
+             throw new Error("Unable to verify legal consent server-side. Please try again.");
+        }
+    }
 
     if (socialUser) {
       onSignUpSuccess();
@@ -652,7 +660,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                           </div>
                         )}
 
-                        {/* STEP 2: CREDENTIALS */}
+                        {/* STEP 2: CREDENTIALS (Only show if NOT social user) */}
                         {step === 2 && !socialUser && (
                            <div className="animate-in slide-in-from-right-8 duration-500 space-y-5">
                              <div>
@@ -673,7 +681,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                            </div>
                         )}
 
-                        {/* STEP 3: PERSONAL */}
+                        {/* STEP 3: PERSONAL & PHONE */}
                         {step === 3 && (
                            <div className="animate-in slide-in-from-right-8 duration-500 space-y-5">
                              <div>
@@ -719,6 +727,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                       )}
                           
                                       <div>
+                                         {/* LEGAL: Mandatory ID Upload */}
                                          <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Upload ID (Mandatory) <span className="text-red-500">*</span></label>
                                          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-700 border-dashed rounded-xl cursor-pointer hover:bg-white/5 hover:border-indigo-500 transition-all group">
                                             <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-400 group-hover:text-indigo-400"><UploadCloud className="w-8 h-8 mb-3" /><p className="text-sm"><span className="font-semibold">{file ? file.name : "Click to upload School ID/Aadhaar"}</span></p></div>
