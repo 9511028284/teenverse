@@ -287,66 +287,68 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   // --- HYBRID ORDER FLOW LOGIC (WITH CASHFREE) ---
   
   // 1. Accept Application -> Start Order (Replaces old logic with Payment Flow)
+// --- CASHFREE: HIRE FLOW ---
   const handleAcceptApplication = async (app) => {
-    if (parentMode) { showToast("Parent Mode: Hiring Locked", "error"); return; }
-    
-    // Safety check for script load
+    // 1. Debugging Logs
+    console.log("1. Starting Hire for:", app.id);
     if (!cashfree.current) {
-        showToast("Payment Gateway not ready. Please refresh.", "error");
+        showToast("Payment Gateway not ready. Refresh page.", "error");
         return;
     }
-    
+
     showToast("Initializing Secure Payment...", "info");
 
-    // 1. Create Order Session (Backend Call)
-    const { payment_session_id, order_id, error } = await api.createEscrowSession(
-      app.id, 
-      app.bid_amount, 
-      app.freelancer_id
-    );
+    // 2. Call API
+    const response = await api.createEscrowSession(app.id, app.bid_amount, app.freelancer_id);
+    console.log("2. API Response:", response);
 
-    if (error) {
-      showToast("Payment Init Failed: " + error.message, "error");
-      return;
-    }
+    // 3. FIX: Handle both variable names (camelCase vs snake_case)
+    const sessionId = response.paymentSessionId || response.payment_session_id;
+    const orderId = response.orderId || response.order_id;
 
-    // 2. Open Cashfree Checkout using the ref instance
-    const checkoutOptions = {
-      paymentSessionId: payment_session_id,
-      redirectTarget: "_modal",
-    };
-
-    cashfree.current.checkout(checkoutOptions).then(async (result) => {
-      if(result.error){
-        showToast("Payment Cancelled", "error");
-      }
-      // Always verify status after modal closes to be safe
-      await handlePaymentVerification(order_id, app);
-    });
-  };
-
-  // Helper: Verify Payment and Start Order
-  const handlePaymentVerification = async (orderId, app) => {
-    showToast("Verifying payment...", "info");
-    
-    // Verify with backend
-    const { status, error } = await api.verifyPaymentSignature(orderId);
-
-    if (error || status !== 'PAID') {
-        showToast("Payment verification failed. If deducted, it will be refunded.", "error");
+    // 4. Check for errors
+    if (response.error) {
+        showToast("Init Failed: " + response.error.message, "error");
         return;
     }
 
-    // Success! Update App Status to ACCEPTED (Order Started)
-    const timestamp = new Date().toISOString();
-    
-    // Update Local State
-    setApplications(apps => apps.map(a => a.id === app.id ? { ...a, status: APP_STATUS.ACCEPTED, started_at: timestamp } : a));
-    
-    showToast("Payment Secured! Freelancer hired successfully.", "success");
-  };
+    if (!sessionId) {
+        console.error("❌ Session ID missing in response:", response);
+        showToast("Error: Payment Session failed", "error");
+        return;
+    }
 
-  // 2. Submit Work -> Hybrid Delivery
+    // 5. Open Checkout
+    console.log("3. Opening Checkout with:", sessionId);
+    cashfree.current.checkout({
+        paymentSessionId: sessionId,
+        redirectTarget: "_modal",
+    }).then(() => {
+        console.log("4. Popup Closed. Verifying...");
+        handlePaymentVerification(orderId, app);
+    });
+  };
+  // Helper: Verify Payment and Start Order
+  // --- CASHFREE: VERIFY PAYMENT ---
+// --- CASHFREE: VERIFY PAYMENT ---
+  const handlePaymentVerification = async (orderId, app) => {
+    console.log("Verifying Order:", orderId);
+    
+    // FIX: Extract 'success' correctly
+    const { success, error } = await api.verifyAndStartEscrow(orderId, app.id);
+
+    if (success) {
+      showToast("Payment Secured! Order Started.", "success");
+      // Update UI
+      setApplications(prev => prev.map(a => 
+        a.id === app.id ? { ...a, status: 'Accepted', started_at: new Date().toISOString() } : a
+      ));
+    } else {
+      console.error("Verification Failed:", error);
+      // Optional: You can ignore this alert if the user just closed the popup without paying
+      if (error) showToast("Payment Verification Failed", "error");
+    }
+  };  // 2. Submit Work -> Hybrid Delivery
   const handleSubmitWork = async (e) => {
     e.preventDefault();
     // FIX: Ensure we use the specific selected Application, NOT selectedJob
