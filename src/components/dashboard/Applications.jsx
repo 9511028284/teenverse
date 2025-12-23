@@ -1,6 +1,6 @@
 import React from 'react';
 import Button from '../ui/Button';
-import { Eye, Clock, CheckCircle, XCircle, Package, DollarSign } from 'lucide-react';
+import { Eye, Clock, CheckCircle, XCircle, Package, DollarSign, Lock, Unlock } from 'lucide-react';
 
 const Applications = ({ applications, isClient, onAction, onViewTimeline, parentMode }) => {
   
@@ -15,13 +15,27 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
       if (app.status === 'Pending') {
         return (
           <div className="flex gap-2 justify-end">
-            <Button size="sm" onClick={() => onAction('accept', app)} className="bg-indigo-600 hover:bg-indigo-700">Hire</Button>
+             {/* UPDATED: Indicates Payment Required to Start */}
+            <Button size="sm" onClick={() => onAction('accept', app)} className="bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1">
+              <DollarSign size={14}/> Hire & Pay
+            </Button>
             <Button size="sm" variant="outline" onClick={() => onAction('reject', app)} className="text-red-500 border-red-200">Reject</Button>
           </div>
         );
       }
-      if (app.status === 'Accepted') return <span className="text-xs text-indigo-500 font-medium animate-pulse">Waiting for work...</span>;
-      
+
+      if (app.status === 'Accepted') {
+        return (
+            // UPDATED: Visual Indicator for Escrow
+            <div className="flex flex-col items-end">
+                <span className="text-xs text-indigo-500 font-medium animate-pulse">Waiting for work...</span>
+                <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-full mt-1">
+                    <Lock size={10} /> Funds in Escrow
+                </span>
+            </div>
+        );
+      }
+
       if (app.status === 'Submitted') {
         return (
           <div className="flex gap-2 justify-end">
@@ -33,13 +47,14 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
       
       if (app.status === 'Completed') {
         return (
+          // UPDATED: Release Escrow Action
           <Button 
             size="sm" 
             onClick={() => onAction('pay', app)} 
             disabled={parentMode} // PARENT MODE LOCK
             className={`flex items-center gap-1 ${parentMode ? 'opacity-50 cursor-not-allowed bg-gray-400' : 'bg-green-600 hover:bg-green-700'}`}
           >
-            <DollarSign size={14}/> {parentMode ? 'Locked' : 'Release Payment'}
+            <Unlock size={14}/> {parentMode ? 'Locked' : 'Release Escrow'}
           </Button>
         );
       }
