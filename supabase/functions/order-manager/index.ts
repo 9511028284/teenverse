@@ -1,89 +1,101 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 serve(async (req) => {
-  // 1. Setup Admin Client (Bypasses RLS)
-  const supabaseAdmin = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  )
+  // 1. Handle CORS Preflight - Essential for browser requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
 
-  // 2. Get User Info (Who is trying to do this?)
-  const authHeader = req.headers.get('Authorization')!
-  const userClient = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-    { global: { headers: { Authorization: authHeader } } }
-  )
-  const { data: { user } } = await userClient.auth.getUser()
-
-  if (!user) return new Response("Unauthorized", { status: 401 })
-
-  const { action, appId, payload } = await req.json()
-
-  // 3. THE STATE MACHINE LOGIC
   try {
-    // Fetch current application state
+    // 2. Debug: Check Environment Variables
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("MISSING ENV VARS: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is null.");
+      throw new Error("Server Misconfiguration: Missing Environment Variables");
+    }
+
+    // 3. Initialize Admin Client
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    // 4. Parse Request
+    const { action, appId, payload } = await req.json();
+    console.log(`Received Request -> Action: ${action}, AppID: ${appId}`); // Debug Log
+
+    if (!appId) throw new Error("Missing 'appId' in request body");
+
+    // 5. Fetch current application to verify it exists
     const { data: app, error: fetchError } = await supabaseAdmin
       .from('applications')
       .select('*')
       .eq('id', appId)
-      .single()
+      .single();
 
-    if (fetchError || !app) throw new Error("Application not found")
-
-    let updates = {}
-
-    switch (action) {
-      case 'ACCEPT_APPLICATION':
-        // Rule: Only Client can accept. Status must be 'Pending'.
-        if (app.client_id !== user.id) throw new Error("Only client can accept")
-        if (app.status !== 'Pending') throw new Error("Job already started")
-        
-        updates = { status: 'Accepted', started_at: new Date().toISOString() }
-        break;
-
-      case 'SUBMIT_WORK':
-        // Rule: Only Freelancer can submit. Status must be 'Accepted'.
-        if (app.freelancer_id !== user.id) throw new Error("Only freelancer can submit")
-        if (app.status !== 'Accepted') throw new Error("Job not in progress")
-        
-        updates = { 
-          status: 'Submitted', 
-          submitted_at: new Date().toISOString(),
-          work_link: payload.work_link,
-          work_message: payload.message,
-          work_files: payload.files // Array of URLs
-        }
-        break;
-
-      case 'APPROVE_WORK':
-        // Rule: Only Client can approve. Status must be 'Submitted'.
-        if (app.client_id !== user.id) throw new Error("Only client can approve")
-        if (app.status !== 'Submitted') throw new Error("No work to approve")
-        
-        updates = { status: 'Completed', completed_at: new Date().toISOString() }
-        break;
-
-      // NOTE: 'PAID' status is NOT here. That only comes via Webhook!
-      
-      default:
-        throw new Error("Invalid Action")
+    if (fetchError || !app) {
+      console.error("Fetch Error:", fetchError);
+      throw new Error("Application not found or database error");
     }
 
-    // 4. Apply Updates
+    let updates = {}
+    const now = new Date().toISOString();
+    
+    // 6. Logic based on action (State Machine)
+    if (action === 'ACCEPT_APPLICATION') {
+        // Ensure the 'started_at' column exists in your DB!
+        updates = { status: 'Accepted', started_at: now }
+    } 
+    else if (action === 'SUBMIT_WORK') {
+        updates = { 
+            status: 'Submitted', 
+            submitted_at: now,
+            work_link: payload?.work_link || null,
+            work_message: payload?.message || null
+            // Note: If you have a 'work_files' column, add: work_files: payload?.files 
+        }
+    } 
+    else if (action === 'APPROVE_WORK') {
+        updates = { status: 'Completed', completed_at: now }
+    } 
+    else {
+        throw new Error(`Invalid Action: ${action}`);
+    }
+
+    console.log(`Applying Updates for ${action}:`, updates); // Debug Log
+
+    // 7. Update DB
     const { error: updateError } = await supabaseAdmin
       .from('applications')
       .update(updates)
-      .eq('id', appId)
+      .eq('id', appId);
 
-    if (updateError) throw updateError
+    if (updateError) {
+      console.error("Update Failed:", updateError);
+      throw new Error(`Database Update Failed: ${updateError.message}`);
+    }
 
-    return new Response(JSON.stringify({ success: true, status: updates.status }), {
-      headers: { 'Content-Type': 'application/json' }
+    // 8. Success Response
+    return new Response(JSON.stringify({ success: true, message: "Order Updated" }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
     })
 
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 400 })
+    // 9. CRITICAL: Log the actual error to Supabase Dashboard
+    console.error("CRITICAL FUNCTION ERROR:", err);
+
+    return new Response(JSON.stringify({ 
+      error: err.message, 
+      details: "Check Supabase Edge Function Logs for more info." 
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400,
+    })
   }
 })

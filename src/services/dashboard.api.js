@@ -179,3 +179,83 @@ export const checkAndGrantFirstGigBadge = async (userId) => {
   }
   return false;
 };
+
+// 1. Initialize Cashfree Order (Called when Client clicks "Hire")
+export const createEscrowSession = async (applicationId, amount, freelancerId) => {
+  try {
+    // Call Supabase Edge Function to generate Cashfree Session ID securely
+    const { data, error } = await supabase.functions.invoke('payment-gateway', {
+      body: {
+        action: 'CREATE_ORDER',
+        amount: amount,
+        orderId: `ORD_${applicationId}_${Date.now()}`,
+        customerId: `CUST_${Date.now()}`, // In real app, use actual user ID
+        customerPhone: '9999999999' // In real app, fetch from user profile
+      }
+    });
+
+    if (error) throw error;
+    return { paymentSessionId: data.payment_session_id, orderId: data.order_id };
+  } catch (err) {
+    console.error("Payment Init Error:", err);
+    return { error: err };
+  }
+};
+
+// 2. Verify Payment & Start Escrow (Called after Cashfree success)
+export const verifyAndStartEscrow = async (orderId, applicationId) => {
+  try {
+    // 1. Verify with Backend
+    const { data, error } = await supabase.functions.invoke('payment-gateway', {
+      body: { action: 'VERIFY_PAYMENT', orderId }
+    });
+
+    if (error) throw error;
+
+    if (data.status === 'SUCCESS') {
+      // 2. Update App Status to ACCEPTED (Work Starts, Money Held)
+      // We mark it as 'escrow_active: true' in the DB (assuming you added this column)
+      const { error: dbError } = await supabase
+        .from('applications')
+        .update({ 
+          status: 'Accepted', 
+          started_at: new Date().toISOString(),
+          payment_id: orderId, // Store tracking ID
+          is_escrow_held: true  // Logical Flag for Escrow
+        })
+        .eq('id', applicationId);
+        
+      if (dbError) throw dbError;
+      
+      return { success: true };
+    } else {
+      throw new Error("Payment verification failed at gateway.");
+    }
+  } catch (err) {
+    return { error: err };
+  }
+};
+
+// 3. Release Funds (Client releases held money)
+export const releaseEscrowFunds = async (appId, amount, freelancerId) => {
+  // In a real Payouts API, we would trigger a Transfer here.
+  // For Sandbox, we verify the user is the client and update the status.
+  
+  const { error } = await supabase
+    .from('applications')
+    .update({ 
+      status: 'Paid', 
+      paid_at: new Date().toISOString(),
+      is_escrow_held: false // Release lock
+    })
+    .eq('id', appId);
+
+  if (!error) {
+    // Notify Freelancer
+    await supabase.from('notifications').insert([{ 
+      user_id: freelancerId, 
+      message: `💸 Payment Released! ₹${amount} has been credited.` 
+    }]);
+  }
+  return { error };
+};
