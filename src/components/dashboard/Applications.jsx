@@ -1,6 +1,6 @@
 import React from 'react';
 import Button from '../ui/Button';
-import { Eye, Clock, CheckCircle, XCircle, Package, DollarSign, Lock, Unlock } from 'lucide-react';
+import { Eye, Clock, CheckCircle, XCircle, Package, DollarSign, Lock, Unlock, FileText, ExternalLink } from 'lucide-react';
 
 const Applications = ({ applications, isClient, onAction, onViewTimeline, parentMode }) => {
   
@@ -38,9 +38,35 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
 
       if (app.status === 'Submitted') {
         return (
-          <div className="flex gap-2 justify-end">
-             <Button size="sm" onClick={() => onAction('view_submission', app)} variant="outline">View Work</Button>
-             <Button size="sm" onClick={() => onAction('approve', app)} className="bg-emerald-500 hover:bg-emerald-600">Approve</Button>
+          <div className="flex flex-col items-end gap-2">
+             {/* Direct access to submitted work */}
+             <div className="flex items-center gap-3 text-xs mb-1">
+                {app.submission_link && (
+                  <a 
+                    href={app.submission_link} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="flex items-center gap-1 text-blue-500 hover:underline hover:text-blue-600 transition-colors"
+                  >
+                    <ExternalLink size={12}/> Link
+                  </a>
+                )}
+                {app.submission_file && (
+                  <a 
+                    href={app.submission_file} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="flex items-center gap-1 text-indigo-500 hover:underline hover:text-indigo-600 transition-colors"
+                  >
+                    <FileText size={12}/> File
+                  </a>
+                )}
+             </div>
+
+             <div className="flex gap-2 justify-end">
+                <Button size="sm" onClick={() => onAction('view_submission', app)} variant="outline">Details</Button>
+                <Button size="sm" onClick={() => onAction('approve', app)} className="bg-emerald-500 hover:bg-emerald-600">Approve</Button>
+             </div>
           </div>
         );
       }
