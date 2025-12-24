@@ -1,50 +1,64 @@
 import React from 'react';
-import { Award, TrendingUp, Activity, ArrowRight, Sparkles, Briefcase, Wallet, Users, Zap } from 'lucide-react';
+import { Award, TrendingUp, Briefcase, ArrowRight, Sparkles, Wallet, Zap, Share2, Search, Plus } from 'lucide-react';
 import Button from '../ui/Button';
 
 const Overview = ({ user, isClient, totalEarnings, jobsCount, applicationsCount, badgesCount, setTab }) => {
-  
-  // Helper to determine greeting based on time
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
 
   return (
-    <div className="space-y-8 animate-fade-in pb-10">
+    <div className="space-y-6 animate-fade-in pb-12 relative">
       
-      {/* --- HERO SECTION (The "Command Center") --- */}
-      <div className="relative overflow-hidden rounded-[32px] bg-gray-900 text-white shadow-2xl group">
-         {/* Animated Background Mesh */}
-         <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
-         <div className="absolute -top-24 -right-24 w-96 h-96 bg-purple-600 rounded-full blur-[128px] opacity-50 group-hover:opacity-70 transition-opacity duration-1000"></div>
-         <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-indigo-600 rounded-full blur-[128px] opacity-50 group-hover:opacity-70 transition-opacity duration-1000"></div>
+      {/* GLOBAL NOISE OVERLAY (Optional but recommended for the vibe) */}
+      <div className="fixed inset-0 opacity-[0.03] pointer-events-none z-0" 
+           style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}>
+      </div>
+
+      {/* --- HERO SECTION: The "Holographic" Command Center --- */}
+      <div className="relative overflow-hidden rounded-[40px] bg-[#0f172a] border border-white/10 shadow-2xl group min-h-[320px] flex flex-col justify-center">
          
-         <div className="relative z-10 p-8 md:p-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div>
-               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-bold tracking-wider uppercase mb-4 backdrop-blur-md">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+         {/* Dynamic Gradient Blobs */}
+         <div className="absolute -top-20 -right-20 w-96 h-96 bg-purple-600/40 rounded-full blur-[100px] group-hover:bg-purple-500/50 transition-all duration-1000 animate-pulse-slow"></div>
+         <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-indigo-600/40 rounded-full blur-[100px] group-hover:bg-indigo-500/50 transition-all duration-1000"></div>
+         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
+
+         <div className="relative z-10 px-10 py-8 flex flex-col md:flex-row justify-between items-center gap-8">
+            <div className="space-y-4 max-w-xl">
+               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
+                 <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                   </span>
-                  System Online
+                  <span className="text-xs font-mono font-bold text-emerald-300 tracking-widest uppercase">System Online</span>
                </div>
-               <h1 className="text-3xl md:text-5xl font-black tracking-tight mb-2">
-                  {greeting}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-300">{user.name?.split(' ')[0]}</span>
+               
+               <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight leading-[1.1]">
+                  {greeting}, <br/>
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300">
+                    {user.name?.split(' ')[0] || 'Creator'}
+                  </span>.
                </h1>
-               <p className="text-gray-400 max-w-lg text-lg">
+               
+               <p className="text-indigo-200/80 text-lg font-medium leading-relaxed">
                   {isClient 
-                    ? "Your projects are moving fast. Review proposals and keep the momentum going." 
-                    : "You're on a roll! Check your latest stats and pick up a new gig today."}
+                    ? "Your projects are accelerating. The talent pool is active."
+                    : "The market is hot. Your next big opportunity is waiting."}
                </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+
+            {/* Floating Action Glass */}
+            <div className="p-6 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-xl shadow-2xl flex flex-col gap-3 w-full md:w-auto min-w-[240px] transform md:rotate-2 hover:rotate-0 transition-all duration-500">
                <Button 
-                  className="bg-white text-gray-900 hover:bg-indigo-50 border-none shadow-xl shadow-indigo-900/20 h-12 px-6 text-base" 
+                  className="w-full bg-white text-black hover:bg-indigo-50 h-14 text-lg shadow-[0_0_20px_rgba(255,255,255,0.3)]"
                   onClick={() => setTab('jobs')}
                   icon={isClient ? Plus : Search}
                >
                   {isClient ? 'Post New Job' : 'Find Work'}
                </Button>
-               <button onClick={() => setTab('profile-card')} className="h-12 px-6 rounded-xl border border-white/20 hover:bg-white/10 transition-all font-bold flex items-center justify-center gap-2 backdrop-blur-md">
+               <button 
+                  onClick={() => setTab('profile-card')}
+                  className="w-full h-12 rounded-xl flex items-center justify-center gap-2 text-white font-bold bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
+               >
                   <Share2 size={18}/> Share Profile
                </button>
             </div>
@@ -52,82 +66,62 @@ const Overview = ({ user, isClient, totalEarnings, jobsCount, applicationsCount,
       </div>
 
       {/* --- BENTO GRID STATS --- */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-6">
          
-         {/* CARD 1: EARNINGS (Large - Spans 2 cols) */}
-         <div className="col-span-1 md:col-span-3 lg:col-span-2 bg-white dark:bg-[#1E293B] p-6 rounded-[24px] border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-xl transition-all duration-300 group relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-emerald-500/20 transition-all"></div>
-            <div className="flex justify-between items-start mb-8">
-               <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
-                  <Wallet size={24}/>
-               </div>
-               <div className="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 px-2 py-1 rounded-lg">
-                  <TrendingUp size={12}/> +12.5%
-               </div>
-            </div>
-            <div>
-               <p className="text-gray-500 dark:text-gray-400 text-sm font-bold uppercase tracking-wider mb-1">{isClient ? 'Total Spent' : 'Total Earnings'}</p>
-               <h3 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">₹{totalEarnings.toLocaleString()}</h3>
-               <p className="text-xs text-gray-400 mt-2">Last updated just now</p>
+         {/* CARD 1: EARNINGS (Gradient Mesh) */}
+         <div className="col-span-1 md:col-span-3 lg:col-span-4 relative overflow-hidden rounded-[32px] bg-[#1e1b4b] border border-indigo-500/20 p-8 group">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/30 rounded-full blur-[80px] -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700"></div>
+            <div className="relative z-10">
+                <div className="flex justify-between items-start mb-12">
+                   <div className="p-3 bg-indigo-500/20 rounded-2xl text-indigo-300 border border-indigo-500/30">
+                      <Wallet size={28} />
+                   </div>
+                   <div className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1.5 rounded-full border border-emerald-400/20">
+                      <TrendingUp size={12}/> +12.5%
+                   </div>
+                </div>
+                <p className="text-indigo-300/60 font-mono text-xs uppercase tracking-widest mb-1">{isClient ? 'Total Spent' : 'Lifetime Earnings'}</p>
+                <h3 className="text-5xl font-black text-white tracking-tighter">
+                   ₹{(totalEarnings/1000).toFixed(1)}k
+                </h3>
             </div>
          </div>
 
-         {/* CARD 2: ACTIVE STATUS (Medium - Spans 2 cols) */}
-         <div className="col-span-1 md:col-span-3 lg:col-span-2 bg-white dark:bg-[#1E293B] p-6 rounded-[24px] border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-xl transition-all duration-300 group relative overflow-hidden">
-            <div className="absolute bottom-0 left-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -ml-16 -mb-16 group-hover:bg-blue-500/20 transition-all"></div>
-            <div className="flex justify-between items-start mb-8">
-               <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
-                  <Briefcase size={24}/>
+         {/* CARD 2: ACTIVE STATUS (Dark Tech) */}
+         <div className="col-span-1 md:col-span-3 lg:col-span-4 relative overflow-hidden rounded-[32px] bg-[#0f172a] border border-white/10 p-8 group hover:border-blue-500/50 transition-colors duration-300">
+            <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-cyan-400"></div>
+            <div className="flex justify-between items-start mb-12">
+               <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-400 border border-blue-500/20">
+                  <Briefcase size={28}/>
                </div>
-               <div className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/30 px-2 py-1 rounded-lg">
-                  Active
-               </div>
+               <div className="animate-pulse w-2 h-2 bg-blue-500 rounded-full"></div>
             </div>
             <div>
-               <p className="text-gray-500 dark:text-gray-400 text-sm font-bold uppercase tracking-wider mb-1">{isClient ? 'Active Jobs' : 'Applications Sent'}</p>
-               <h3 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">{isClient ? jobsCount : applicationsCount}</h3>
-               <div className="w-full bg-gray-100 dark:bg-gray-700 h-1.5 rounded-full mt-4 overflow-hidden">
-                  <div className="bg-blue-500 h-full rounded-full w-[70%]"></div>
+               <p className="text-gray-400 font-mono text-xs uppercase tracking-widest mb-1">{isClient ? 'Active Jobs' : 'Applications'}</p>
+               <div className="flex items-baseline gap-2">
+                  <h3 className="text-5xl font-black text-white tracking-tighter">{isClient ? jobsCount : applicationsCount}</h3>
+                  <span className="text-sm text-gray-500 font-medium">pending</span>
                </div>
             </div>
          </div>
 
-         {/* CARD 3: BADGES (Vertical - Spans 1 col but tall on desktop) */}
-         <div className="col-span-1 md:col-span-2 lg:col-span-2 bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-[24px] text-white shadow-xl relative overflow-hidden group">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-white/20 blur-[60px] rounded-full group-hover:scale-125 transition-transform duration-700"></div>
-            <div className="relative z-10 flex flex-col h-full justify-between">
-               <div className="flex justify-between items-start">
-                  <div className="p-3 rounded-2xl bg-white/20 backdrop-blur-md text-white">
-                     <Award size={24}/>
-                  </div>
-                  <Award size={64} className="text-white/10 absolute top-4 right-4 rotate-12"/>
-               </div>
-               <div className="mt-8">
-                  <p className="text-indigo-200 text-sm font-bold uppercase tracking-wider mb-1">Reputation</p>
-                  <h3 className="text-4xl font-black tracking-tight mb-1">{badgesCount} Badges</h3>
-                  <p className="text-indigo-100 text-xs opacity-80">You are in the top 5%!</p>
-               </div>
-               <button onClick={() => setTab('academy')} className="mt-4 w-full py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2">
-                  View All <ArrowRight size={14}/>
-               </button>
-            </div>
-         </div>
-         
-         {/* CARD 4: QUICK INSIGHT (Wide - Spans Full Width) */}
-         <div className="col-span-1 md:col-span-3 lg:col-span-6 bg-gray-50 dark:bg-[#0F172A] border border-gray-200 dark:border-gray-800 p-4 rounded-[24px] flex items-center gap-4 overflow-hidden relative">
-             <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm border border-gray-100 dark:border-gray-700">
-                <Sparkles className="text-yellow-500" size={20}/>
+         {/* CARD 3: BADGES (Vertical Call to Action) */}
+         <div className="col-span-1 md:col-span-6 lg:col-span-4 relative overflow-hidden rounded-[32px] bg-gradient-to-br from-fuchsia-600 to-purple-800 p-8 text-white shadow-xl flex flex-col justify-between group">
+             {/* Spinning Star Decoration */}
+             <div className="absolute -top-10 -right-10 opacity-20 animate-spin-slow">
+                 <svg width="200" height="200" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" /></svg>
              </div>
-             <div className="flex-1">
-                <h4 className="text-sm font-bold text-gray-900 dark:text-white">Pro Tip:</h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                   {isClient 
-                     ? "Posting detailed job descriptions increases proposal quality by 40%. Try using our AI tool!" 
-                     : "Freelancers with a verified badge get 3x more clicks. Upgrade to Pro today."}
-                </p>
+             
+             <div>
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-6">
+                    <Award size={24} className="text-white"/>
+                </div>
+                <h3 className="text-3xl font-bold mb-2">Level Up</h3>
+                <p className="text-fuchsia-100/80 text-sm leading-relaxed mb-6">You have {badgesCount} badges. Complete 2 more quests to reach "Elite" status.</p>
              </div>
-             <button onClick={() => setTab(isClient ? 'jobs' : 'pricing')} className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline whitespace-nowrap pr-4">
-                Check it out
+             
+             <button onClick={() => setTab('academy')} className="w-full py-4 bg-white text-fuchsia-900 font-bold rounded-2xl hover:scale-[1.02] transition-transform flex items-center justify-center gap-2">
+                Go to Academy <ArrowRight size={16}/>
              </button>
          </div>
 
@@ -135,11 +129,4 @@ const Overview = ({ user, isClient, totalEarnings, jobsCount, applicationsCount,
     </div>
   );
 };
-
-// Helper Icons needed just for this component
-const Plus = ({size}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
-const Search = ({size}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>;
-import { Share2 } from 'lucide-react'; // Ensure Share2 is imported or passed via props. 
-// NOTE: I added Share2 import at the top of this file to be safe.
-
 export default Overview;

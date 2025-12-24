@@ -259,3 +259,69 @@ export const releaseEscrowFunds = async (appId, amount, freelancerId) => {
   }
   return { error };
 };
+
+
+// 1. NEW: Secure Action Handler (Replaces direct updates)
+export const secureOrderAction = async (action, appId, userId, payload = {}) => {
+  const { data, error } = await supabase.functions.invoke('order-manager', {
+    body: { action, appId, userId, payload }
+  });
+  
+  if (error) return { error };
+  if (data.error) return { error: { message: data.error } }; // Catch backend logic errors
+  return { data };
+};
+
+// 2. NEW: Scalable Search (Replaces client-side filtering)
+export const searchJobsAPI = async (searchTerm) => {
+  if (!searchTerm) return [];
+  const { data, error } = await supabase.rpc('search_jobs', { search_term: searchTerm });
+  if (error) {
+      console.error(error);
+      return [];
+  }
+  return data;
+};
+
+
+
+// --- AUTOMATED PAYOUTS ---
+export const releasePayout = async (appId, amount, freelancerId) => {
+  try {
+    // 1. Calculate Split (Freelancer gets 96%)
+    const payoutAmount = (amount * 0.96).toFixed(2);
+    
+    // 2. Call Edge Function to trigger transfer
+    const { data, error } = await supabase.functions.invoke('payment-gateway', {
+      body: {
+        action: 'INITIATE_PAYOUT',
+        amount: payoutAmount,
+        transferId: `TRANS_${appId}_${Date.now()}`,
+        freelancerId: freelancerId
+      }
+    });
+
+    if (error) throw error;
+    
+    // 3. If successful, mark as Paid in DB
+    if (data.status === 'SUCCESS' || data.status === 'PENDING') {
+        await supabase
+            .from('applications')
+            .update({ 
+                status: 'Paid', 
+                paid_at: new Date().toISOString(),
+                is_escrow_held: false,
+                payout_reference: data.referenceId
+            })
+            .eq('id', appId);
+            
+        return { success: true };
+    } else {
+        throw new Error(data.message || "Payout initiation failed");
+    }
+
+  } catch (err) {
+    console.error("Payout Error:", err);
+    return { error: err };
+  }
+};

@@ -1,80 +1,96 @@
-import React, { useState } from 'react';
-import { Trophy, CheckCircle, Lock, Zap, Timer } from 'lucide-react'; // Added Timer icon
+import React from 'react';
+import { Trophy, Lock, Zap, BookOpen, Star, Hexagon } from 'lucide-react';
 import Button from '../ui/Button';
-import { CATEGORIES } from '../../utils/constants'; 
 
 const Academy = ({ unlockedSkills, setModal, quizzes }) => {
-  // --- MOCK SKILL TESTS DATA ---
-  const SKILL_TESTS = [
-    { id: 'python_basic', title: 'Python Basics', time: '10m', questions: 10, reward: 'Python Verified Badge' },
-    { id: 'canva_design', title: 'Canva Design', time: '15m', questions: 15, reward: 'Design Pro Badge' },
-    { id: 'video_editing', title: 'Video Editing Fundamentals', time: '12m', questions: 12, reward: 'Editor Badge' },
-  ];
-
-  const handleStartTest = (testId) => {
-      alert(`Starting ${testId} test... (This would open a timed quiz interface in a real app)`);
-      // Here you would set a modal state to open the specific test component
-  };
-
+  
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* ... (Existing Header and Quizzes section) ... */}
-       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
-        <div className="relative z-10 flex justify-between items-end">
-          <div>
-            <h2 className="text-3xl font-bold mb-2 flex items-center gap-3"><Trophy size={32} className="text-yellow-300"/> Level {Math.floor(unlockedSkills.length / 2) + 1} Freelancer</h2>
-            <p className="text-indigo-100">Complete quizzes to unlock new job categories and earn badges!</p>
-          </div>
-        </div>
-        <div className="mt-6 h-3 w-full bg-black/20 rounded-full overflow-hidden backdrop-blur-sm">
-          <div className="h-full bg-yellow-400 transition-all duration-1000 ease-out" style={{ width: `${(unlockedSkills.length / 4) * 100}%` }}></div>
-        </div>
-      </div>
+    <div className="space-y-10 animate-fade-in pb-10">
+      
+      {/* LEVEL HEADER */}
+      <div className="relative rounded-[32px] overflow-hidden bg-[#0f172a] p-8 border border-white/10 shadow-2xl">
+         {/* Background Effects */}
+         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-yellow-500/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3"></div>
+         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
 
-      {/* CATEGORY UNLOCK QUIZZES */}
-      <h3 className="text-xl font-bold dark:text-white mb-4">Unlock Categories</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {Object.entries(quizzes).map(([key, quiz]) => {
-          const isUnlocked = unlockedSkills.includes(key);
-          return (
-            <div key={key} className={`bg-white dark:bg-[#1E293B] p-6 rounded-2xl border ${isUnlocked ? 'border-emerald-200 dark:border-emerald-900/50' : 'border-gray-200 dark:border-gray-700'} shadow-sm relative overflow-hidden`}>
-              {isUnlocked && <div className="absolute top-0 right-0 bg-emerald-500 text-white text-xs px-3 py-1 rounded-bl-xl font-bold">UNLOCKED</div>}
-              <h3 className="text-xl font-bold dark:text-white mb-2 flex items-center gap-2">
-                {isUnlocked ? <CheckCircle size={20} className="text-emerald-500"/> : <Lock size={20} className="text-gray-400"/>}
-                {quiz.title || quiz.question} 
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Pass this quiz to apply for {key.toUpperCase()} jobs.</p>
-              {!isUnlocked ? (
-                <Button onClick={() => setModal(`quiz-${key}`)} className="w-full">Start Quiz</Button>
-              ) : (
-                <Button variant="outline" disabled className="w-full border-emerald-200 text-emerald-600 dark:border-emerald-900 dark:text-emerald-500">Completed</Button>
-              )}
+         <div className="relative z-10 flex flex-col md:flex-row justify-between items-end gap-6">
+            <div>
+               <div className="flex items-center gap-2 mb-2">
+                  <Star className="text-yellow-400 fill-yellow-400" size={20}/>
+                  <span className="text-yellow-400 font-bold uppercase tracking-widest text-xs">Current Rank</span>
+               </div>
+               <h2 className="text-4xl md:text-5xl font-black text-white italic">
+                  LEVEL {Math.floor(unlockedSkills.length / 2) + 1} <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 to-amber-500">MAVERICK</span>
+               </h2>
+               <p className="text-gray-400 mt-2 max-w-md">Complete {4 - (unlockedSkills.length % 4)} more challenges to reach the next tier.</p>
             </div>
-          );
-        })}
+            
+            <div className="w-full md:w-1/3">
+               <div className="flex justify-between text-xs font-bold text-gray-400 mb-2 uppercase">
+                  <span>XP Progress</span>
+                  <span>{((unlockedSkills.length / 4) * 100).toFixed(0)}%</span>
+               </div>
+               <div className="h-4 bg-gray-800 rounded-full overflow-hidden border border-white/5">
+                  <div className="h-full bg-gradient-to-r from-yellow-400 to-orange-500 relative">
+                      <div className="absolute inset-0 bg-white/30 w-full h-full animate-pulse"></div>
+                  </div>
+               </div>
+            </div>
+         </div>
       </div>
 
-      {/* NEW: SKILL TESTS SECTION */}
-      <div className="mt-10">
-        <h3 className="text-xl font-bold dark:text-white mb-4 flex items-center gap-2"><Zap className="text-yellow-500"/> Skill Verification Tests</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {SKILL_TESTS.map(test => (
-                <div key={test.id} className="bg-white dark:bg-[#1E293B] p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm hover:border-indigo-400 transition-colors group">
-                    <div className="flex justify-between items-start mb-4">
-                        <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                            <Timer size={24}/>
+      {/* SKILL TREE GRID */}
+      <div>
+         <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <Zap className="text-cyan-400"/> Skill Tree
+         </h3>
+         
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Object.entries(quizzes).map(([key, quiz], index) => {
+               const isUnlocked = unlockedSkills.includes(key);
+               
+               return (
+                  <div key={key} className={`relative group p-1 rounded-[24px] transition-all duration-300 ${isUnlocked ? 'bg-gradient-to-b from-emerald-500 to-teal-500' : 'bg-gray-800 hover:bg-gray-700'}`}>
+                     
+                     {/* Inner Card */}
+                     <div className="h-full bg-[#1e293b] rounded-[22px] p-6 relative overflow-hidden flex flex-col">
+                        
+                        {/* Status Icon */}
+                        <div className="absolute top-4 right-4">
+                           {isUnlocked 
+                              ? <div className="p-2 bg-emerald-500/20 rounded-full text-emerald-400"><Trophy size={18}/></div>
+                              : <div className="p-2 bg-gray-700 rounded-full text-gray-500"><Lock size={18}/></div>
+                           }
                         </div>
-                        <span className="text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 px-2 py-1 rounded-lg">{test.time}</span>
-                    </div>
-                    <h4 className="font-bold text-lg dark:text-white mb-1">{test.title}</h4>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{test.questions} Questions</p>
-                    <div className="text-xs font-medium text-indigo-500 mb-4">Reward: {test.reward}</div>
-                    <Button variant="outline" className="w-full" onClick={() => handleStartTest(test.id)}>Take Test</Button>
-                </div>
-            ))}
-        </div>
+
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${isUnlocked ? 'bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-gray-700 text-gray-400'}`}>
+                           <Hexagon size={24} strokeWidth={2}/>
+                        </div>
+
+                        <h4 className="text-lg font-bold text-white mb-2">{quiz.title || `Module ${index + 1}`}</h4>
+                        <p className="text-sm text-gray-400 mb-6 flex-grow">
+                           {isUnlocked ? "Mastery achieved. Badge added to profile." : "Pass the assessment to unlock this job category."}
+                        </p>
+
+                        {!isUnlocked ? (
+                           <Button 
+                              onClick={() => setModal(`quiz-${key}`)} 
+                              className="w-full bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-900/50"
+                           >
+                              Start Challenge
+                           </Button>
+                        ) : (
+                           <div className="w-full py-2 text-center text-xs font-bold text-emerald-400 uppercase tracking-widest border border-emerald-500/30 rounded-xl bg-emerald-500/5">
+                              Completed
+                           </div>
+                        )}
+                     </div>
+                  </div>
+               )
+            })}
+         </div>
       </div>
+
     </div>
   );
 };

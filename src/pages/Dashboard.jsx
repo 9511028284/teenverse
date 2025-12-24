@@ -423,9 +423,19 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
   // 4. Final Payment Wrapper (Releasing Money to Freelancer)
   const handleFinalPayment = async (app) => {
-    if (parentMode) { showToast("Parent Mode: Payments Locked.", "error"); return; }
-    if (app.status !== APP_STATUS.COMPLETED) { showToast("Approve work first.", "error"); return; }
-    setPaymentModal({ appId: app.id, amount: app.bid_amount, freelancerId: app.freelancer_id });
+    if(!window.confirm(`Transfer ₹${(app.bid_amount * 0.96).toFixed(2)} to freelancer?`)) return;
+
+    showToast("Processing Bank Transfer...", "info");
+    
+    // CALL NEW PAYOUT FUNCTION
+    const { success, error } = await api.releasePayout(app.id, app.bid_amount, app.freelancer_id);
+
+    if (success) {
+       showToast("Funds Transferred Successfully!", "success");
+       setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'Paid' } : a));
+    } else {
+       showToast("Transfer Failed: " + error.message, "error");
+    }
   };
 
   // 5. Processing the Payment Release
@@ -450,17 +460,33 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   };
 
   // --- MASTER ACTION HANDLER (Centralized) ---
-  const handleAppAction = (action, app) => {
-    // Parent Mode Guard
+  // --- MASTER ACTION HANDLER (Centralized) ---
+  const handleAppAction = async (action, app) => {
+    // 1. OPTIONAL: Keep Frontend Guard (for immediate UI feedback)
     if (parentMode && ['pay', 'approve', 'accept'].includes(action)) {
         showToast("Parent Mode Active: Action Locked", "error");
         return;
     }
 
+    // 2. NEW: Secure Backend Check (The "Phase 4" logic)
+    // We only need to verify sensitive actions with the backend first
+    if (['approve', 'pay', 'release_escrow'].includes(action)) {
+        // Use the exact name you exported in dashboard.api.js: secureOrderAction
+        const result = await api.secureOrderAction(action.toUpperCase(), app.id, user.id);
+        
+        // If backend denies it (e.g., Parent Mode hacked), stop here
+        if (result.error) {
+            showToast(`❌ ${result.error.message || "Action Blocked"}`, "error");
+            // If server says it was a security block, force parent mode on frontend to match
+            if (result.error.isSecurityBlock) setParentMode(true);
+            return;
+        }
+    }
+
+    // 3. Proceed with Standard Logic (Happy Path)
     if (action === 'accept') handleAcceptApplication(app);
-    if (action === 'reject') updateStatus(app.id, APP_STATUS.REJECTED, app.freelancer_id);
+    if (action === 'reject') updateStatus(app.id, 'Rejected', app.freelancer_id);
     
-    // FIX: Using selectedApp to distinguish from generic browsing
     if (action === 'submit') { 
         setSelectedApp(app);
         setModal('submit_work'); 
@@ -498,22 +524,42 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
-  const handleUpdateProfile = async (e) => {
+const handleUpdateProfile = async (e) => {
     e.preventDefault();
     const tableName = isClient ? 'clients' : 'freelancers';
-    const cleanUpdates = { name: profileForm.name, phone: profileForm.phone, nationality: profileForm.nationality };
+    
+    // 1. Common Fields
+    const cleanUpdates = { 
+        name: profileForm.name, 
+        phone: profileForm.phone, 
+        nationality: profileForm.nationality 
+    };
+
+    // 2. Freelancer Specific Fields (Including NEW Bank Details)
     if (!isClient) {
-        cleanUpdates.age = profileForm.age; cleanUpdates.qualification = profileForm.qualification;
+        cleanUpdates.age = profileForm.age; 
+        cleanUpdates.qualification = profileForm.qualification;
         cleanUpdates.specialty = profileForm.specialty;
         cleanUpdates.services = profileForm.services;
         cleanUpdates.upi = profileForm.upi;
+        
+        // --- NEW BANK DETAILS ---
+        cleanUpdates.bank_name = profileForm.bank_name;
+        cleanUpdates.account_number = profileForm.account_number;
+        cleanUpdates.ifsc_code = profileForm.ifsc_code;
     } else { 
         cleanUpdates.is_organisation = profileForm.is_organisation;
     }
 
+    // 3. Save to Supabase
     const { error } = await api.updateUserProfile(user.id, cleanUpdates, tableName);
-    if (error) { showToast(error.message, 'error'); } 
-    else { showToast("Profile updated!"); setUser({ ...user, ...cleanUpdates }); }
+    
+    if (error) { 
+        showToast(error.message, 'error');
+    } else { 
+        showToast("Profile & Bank Details updated!", "success"); 
+        setUser({ ...user, ...cleanUpdates }); 
+    }
   };
 
   // --- QUIZ & AI HANDLERS ---

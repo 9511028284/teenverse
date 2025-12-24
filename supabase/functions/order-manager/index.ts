@@ -7,7 +7,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // 1. Handle CORS Preflight - Essential for browser requests
+  // 1. Handle CORS Preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -18,37 +18,64 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("MISSING ENV VARS: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is null.");
       throw new Error("Server Misconfiguration: Missing Environment Variables");
     }
 
-    // 3. Initialize Admin Client
+    // 3. Initialize Admin Client (Bypasses RLS for security checks)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 4. Parse Request
-    const { action, appId, payload } = await req.json();
-    console.log(`Received Request -> Action: ${action}, AppID: ${appId}`); // Debug Log
+    // 4. Parse Request - NOW REQUIRES userId
+    const { action, appId, userId, payload } = await req.json();
+    console.log(`Received Secure Request -> Action: ${action}, AppID: ${appId}, UserID: ${userId}`);
 
-    if (!appId) throw new Error("Missing 'appId' in request body");
+    if (!appId || !userId) throw new Error("Missing 'appId' or 'userId' in request body");
 
-    // 5. Fetch current application to verify it exists
+    // 5. 🛡️ SECURITY: Fetch User Profile & Parent Mode Status
+    // We check the DB for the TRUE parent mode status (ignoring frontend)
+    const { data: userProfile, error: userError } = await supabaseAdmin
+      .from('users') // Verify this matches your table name (users/freelancers/clients)
+      .select('parent_mode_enabled, is_banned')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !userProfile) {
+        throw new Error("User validation failed: User not found.");
+    }
+
+    if (userProfile.is_banned) {
+        return new Response(JSON.stringify({ error: "Account Suspended" }), { status: 403, headers: corsHeaders });
+    }
+
+    // 6. 🛡️ SECURITY: Enforce Parent Mode
+    // Critical actions are blocked if Parent Mode is ON
+    const RESTRICTED_ACTIONS = ['APPROVE_WORK', 'RELEASE_ESCROW', 'PAY'];
+    
+    if (userProfile.parent_mode_enabled && RESTRICTED_ACTIONS.includes(action)) {
+        console.warn(`Blocked Action ${action} for User ${userId} due to Parent Mode.`);
+        return new Response(JSON.stringify({ 
+            error: "Security Block: Parent Mode is active. Ask your parent to approve this.",
+            isSecurityBlock: true 
+        }), { 
+            status: 403, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+    }
+
+    // 7. Fetch Application Data
     const { data: app, error: fetchError } = await supabaseAdmin
       .from('applications')
       .select('*')
       .eq('id', appId)
       .single();
 
-    if (fetchError || !app) {
-      console.error("Fetch Error:", fetchError);
-      throw new Error("Application not found or database error");
-    }
+    if (fetchError || !app) throw new Error("Application not found");
 
-    let updates = {}
+    // 8. Logic based on action (State Machine)
+   
+    let updates = {};
     const now = new Date().toISOString();
     
-    // 6. Logic based on action (State Machine)
     if (action === 'ACCEPT_APPLICATION') {
-        // Ensure the 'started_at' column exists in your DB!
         updates = { status: 'Accepted', started_at: now }
     } 
     else if (action === 'SUBMIT_WORK') {
@@ -56,43 +83,40 @@ serve(async (req) => {
             status: 'Submitted', 
             submitted_at: now,
             work_link: payload?.work_link || null,
-            work_message: payload?.message || null
-            // Note: If you have a 'work_files' column, add: work_files: payload?.files 
+            work_message: payload?.work_message || payload?.message || null, // Handle both keys safely
+            
+            // ✅ NEW: Actually save the file URLs to the database
+            work_files: payload?.files || [] 
         }
     } 
     else if (action === 'APPROVE_WORK') {
         updates = { status: 'Completed', completed_at: now }
     } 
-    else {
-        throw new Error(`Invalid Action: ${action}`);
+    else if (action === 'RELEASE_ESCROW') {
+        if (app.status !== 'Completed') throw new Error("Work must be approved first.");
+        updates = { status: 'Paid', paid_at: now, is_escrow_held: false }
     }
-
-    console.log(`Applying Updates for ${action}:`, updates); // Debug Log
-
-    // 7. Update DB
+    
+// ... rest of the file
+    // 9. Update DB
     const { error: updateError } = await supabaseAdmin
       .from('applications')
       .update(updates)
       .eq('id', appId);
 
-    if (updateError) {
-      console.error("Update Failed:", updateError);
-      throw new Error(`Database Update Failed: ${updateError.message}`);
-    }
+    if (updateError) throw new Error(`Database Update Failed: ${updateError.message}`);
 
-    // 8. Success Response
-    return new Response(JSON.stringify({ success: true, message: "Order Updated" }), {
+    // 10. Success Response
+    return new Response(JSON.stringify({ success: true, message: "Order Updated Successfully" }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
 
   } catch (err) {
-    // 9. CRITICAL: Log the actual error to Supabase Dashboard
     console.error("CRITICAL FUNCTION ERROR:", err);
-
     return new Response(JSON.stringify({ 
       error: err.message, 
-      details: "Check Supabase Edge Function Logs for more info." 
+      details: "Check Supabase Edge Function Logs." 
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
