@@ -2,22 +2,34 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Users, Briefcase, CheckCircle, XCircle, 
   Trash2, DollarSign, LogOut, Shield, Flag, Package,
-  Clock, User, Filter, AlertTriangle // Added new icons
+  Clock, AlertTriangle, ShieldCheck, Landmark, Eye, MessageSquare
 } from 'lucide-react';
 import { supabase } from '../supabase';
+import * as api from '../services/dashboard.api'; 
 import Toast from '../components/ui/Toast';
 
 const AdminDashboard = ({ onLogout }) => {
+  // --- STATE ---
   const [tab, setTab] = useState('overview');
+  const [reportFilter, setReportFilter] = useState('pending');
+  
+  // Data States
   const [users, setUsers] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [services, setServices] = useState([]);
-  const [reports, setReports] = useState([]); 
+  const [reports, setReports] = useState([]);
+  const [escrowOrders, setEscrowOrders] = useState([]); // From Uploaded File
   
-  // New State for Report Filtering
-  const [reportFilter, setReportFilter] = useState('pending'); 
+  const [stats, setStats] = useState({ 
+    totalUsers: 0, totalJobs: 0, totalServices: 0, 
+    totalRevenue: 0, activeReports: 0, heldInEscrow: 0 
+  });
+  
+  // Evidence / Modal States (From Prompt)
+  const [selectedReport, setSelectedReport] = useState(null); 
+  const [evidence, setEvidence] = useState(null); 
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
 
-  const [stats, setStats] = useState({ totalUsers: 0, totalJobs: 0, totalServices: 0, totalRevenue: 0, activeReports: 0 });
   const [toast, setToast] = useState(null);
 
   const showToast = (msg, type = 'success') => {
@@ -27,8 +39,9 @@ const AdminDashboard = ({ onLogout }) => {
 
   useEffect(() => {
     fetchData();
-  }, [reportFilter]); // Refetch when filter changes
+  }, [reportFilter]); 
 
+  // --- DATA FETCHING ---
   const fetchData = async () => {
     // 1. Fetch Users
     const { data: clients } = await supabase.from('clients').select('*');
@@ -48,58 +61,108 @@ const AdminDashboard = ({ onLogout }) => {
     const { data: allReports } = await supabase
         .from('reports')
         .select('*')
-        .eq('status', reportFilter) // Apply filter
+        .eq('status', reportFilter) 
         .order('created_at', { ascending: false });
     setReports(allReports || []);
 
-    // 5. Fetch Stats (Independent of filter)
+    // 5. Fetch Financials (Escrow) - Critical for Level 1 Admin
+    const { data: escrows } = await api.fetchAdminEscrowOrders();
+    setEscrowOrders(escrows || []);
+
+    // 6. Calculate Stats
     const { count: pendingCount } = await supabase.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'pending');
     
-    // Fetch Revenue
+    // Revenue & Escrow Math
     const { data: payments } = await supabase.from('applications').select('bid_amount').eq('status', 'Paid');
     const totalRevenue = payments?.reduce((acc, curr) => acc + (Number(curr.bid_amount) * 0.04), 0) || 0;
+    
+    const totalHeld = escrows?.reduce((acc, curr) => acc + (Number(curr.bid_amount) || 0), 0) || 0;
 
     setStats({
       totalUsers: allUsers.length,
       totalJobs: allJobs?.length || 0,
       totalServices: allServices?.length || 0,
       totalRevenue,
-      activeReports: pendingCount || 0
+      activeReports: pendingCount || 0,
+      heldInEscrow: totalHeld
     });
   };
+
+  // --- EVIDENCE GATHERING LOGIC (New) ---
+  const openCaseFile = async (report) => {
+    setSelectedReport(report);
+    setEvidenceLoading(true);
+    
+    try {
+        // A. Fetch Related Job
+        let jobData = null;
+        if (report.target_type === 'job' && report.target_id) {
+             const { data } = await supabase.from('jobs').select('*').eq('id', report.target_id).single();
+             jobData = data;
+        }
+
+        // B. Fetch Chat History (Forensics)
+        // We look for messages between these two users
+        const { data: chats } = await supabase
+            .from('messages')
+            .select('*')
+            .or(`sender_id.eq.${report.reporter_id},receiver_id.eq.${report.reporter_id}`)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        // Filter strictly between the reporter and the accused
+        const relevantChats = chats?.filter(msg => 
+            (msg.sender_id === report.reporter_id && msg.receiver_id === report.reported_user_id) ||
+            (msg.sender_id === report.reported_user_id && msg.receiver_id === report.reporter_id)
+        ) || [];
+
+        setEvidence({ job: jobData, chats: relevantChats });
+    } catch (err) {
+        console.error("Evidence Error:", err);
+        showToast("Failed to load case context", "error");
+    } finally {
+        setEvidenceLoading(false);
+    }
+  };
+
+  // --- ACTIONS ---
 
   const handleResolveReport = async (id, newStatus) => {
       const { error } = await supabase.from('reports').update({ status: newStatus }).eq('id', id);
       if(error) showToast("Error updating report", "error");
       else {
           showToast(`Report marked as ${newStatus}`);
-          // Remove from current view if it no longer matches filter
+          // Close modal if open
+          if (selectedReport?.id === id) setSelectedReport(null);
+          
+          // UI Updates
           if (reportFilter !== newStatus) {
             setReports(reports.filter(r => r.id !== id));
           }
-          // Update stats if we resolved a pending report
           if (reportFilter === 'pending' && newStatus !== 'pending') {
              setStats(prev => ({...prev, activeReports: prev.activeReports - 1}));
           }
       }
   };
   
- // AdminPage.txt (Refactored)
-const handleBanUser = async (id, table) => {
-    if(!window.confirm("Ban this user? They will be marked as banned but data preserved.")) return;
+  const handleBanUser = async (id, table) => {
+    if(!window.confirm("⚠️ BAN USER: Are you sure? They will be marked as banned.")) return;
 
-    // Update instead of Delete
     const { error } = await supabase
         .from(table)
-        .update({ status: 'banned' }) // Ensure your DB has this column
+        .update({ status: 'banned' }) 
         .eq('id', id);
 
     if (error) showToast(error.message, 'error');
     else {
         showToast("User banned successfully");
-        fetchData();
+        if (selectedReport) {
+            handleResolveReport(selectedReport.id, 'resolved');
+        } else {
+            fetchData();
+        }
     }
-};
+  };
   
   const handleDeleteJob = async (id) => {
        if(!window.confirm("Admin: Delete this job?")) return;
@@ -115,6 +178,21 @@ const handleBanUser = async (id, table) => {
        else { showToast("Service deleted"); fetchData(); }
   };
 
+  // --- FINANCIAL ACTIONS ---
+  const handleForceRelease = async (app) => {
+    if(!window.confirm(`⚠️ ADMIN OVERRIDE:\n\nForce transfer ₹${app.bid_amount} to Freelancer (${app.freelancer_name})?`)) return;
+    const { error } = await api.adminForceRelease(app.id, app.bid_amount, app.freelancer_id);
+    if(error) showToast(error.message, 'error');
+    else { showToast("Funds Released"); fetchData(); }
+  };
+
+  const handleForceRefund = async (app) => {
+    if(!window.confirm(`⚠️ ADMIN OVERRIDE:\n\nForce refund ₹${app.bid_amount} to Client (${app.client_name})?`)) return;
+    const { error } = await api.adminForceRefund(app.id, app.client_id);
+    if(error) showToast(error.message, 'error');
+    else { showToast("Order Refunded"); fetchData(); }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex font-sans">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
@@ -125,19 +203,21 @@ const handleBanUser = async (id, table) => {
           <Shield size={24} /> Admin Panel
         </div>
         <nav className="flex-1 p-4 space-y-2">
-          {['overview', 'reports', 'users', 'jobs', 'services'].map((t) => (
+          {['overview', 'financials', 'reports', 'users', 'jobs', 'services'].map((t) => (
              <button 
                 key={t}
                 onClick={() => setTab(t)} 
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors capitalize ${tab === t ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
              >
                 {t === 'overview' && <LayoutDashboard size={18} />}
+                {t === 'financials' && <Landmark size={18} />}
                 {t === 'reports' && <Flag size={18} />}
                 {t === 'users' && <Users size={18} />}
                 {t === 'jobs' && <Briefcase size={18} />}
                 {t === 'services' && <Package size={18} />}
                 {t} 
                 {t === 'reports' && stats.activeReports > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{stats.activeReports}</span>}
+                {t === 'financials' && stats.heldInEscrow > 0 && <span className="ml-auto bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full">₹</span>}
              </button>
           ))}
         </nav>
@@ -152,7 +232,6 @@ const handleBanUser = async (id, table) => {
       <main className="flex-1 p-4 md:p-8 md:ml-64 overflow-y-auto">
         <header className="mb-8 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white capitalize">{tab}</h1>
-          {/* Mobile Menu Button could go here */}
         </header>
 
         {tab === 'overview' && (
@@ -161,25 +240,95 @@ const handleBanUser = async (id, table) => {
                <div className="flex justify-between mb-2"><h3 className="text-gray-500 font-bold text-xs uppercase">Revenue</h3><DollarSign className="text-emerald-500"/></div>
                <p className="text-3xl font-black">₹{stats.totalRevenue.toFixed(2)}</p>
             </div>
+             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
+               <div className="flex justify-between mb-2"><h3 className="text-gray-500 font-bold text-xs uppercase">Held in Escrow</h3><Landmark className="text-blue-500"/></div>
+               <p className="text-3xl font-black text-blue-600">₹{stats.heldInEscrow}</p>
+            </div>
             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
                <div className="flex justify-between mb-2"><h3 className="text-gray-500 font-bold text-xs uppercase">Active Disputes</h3><Flag className="text-red-500"/></div>
                <p className="text-3xl font-black text-red-600">{stats.activeReports}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
-               <div className="flex justify-between mb-2"><h3 className="text-gray-500 font-bold text-xs uppercase">Total Users</h3><Users className="text-blue-500"/></div>
+               <div className="flex justify-between mb-2"><h3 className="text-gray-500 font-bold text-xs uppercase">Total Users</h3><Users className="text-purple-500"/></div>
                <p className="text-3xl font-black">{stats.totalUsers}</p>
             </div>
-             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
-               <div className="flex justify-between mb-2"><h3 className="text-gray-500 font-bold text-xs uppercase">Total Gigs</h3><Package className="text-purple-500"/></div>
-               <p className="text-3xl font-black">{stats.totalServices}</p>
+          </div>
+        )}
+
+        {/* --- FINANCIALS / ESCROW TAB --- */}
+        {tab === 'financials' && (
+          <div className="space-y-6">
+            <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-700 flex items-center gap-3">
+                <AlertTriangle className="text-amber-600" size={24} />
+                <div>
+                    <h3 className="font-bold text-amber-800 dark:text-amber-200">Escrow Oversight</h3>
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                        These funds are currently held by TeenVerse. Only use "Force" buttons in emergencies.
+                    </p>
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50 uppercase text-xs font-bold text-gray-500">
+                        <tr>
+                            <th className="p-4">Order ID</th>
+                            <th className="p-4">Amount</th>
+                            <th className="p-4">Client vs Freelancer</th>
+                            <th className="p-4">Stage</th>
+                            <th className="p-4 text-right">Admin Override</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {escrowOrders.map(order => (
+                            <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                                <td className="p-4 font-mono text-xs text-gray-400">{order.id.split('-')[0]}...</td>
+                                <td className="p-4 font-bold text-emerald-600 text-lg">₹{order.bid_amount}</td>
+                                <td className="p-4">
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-xs text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded w-fit">Client: {order.client_name}</span>
+                                        <span className="text-xs text-purple-600 font-bold bg-purple-50 px-2 py-0.5 rounded w-fit">Teen: {order.freelancer_name}</span>
+                                        <span className="text-[10px] text-gray-400 mt-1 italic">{order.jobs?.title}</span>
+                                    </div>
+                                </td>
+                                <td className="p-4">
+                                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${
+                                        order.status === 'Disputed' ? 'bg-red-100 text-red-700' : 
+                                        order.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                        'bg-blue-100 text-blue-700'}`}>
+                                        {order.status}
+                                    </span>
+                                </td>
+                                <td className="p-4 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        <button 
+                                            onClick={() => handleForceRelease(order)}
+                                            className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                                            title="Pay Freelancer"
+                                        >
+                                            <CheckCircle size={14}/> Pay Teen
+                                        </button>
+                                        <button 
+                                            onClick={() => handleForceRefund(order)}
+                                            className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                                            title="Refund Client"
+                                        >
+                                            <XCircle size={14}/> Refund
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                {escrowOrders.length === 0 && <div className="p-10 text-center text-gray-400">No active funds held in escrow. System Clear.</div>}
             </div>
           </div>
         )}
         
-        {/* IMPROVED REPORTS TAB */}
+        {/* REPORTS TAB */}
         {tab === 'reports' && (
             <div className="space-y-6">
-                {/* Filter Tabs */}
                 <div className="flex bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 w-fit">
                   {['pending', 'resolved', 'dismissed'].map((status) => (
                     <button
@@ -196,7 +345,6 @@ const handleBanUser = async (id, table) => {
                   ))}
                 </div>
 
-                {/* Mobile Friendly Report Cards */}
                 {reports.length === 0 ? (
                     <div className="text-center py-20 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700">
                         <CheckCircle size={48} className="mx-auto text-green-500 mb-4 opacity-50" />
@@ -220,44 +368,26 @@ const handleBanUser = async (id, table) => {
                                             <Clock size={12} /> {new Date(report.created_at).toLocaleDateString()}
                                         </span>
                                     </div>
+                                    {reportFilter === 'pending' && (
+                                        <button 
+                                            onClick={() => openCaseFile(report)}
+                                            className="text-xs flex items-center gap-1 bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-100 transition-colors"
+                                        >
+                                            <Eye size={12} /> Review Evidence
+                                        </button>
+                                    )}
                                 </div>
-
                                 <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700 text-sm italic text-gray-600 dark:text-gray-300">
                                     "{report.details || 'No details provided'}"
                                 </div>
-
                                 <div className="grid grid-cols-2 gap-4 text-xs text-gray-500">
-                                    <div>
-                                        <span className="font-bold uppercase block mb-1">Reporter ID</span>
-                                        <span className="font-mono bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded select-all">{report.reporter_id.slice(0,8)}...</span>
-                                    </div>
-                                    <div>
-                                        <span className="font-bold uppercase block mb-1">Reported User ID</span>
-                                        <span className="font-mono bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded select-all">{report.reported_user_id.slice(0,8)}...</span>
-                                    </div>
+                                    <div><span className="font-bold uppercase block mb-1">Reporter</span><span className="font-mono bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded select-all">{report.reporter_id.slice(0,8)}...</span></div>
+                                    <div><span className="font-bold uppercase block mb-1">Reported</span><span className="font-mono bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded select-all">{report.reported_user_id.slice(0,8)}...</span></div>
                                 </div>
-
                                 {reportFilter === 'pending' && (
                                     <div className="flex gap-2 mt-2 pt-4 border-t border-gray-100 dark:border-gray-700">
-                                        <button 
-                                            onClick={() => handleResolveReport(report.id, 'resolved')} 
-                                            className="flex-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 py-2 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2"
-                                        >
-                                            <CheckCircle size={16}/> Resolve
-                                        </button>
-                                        <button 
-                                            onClick={() => handleResolveReport(report.id, 'dismissed')} 
-                                            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2"
-                                        >
-                                            <XCircle size={16}/> Dismiss
-                                        </button>
-                                        <button 
-                                            onClick={() => handleBanUser(report.reported_user_id, 'freelancers')} // Defaulting to freelancer table, you might need logic to check user role
-                                            className="px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors"
-                                            title="Ban User"
-                                        >
-                                            <Trash2 size={18}/>
-                                        </button>
+                                        <button onClick={() => handleResolveReport(report.id, 'dismissed')} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"><XCircle size={16}/> Dismiss</button>
+                                        <button onClick={() => handleBanUser(report.reported_user_id, 'freelancers')} className="px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg" title="Ban User"><Trash2 size={18}/></button>
                                     </div>
                                 )}
                             </div>
@@ -273,7 +403,7 @@ const handleBanUser = async (id, table) => {
               <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 text-sm">
                 <tr>
                   <th className="p-4">Name</th>
-                  <th className="p-4">Role</th>
+                  <th className="p-4">Role & Status</th>
                   <th className="p-4">Email</th>
                   <th className="p-4">ID Proof</th>
                   <th className="p-4 text-right">Actions</th>
@@ -283,11 +413,20 @@ const handleBanUser = async (id, table) => {
                 {users.map(user => (
                   <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                     <td className="p-4 font-medium text-gray-900 dark:text-white">{user.name}</td>
-                    <td className="p-4"><span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.role === 'client' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{user.role}</span></td>
+                    <td className="p-4">
+                        <div className="flex flex-col items-start gap-1">
+                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.role === 'client' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{user.role}</span>
+                            {user.role === 'freelancer' && user.age < 18 && (
+                                user.is_parent_verified 
+                                ? <span className="flex items-center gap-1 text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200"><ShieldCheck size={10} /> Verified Minor</span>
+                                : <span className="flex items-center gap-1 text-[10px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded border border-orange-200"><AlertTriangle size={10} /> Parent Pending</span>
+                            )}
+                        </div>
+                    </td>
                     <td className="p-4 text-gray-500 dark:text-gray-400 text-sm">{user.email}</td>
                     <td className="p-4">
                       {user.id_proof_url ? 
-                        <a href={user.id_proof_url} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline text-sm">View ID</a> : 
+                        <a href={user.id_proof_url} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline text-sm font-bold">View ID</a> : 
                         <span className="text-gray-400 text-sm">None</span>
                       }
                     </td>
@@ -303,7 +442,6 @@ const handleBanUser = async (id, table) => {
           </div>
         )}
         
-        {/* Jobs & Services Tabs - Simple Cards */}
         {(tab === 'jobs' || tab === 'services') && (
           <div className="grid gap-4">
             {(tab === 'jobs' ? jobs : services).map(item => (
@@ -333,6 +471,95 @@ const handleBanUser = async (id, table) => {
           </div>
         )}
       </main>
+
+      {/* --- EVIDENCE MODAL OVERLAY --- */}
+      {selectedReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-gray-900 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+                
+                {/* Modal Header */}
+                <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
+                    <div>
+                        <h2 className="font-bold text-xl dark:text-white flex items-center gap-2">
+                           <Shield className="text-indigo-600" size={20}/> Case File #{selectedReport.id.slice(0,6)}
+                        </h2>
+                        <p className="text-xs text-gray-500 mt-1">Review evidence before taking action.</p>
+                    </div>
+                    <button onClick={() => setSelectedReport(null)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors">
+                        <XCircle className="text-gray-400" />
+                    </button>
+                </div>
+
+                {/* Modal Content */}
+                <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                    {evidenceLoading ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
+                            <p className="text-sm">Gathering forensics...</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* 1. Job Context */}
+                            {evidence?.job && (
+                                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
+                                    <h4 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase mb-2 flex items-center gap-2"><Briefcase size={14}/> Job Context</h4>
+                                    <p className="font-bold text-lg dark:text-white">{evidence.job.title}</p>
+                                    <div className="flex gap-4 mt-2 text-sm text-gray-600 dark:text-gray-300">
+                                        <span>Budget: <strong>₹{evidence.job.budget}</strong></span>
+                                        <span>Type: {evidence.job.job_type}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 2. Chat History */}
+                            <div>
+                                <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2"><MessageSquare size={14}/> Recent Chat Logs</h4>
+                                <div className="bg-gray-50 dark:bg-black/40 p-4 rounded-xl h-64 overflow-y-auto space-y-3 border border-gray-100 dark:border-gray-800">
+                                    {evidence?.chats && evidence.chats.length > 0 ? (
+                                        evidence.chats.map(msg => (
+                                            <div key={msg.id} className={`flex flex-col ${msg.sender_id === selectedReport.reporter_id ? 'items-end' : 'items-start'}`}>
+                                                <div className={`px-4 py-2 rounded-2xl text-sm max-w-[85%] ${
+                                                    msg.sender_id === selectedReport.reporter_id 
+                                                        ? 'bg-indigo-600 text-white rounded-tr-none' 
+                                                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-tl-none'
+                                                }`}>
+                                                    {msg.content}
+                                                </div>
+                                                <span className="text-[10px] text-gray-400 mt-1 px-1">
+                                                    {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                </span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-60">
+                                            <MessageSquare size={32} className="mb-2"/>
+                                            <p className="text-sm">No recent chat history found.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                {/* Modal Actions */}
+                <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex gap-3">
+                    <button 
+                        onClick={() => handleResolveReport(selectedReport.id, 'dismissed')} 
+                        className="flex-1 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    >
+                        Dismiss Report
+                    </button>
+                    <button 
+                        onClick={() => handleBanUser(selectedReport.reported_user_id, 'freelancers')} // Default assumption
+                        className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-500/30 flex items-center justify-center gap-2"
+                    >
+                        <Trash2 size={18}/> Ban User & Resolve
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
     </div>
   );
 };

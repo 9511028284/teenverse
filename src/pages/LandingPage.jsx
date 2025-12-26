@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Rocket, Star, Zap, Heart, TrendingUp, ArrowRight, CheckCircle, 
   Loader2, DollarSign, Cpu, User, Briefcase, ShieldCheck, Lock, 
-  Menu, X, Sun, Moon, Instagram, Twitter, Linkedin, Send, Code 
+  Menu, X, Sun, Moon, Instagram, Twitter, Linkedin, Send, Code, Mail, MapPin, Clock, AlertTriangle
 } from 'lucide-react';
 import { supabase } from '../supabase'; // Ensure this path matches your project structure
 
@@ -593,27 +593,106 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
       </section>
 
       {/* --- FOOTER --- */}
-      <footer className="border-t border-white/10 bg-black pt-16 pb-8">
-         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8 mb-12">
-            <div className="text-center md:text-left">
-               <div className="font-black text-2xl tracking-tighter mb-2">TeenVerse.</div>
-               <p className="text-gray-500 text-sm">Mahoba to the 🌍.<br/>Built by teens.</p>
-            </div>
-            <div className="flex gap-6">
-               {[Instagram, Twitter, Linkedin].map((Icon, i) => (
-                  <div key={i} className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center hover:bg-white hover:text-black hover:scale-110 transition-all cursor-pointer">
-                     <Icon size={20}/>
+      {/* --- FOOTER: TRUST & IDENTITY --- */}
+      <footer className="border-t border-white/10 bg-black pt-20 pb-10 relative overflow-hidden">
+         {/* Decorative background glow */}
+         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-900/10 blur-[120px] pointer-events-none"></div>
+
+         <div className="max-w-7xl mx-auto px-6 relative z-10">
+            
+            {/* TOP GRID: 5 COLUMNS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-12 mb-20">
+               
+               {/* 1. IDENTITY BLOCK (Span 4) */}
+               <div className="lg:col-span-4 space-y-6">
+                  <div className="flex items-center gap-2 group cursor-default">
+                     <div className="w-8 h-8 bg-indigo-600 rounded-lg rotate-3 group-hover:rotate-12 transition-transform"></div>
+                     <span className="font-black text-2xl tracking-tighter text-white">TeenVerseHub<span className="text-[#ccff00]">.</span></span>
                   </div>
-               ))}
+                  <p className="text-gray-400 text-sm leading-relaxed max-w-sm">
+                     Built by teens. Protected by design. <br/>
+                     We are building the safest, most powerful economy for the next generation. From India 🇮🇳 to the world.
+                  </p>
+                  <div className="flex items-center gap-2 text-xs font-mono text-green-500 border border-green-900/30 bg-green-900/10 px-3 py-1 rounded-full w-fit">
+                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                     SYSTEM OPERATIONAL • v1.0
+                  </div>
+               </div>
+
+               {/* 2. PRODUCT (Span 2) */}
+               <div className="lg:col-span-2 space-y-6">
+                  <h4 className="text-white font-bold uppercase tracking-wider text-sm">Platform</h4>
+                  <ul className="space-y-3 text-sm text-gray-500 font-medium">
+                     {['Explore Gigs', 'Post a Job', 'Academy', 'Community', 'Login'].map(item => (
+                        <li key={item}>
+                           <button onClick={() => handleNav(item.toLowerCase())} className="hover:text-[#ccff00] transition-colors hover:translate-x-1 duration-300 block">
+                              {item}
+                           </button>
+                        </li>
+                     ))}
+                  </ul>
+               </div>
+
+               {/* 3. TRUST & SAFETY (Span 2) - CRITICAL */}
+               <div className="lg:col-span-2 space-y-6">
+                  <h4 className="text-white font-bold uppercase tracking-wider text-sm flex items-center gap-2">
+                     <ShieldCheck size={16} className="text-[#ccff00]"/> Safety
+                  </h4>
+                  <ul className="space-y-3 text-sm text-gray-500 font-medium">
+                     <li><button onClick={() => onLegalClick('safety')} className="hover:text-white transition-colors">Safety Center</button></li>
+                     <li><button onClick={() => onLegalClick('parents')} className="hover:text-white transition-colors">Parent Guide</button></li>
+                     <li><button onClick={() => onLegalClick('escrow')} className="hover:text-white transition-colors">Escrow Protection</button></li>
+                     <li><button onClick={() => onLegalClick('report')} className="hover:text-red-400 transition-colors flex items-center gap-2"><AlertTriangle size={12}/> Report Abuse</button></li>
+                  </ul>
+               </div>
+
+               {/* 4. LEGAL (Span 2) */}
+               <div className="lg:col-span-2 space-y-6">
+                  <h4 className="text-white font-bold uppercase tracking-wider text-sm">Legal</h4>
+                  <ul className="space-y-3 text-sm text-gray-500 font-medium">
+                     <li><button onClick={() => onLegalClick('terms')} className="hover:text-white transition-colors">Terms of Use</button></li>
+                     <li><button onClick={() => onLegalClick('privacy')} className="hover:text-white transition-colors">Privacy Policy</button></li>
+                     <li><button onClick={() => onLegalClick('refunds')} className="hover:text-white transition-colors">Refund Policy</button></li>
+                     <li className="pt-2 text-[10px] text-gray-600 leading-tight">
+                        Designed in compliance with Indian IT & child safety norms.
+                     </li>
+                  </ul>
+               </div>
+
+               {/* 5. CONTACT (Span 2) */}
+               <div className="lg:col-span-2 space-y-6">
+                  <h4 className="text-white font-bold uppercase tracking-wider text-sm">Connect</h4>
+                  <div className="flex gap-4 mb-4">
+                     {[Instagram, Twitter, Linkedin].map((Icon, i) => (
+                        <a key={i} href="#" className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-[#ccff00] hover:text-black hover:scale-110 transition-all">
+                           <Icon size={18}/>
+                        </a>
+                     ))}
+                  </div>
+                  <div className="space-y-2 text-sm text-gray-500">
+                     <div className="flex items-center gap-2 hover:text-white transition-colors cursor-pointer">
+                        <Mail size={14}/> support@teenverse.in
+                     </div>
+                     <div className="flex items-center gap-2 text-xs">
+                        <Clock size={14}/> Replies in 24-48 hrs
+                     </div>
+                  </div>
+               </div>
             </div>
-            <div className="flex gap-6 text-sm font-bold text-gray-500">
-               <button onClick={() => onLegalClick('privacy')} className="hover:text-white">Privacy</button>
-               <button onClick={() => onLegalClick('terms')} className="hover:text-white">Terms</button>
-               <button onClick={() => onLegalClick('safety')} className="hover:text-white">Safety</button>
+
+            {/* BOTTOM STRIP */}
+            <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+               <div className="text-gray-600 text-xs font-mono">
+                  © 2025 TeenVerseHub • All rights reserved • <span className="text-green-900">Encrypted</span>
+               </div>
+               
+               {/* GEN-Z SIGNATURE */}
+               <div className="flex items-center gap-2 text-sm font-bold text-gray-400">
+                  <span className="text-[#ccff00]">{`{`}</span> 
+                  Skill {'>'} Degree 
+                  <span className="text-[#ccff00]">{`}`}</span>
+               </div>
             </div>
-         </div>
-         <div className="text-center text-xs text-gray-600 font-mono">
-            © 2025 TeenVerse Inc. System Operational.
          </div>
       </footer>
     </div>

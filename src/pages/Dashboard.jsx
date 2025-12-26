@@ -6,6 +6,9 @@ import {
   Trophy, Unlock, Swords, Heart, Crown, ShieldCheck, FileCheck, Maximize2, Minimize2, User, ListChecks, ChevronRight, Eye
 } from 'lucide-react';
 
+// --- LIBRARIES ---
+import { toPng, toBlob } from 'html-to-image'; 
+
 // --- SUPABASE & UTILS ---
 import { supabase } from '../supabase';
 import { CATEGORIES, COLORS, QUIZZES, BATTLES, PRICING_PLANS } from '../utils/constants';
@@ -38,8 +41,6 @@ import PostJobModal from '../components/modals/PostJobModal';
 import CreateServiceModal from '../components/modals/CreateServiceModal';
 import ApplyJobModal from '../components/modals/ApplyJobModal';
 import PaymentModal from '../components/modals/PaymentModal';
-
-import html2canvas from 'html2canvas';
 
 // --- HELPER COMPONENT: BADGE ITEM ---
 const BadgeItem = ({ name, iconName }) => {
@@ -88,9 +89,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   // --- INTERACTION STATES ---
   const [showNotifications, setShowNotifications] = useState(false);
   const [modal, setModal] = useState(null);
-  const [selectedJob, setSelectedJob] = useState(null); // For job browsing
+  const [selectedJob, setSelectedJob] = useState(null); 
   const [selectedApp, setSelectedApp] = useState(null);
-  const [activeChat, setActiveChat] = useState(null); // Specifically for Order actions
+  const [activeChat, setActiveChat] = useState(null); 
+  const [energy, setEnergy] = useState(20); // Feature 2: Energy
 
   // --- HYBRID DELIVERY STATES ---
   const [timelineApp, setTimelineApp] = useState(null);
@@ -130,16 +132,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
   // --- CASHFREE INITIALIZATION ---
   useEffect(() => {
-    // Check if window.Cashfree exists (loaded from script tag in index.html)
     if (window.Cashfree) {
       cashfree.current = new window.Cashfree({
-        mode: "sandbox" // Change to "production" for live
+        mode: "sandbox" 
       });
-    } else {
-      console.error("Cashfree SDK script not loaded in index.html");
-      showToast("Payment System Loading Error", "error");
     }
-  }, [showToast]);
+  }, []);
 
   // --- DATA FETCHING ---
   useEffect(() => {
@@ -149,7 +147,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     const loadData = async () => {
       if (jobs.length === 0) setIsLoading(true);
 
-      // 1. Fetch Badges
+      // Fetch Energy
+      if (!isClient) {
+         api.getEnergy(user.id).then(({ energy }) => setEnergy(energy));
+      }
+
       const { data: badgeData } = await supabase
         .from('user_badges')
         .select('badge_name, badges(icon)')
@@ -160,7 +162,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         icon: b.badges?.icon || 'Award'
       })) || [];
 
-      // 2. Fetch Dashboard Data
       const { services, jobs: jobsData, applications: appsData, notifications: notifsData, referralCount, error } = 
         await api.fetchDashboardData(user);
 
@@ -172,7 +173,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         setBadges(formattedBadges);
         setReferralStats({ count: referralCount, earnings: referralCount * 50 });
 
-        // Calculate Earnings
         const total = appsData.reduce((acc, curr) => {
           if (curr.status === APP_STATUS.PAID) {
             const amount = Number(curr.bid_amount) || 0;
@@ -182,7 +182,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         }, 0);
         setTotalEarnings(total);
 
-        // Toast for new notifications
         if (notifsData.length > 0) {
           const latest = notifsData[0];
           if (lastNotificationId.current && latest.id !== lastNotificationId.current) {
@@ -201,7 +200,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   }, [user, isClient, showToast, jobs.length]);
 
   // --- ACTION HANDLERS ---
-
   const handleClearNotifications = async () => {
     const { error } = await api.clearUserNotifications(user.id);
     if (error) showToast(error.message, 'error'); 
@@ -255,7 +253,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     else { showToast('Service Deleted'); setServices(services.filter(s => s.id !== id)); }
   };
 
-  const handleApplyJob = async (e) => {
+  // --- UPDATED APPLY JOB (Feature 2: Energy) ---
+  const handleApplyJob = async (e, energyCost) => {
     e.preventDefault();
     if (parentMode) { showToast("Parent Mode Active", "error"); return; }
     
@@ -273,6 +272,14 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       return; 
     }
 
+    // Deduct Energy
+    const { success, error: energyError } = await api.deductEnergy(user.id, energyCost);
+    if (!success) {
+        showToast(energyError.message, "error");
+        return;
+    }
+    setEnergy(prev => prev - energyCost);
+
     const formData = new FormData(e.target);
     const appData = { 
       job_id: selectedJob.id, freelancer_id: user.id, freelancer_name: user.name, 
@@ -284,74 +291,63 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     else { showToast('Applied successfully!'); setModal(null); }
   };
 
-  // --- HYBRID ORDER FLOW LOGIC (WITH CASHFREE) ---
-  
-  // 1. Accept Application -> Start Order (Replaces old logic with Payment Flow)
-// --- CASHFREE: HIRE FLOW ---
+  // --- CASHFREE: HIRE FLOW ---
   const handleAcceptApplication = async (app) => {
-    // 1. Debugging Logs
-    console.log("1. Starting Hire for:", app.id);
-    if (!cashfree.current) {
-        showToast("Payment Gateway not ready. Refresh page.", "error");
-        return;
-    }
-
-    showToast("Initializing Secure Payment...", "info");
-
-    // 2. Call API
-    const response = await api.createEscrowSession(app.id, app.bid_amount, app.freelancer_id);
-    console.log("2. API Response:", response);
-
-    // 3. FIX: Handle both variable names (camelCase vs snake_case)
-    const sessionId = response.paymentSessionId || response.payment_session_id;
-    const orderId = response.orderId || response.order_id;
-
-    // 4. Check for errors
-    if (response.error) {
-        showToast("Init Failed: " + response.error.message, "error");
-        return;
-    }
-
-    if (!sessionId) {
-        console.error("❌ Session ID missing in response:", response);
-        showToast("Error: Payment Session failed", "error");
-        return;
-    }
-
-    // 5. Open Checkout
-    console.log("3. Opening Checkout with:", sessionId);
-    cashfree.current.checkout({
-        paymentSessionId: sessionId,
-        redirectTarget: "_modal",
-    }).then(() => {
-        console.log("4. Popup Closed. Verifying...");
-        handlePaymentVerification(orderId, app);
-    });
-  };
-  // Helper: Verify Payment and Start Order
-  // --- CASHFREE: VERIFY PAYMENT ---
-// --- CASHFREE: VERIFY PAYMENT ---
-  const handlePaymentVerification = async (orderId, app) => {
-    console.log("Verifying Order:", orderId);
+    console.log("🔒 Starting Secure Hire for App ID:", app.id);
     
-    // FIX: Extract 'success' correctly
-    const { success, error } = await api.verifyAndStartEscrow(orderId, app.id);
-
-    if (success) {
-      showToast("Payment Secured! Order Started.", "success");
-      // Update UI
-      setApplications(prev => prev.map(a => 
-        a.id === app.id ? { ...a, status: 'Accepted', started_at: new Date().toISOString() } : a
-      ));
-    } else {
-      console.error("Verification Failed:", error);
-      // Optional: You can ignore this alert if the user just closed the popup without paying
-      if (error) showToast("Payment Verification Failed", "error");
+    if (!cashfree.current) {
+        showToast("Payment Gateway initializing... please wait.", "error");
+        return;
     }
-  };  // 2. Submit Work -> Hybrid Delivery
+
+    showToast("Securing Payment Session...", "info");
+
+    try {
+      const { data, error } = await supabase.functions.invoke('secure-payment', {
+        body: { appId: app.id } 
+      });
+
+      if (error || !data) {
+        console.error("Backend Error:", error);
+        throw new Error("Secure Session Failed. Please contact support.");
+      }
+
+      const { payment_session_id, order_id } = data;
+      console.log("✅ Secure Session Created:", payment_session_id);
+      
+      cashfree.current.checkout({
+          paymentSessionId: payment_session_id,
+          redirectTarget: "_modal",
+      }).then(() => {
+          console.log("Popup Closed. Checking status...");
+          handlePaymentVerification(order_id, app);
+      });
+
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  };
+
+  const handlePaymentVerification = async (orderId, app) => {
+      const { data } = await supabase
+        .from('payment_logs')
+        .select('status')
+        .eq('order_id', orderId)
+        .single();
+      
+      if (data && data.status === 'SUCCESS') {
+         showToast("Payment Confirmed! Order Started.", "success");
+         setApplications(prev => prev.map(a => 
+            a.id === app.id ? { ...a, status: 'Accepted', started_at: new Date().toISOString() } : a
+         ));
+      } else {
+         showToast("Payment not completed. Order pending.", "warning");
+      }
+  };
+
+  // --- SUBMIT WORK ---
   const handleSubmitWork = async (e) => {
     e.preventDefault();
-    // FIX: Ensure we use the specific selected Application, NOT selectedJob
     if (!selectedApp) {
         showToast("Error: No active application selected.", "error");
         return;
@@ -366,7 +362,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     const files = e.target.files; 
     
     let uploadedUrls = [];
-    // File Upload Logic
     if (files.length > 0) {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -380,7 +375,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   
     const timestamp = new Date().toISOString();
-    // OPTIMISTIC UPDATE
     const prevApps = [...applications];
     setApplications(apps => apps.map(a => a.id === selectedApp.id ? { ...a, status: APP_STATUS.SUBMITTED, submitted_at: timestamp } : a));
     
@@ -388,24 +382,19 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       body: { 
         action: 'SUBMIT_WORK', 
         appId: selectedApp.id, 
-        payload: {
-          work_link: workLink,
-          message: message,
-          files: uploadedUrls 
-        }
+        payload: { work_link: workLink, message: message, files: uploadedUrls }
       }
     });
 
     if (error) {
-      setApplications(prevApps); // Rollback
+      setApplications(prevApps); 
       showToast("Submission failed: " + error.message, "error");
     } else {
       showToast("Work Submitted Successfully!", "success");
-      setSelectedApp(null); // Clear selection
+      setSelectedApp(null); 
     }
   };
 
-  // 3. Approve Work -> Completed
   const handleApproveWork = async (app) => {
     const prevApps = [...applications];
     setApplications(apps => apps.map(a => a.id === app.id ? { ...a, status: APP_STATUS.COMPLETED } : a));
@@ -416,20 +405,15 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       showToast("Work Approved! Please release payment.", "success");
       setViewWorkApp(null);
     } else {
-      setApplications(prevApps); // Rollback
+      setApplications(prevApps); 
       showToast(error.message, 'error');
     }
   };
 
-  // 4. Final Payment Wrapper (Releasing Money to Freelancer)
   const handleFinalPayment = async (app) => {
     if(!window.confirm(`Transfer ₹${(app.bid_amount * 0.96).toFixed(2)} to freelancer?`)) return;
-
     showToast("Processing Bank Transfer...", "info");
-    
-    // CALL NEW PAYOUT FUNCTION
     const { success, error } = await api.releasePayout(app.id, app.bid_amount, app.freelancer_id);
-
     if (success) {
        showToast("Funds Transferred Successfully!", "success");
        setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'Paid' } : a));
@@ -438,7 +422,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
-  // 5. Processing the Payment Release
   const processPayment = async () => {
     if (!paymentModal) return;
     const { appId, amount, freelancerId } = paymentModal;
@@ -450,7 +433,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         showToast("Payment Successful!", "success");
         setApplications(apps => apps.map(a => a.id === appId ? { ...a, status: APP_STATUS.PAID, paid_at: new Date().toISOString() } : a));
         setPaymentModal(null);
-        // --- BADGE CHECK TRIGGER ---
         const paidApps = applications.filter(a => a.status === APP_STATUS.PAID);
         if (paidApps.length === 0) {
            showToast("🏆 BADGE UNLOCKED: First Gig!", "success");
@@ -459,91 +441,60 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
-  // --- MASTER ACTION HANDLER (Centralized) ---
-  // --- MASTER ACTION HANDLER (Centralized) ---
   const handleAppAction = async (action, app) => {
-    // 1. OPTIONAL: Keep Frontend Guard (for immediate UI feedback)
     if (parentMode && ['pay', 'approve', 'accept'].includes(action)) {
         showToast("Parent Mode Active: Action Locked", "error");
         return;
     }
 
-    // 2. NEW: Secure Backend Check (The "Phase 4" logic)
-    // We only need to verify sensitive actions with the backend first
     if (['approve', 'pay', 'release_escrow'].includes(action)) {
-        // Use the exact name you exported in dashboard.api.js: secureOrderAction
         const result = await api.secureOrderAction(action.toUpperCase(), app.id, user.id);
-        
-        // If backend denies it (e.g., Parent Mode hacked), stop here
         if (result.error) {
             showToast(`❌ ${result.error.message || "Action Blocked"}`, "error");
-            // If server says it was a security block, force parent mode on frontend to match
             if (result.error.isSecurityBlock) setParentMode(true);
             return;
         }
     }
 
-    // 3. Proceed with Standard Logic (Happy Path)
     if (action === 'accept') handleAcceptApplication(app);
     if (action === 'reject') updateStatus(app.id, 'Rejected', app.freelancer_id);
-    
-    if (action === 'submit') { 
-        setSelectedApp(app);
-        setModal('submit_work'); 
-    }
-    
+    if (action === 'submit') { setSelectedApp(app); setModal('submit_work'); }
     if (action === 'view_submission') setViewWorkApp(app);
     if (action === 'approve') handleApproveWork(app);
     if (action === 'pay') handleFinalPayment(app);
   };
 
-  // Generalized Status Updater with Rollback
   const updateStatus = async (appId, status, freelancerId) => {
-    // 1. Current State Check
     const currentApp = applications.find(a => a.id === appId);
     if (!currentApp) return;
 
-    // 2. State Machine Check
-    const allowed = NEXT_ALLOWED_STATE[currentApp.status] || [];
-    // Exception: You can always reject from Pending
-    if (!allowed.includes(status) && status !== APP_STATUS.REJECTED) {
-       // Strict mode off for now
-    }
-
-    // 3. Optimistic Update
     const prevApps = [...applications];
     setApplications(applications.map(a => a.id === appId ? { ...a, status } : a));
-    
-    // 4. API Call
     const { error } = await api.updateApplicationStatus(appId, status, freelancerId);
     if(error) { 
-        setApplications(prevApps); // Rollback
+        setApplications(prevApps); 
         showToast(error.message, 'error');
     } else {
         showToast(`Marked as ${status}`);
     }
   };
 
-const handleUpdateProfile = async (e) => {
+  const handleUpdateProfile = async (e) => {
     e.preventDefault();
     const tableName = isClient ? 'clients' : 'freelancers';
     
-    // 1. Common Fields
     const cleanUpdates = { 
         name: profileForm.name, 
         phone: profileForm.phone, 
         nationality: profileForm.nationality 
     };
 
-    // 2. Freelancer Specific Fields (Including NEW Bank Details)
     if (!isClient) {
         cleanUpdates.age = profileForm.age; 
         cleanUpdates.qualification = profileForm.qualification;
         cleanUpdates.specialty = profileForm.specialty;
         cleanUpdates.services = profileForm.services;
         cleanUpdates.upi = profileForm.upi;
-        
-        // --- NEW BANK DETAILS ---
         cleanUpdates.bank_name = profileForm.bank_name;
         cleanUpdates.account_number = profileForm.account_number;
         cleanUpdates.ifsc_code = profileForm.ifsc_code;
@@ -551,9 +502,7 @@ const handleUpdateProfile = async (e) => {
         cleanUpdates.is_organisation = profileForm.is_organisation;
     }
 
-    // 3. Save to Supabase
     const { error } = await api.updateUserProfile(user.id, cleanUpdates, tableName);
-    
     if (error) { 
         showToast(error.message, 'error');
     } else { 
@@ -562,7 +511,6 @@ const handleUpdateProfile = async (e) => {
     }
   };
 
-  // --- QUIZ & AI HANDLERS ---
   const handleQuizSelection = async (categoryId, answer) => {
     const correctAnswer = SAFE_QUIZZES[categoryId]?.answer;
     if (!correctAnswer) return;
@@ -575,6 +523,10 @@ const handleUpdateProfile = async (e) => {
         await api.unlockSkill(user.id, newSkills); 
         setUser({ ...user, unlockedSkills: newSkills });
 
+        // --- Feature 2: Award Energy ---
+        await api.awardEnergy(user.id, 5); 
+        setEnergy(prev => prev + 5);
+
         const hasBadge = badges.some(b => b.name === 'Skill Certified');
         if (!hasBadge) {
             const newBadge = { name: 'Skill Certified', icon: 'Award' };
@@ -583,7 +535,7 @@ const handleUpdateProfile = async (e) => {
         }
         setModal(null);
         setQuizState({ selected: null, status: 'idle' });
-        showToast("🎉 Skill Unlocked! +500 XP", "success");
+        showToast("🎉 Correct! +500 XP & +5 Energy ⚡", "success");
       }, 1500);
     } else {
       setTimeout(() => setQuizState({ selected: null, status: 'idle' }), 1000);
@@ -603,18 +555,56 @@ const handleUpdateProfile = async (e) => {
   };
 
   const handleDownloadCard = async () => {
-    if (profileCardRef.current) {
-      try {
-        showToast("Generating image...", "info");
-        const canvas = await html2canvas(profileCardRef.current, { backgroundColor: null, scale: 2, useCORS: true, logging: false });
-        const image = canvas.toDataURL("image/png");
-        const link = document.createElement("a");
-        link.href = image;
-        link.download = `TeenVerse-${user.name || 'Profile'}.png`;
+    if (profileCardRef.current === null) {
+        showToast("Card not found.", "error");
+        return;
+    }
+
+    try {
+      showToast("Generating HQ Image...", "info");
+      const dataUrl = await toPng(profileCardRef.current, { 
+          cacheBust: true, 
+          pixelRatio: 3, 
+          backgroundColor: null 
+      });
+      const link = document.createElement('a');
+      link.download = `TeenVerse-${user.name || 'Profile'}.png`;
+      link.href = dataUrl;
+      link.click();
+      showToast("Downloaded successfully!", "success");
+    } catch (err) {
+      console.error("Download failed:", err);
+      showToast("Failed to download image.", "error");
+    }
+  };
+
+  const handleShareToInstagram = async () => {
+    if (profileCardRef.current === null) return;
+    try {
+      showToast("Preparing for Share...", "info");
+      const blob = await toBlob(profileCardRef.current, { cacheBust: true, pixelRatio: 2 });
+      if (!blob) throw new Error('Failed to generate image');
+
+      const file = new File([blob], `TeenVerse-${user.name}.png`, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'My TeenVerse Profile',
+          text: `Check out my freelancer profile on TeenVerse! 🚀 #TeenVerse #Freelancer`,
+        });
+        showToast("Shared successfully!", "success");
+      } else {
+        showToast("Sharing not supported on this device. Downloading instead.", "info");
+        const link = document.createElement('a');
+        link.download = `TeenVerse-${user.name}.png`;
+        link.href = URL.createObjectURL(blob);
         link.click();
-        showToast("Downloaded successfully!", "success");
-      } catch (err) { console.error("Download failed:", err); showToast("Failed to download image.", "error"); }
-    } else { showToast("Could not find card element.", "error"); }
+      }
+    } catch (err) {
+      console.error("Share failed:", err);
+      if (err.name !== 'AbortError') showToast("Failed to share.", "error");
+    }
   };
 
   // --- RENDER HELPERS ---
@@ -688,8 +678,8 @@ const handleUpdateProfile = async (e) => {
                      <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm border-2 border-white dark:border-gray-900">Lv.{userLevel}</div>
                   </div>
                   <div className="overflow-hidden">
-                     <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">{user.name?.split(' ')[0] || 'User'} {badges.some(b => b.name === 'Verified Teen') && <ShieldCheck size={12} className="text-blue-500"/>}</h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.type} Account</p>
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">{user.name?.split(' ')[0] || 'User'} {badges.some(b => b.name === 'Verified Teen') && <ShieldCheck size={12} className="text-blue-500"/>}</h3>
+                     <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.type} Account</p>
                   </div>
                </div>
                
@@ -787,7 +777,7 @@ const handleUpdateProfile = async (e) => {
                        <div className="absolute right-0 top-12 w-80 bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden animate-fade-in z-50">
                           <div className="p-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-white/5">
                              <span className="font-bold text-sm dark:text-white">Notifications</span>
-                              <button onClick={handleClearNotifications} className="text-xs font-medium text-indigo-500 hover:text-indigo-600">Clear All</button>
+                             <button onClick={handleClearNotifications} className="text-xs font-medium text-indigo-500 hover:text-indigo-600">Clear All</button>
                           </div>
                           <div className="max-h-64 overflow-y-auto">
                            {notifications.length === 0 ? <div className="p-8 text-center text-gray-400 text-xs">No new alerts</div> : notifications.map(n => (
@@ -801,7 +791,7 @@ const handleUpdateProfile = async (e) => {
                     )}
                   </div>
                </div>
-             </div>
+            </div>
          </header>
 
          {/* Scrollable Content Area */}
@@ -824,13 +814,28 @@ const handleUpdateProfile = async (e) => {
                         parentMode={parentMode}
                         onAction={handleAppAction} 
                         onViewTimeline={(app) => setTimelineApp(app)}
+                        showToast={showToast}
                     />
                  )}
                  
                  {tab === 'messages' && <div className="bg-white dark:bg-[#1E293B] rounded-3xl border border-gray-200 dark:border-white/5 shadow-sm overflow-hidden h-[calc(100vh-180px)]"><ChatSystem user={user} activeChat={activeChat} setActiveChat={setActiveChat} parentMode={parentMode} /></div>}
                  {tab === 'academy' && !isClient && <Academy unlockedSkills={unlockedSkills} setModal={setModal} quizzes={SAFE_QUIZZES} />}
                  {tab === 'portfolio' && !isClient && <Portfolio rawPortfolioText={rawPortfolioText} setRawPortfolioText={setRawPortfolioText} handleAiGenerate={handleAiGenerate} isAiLoading={isAiLoading} portfolioItems={portfolioItems} />}
-                 {tab === 'profile-card' && !isClient && <ProfileCard ref={profileCardRef} user={user} unlockedSkills={unlockedSkills} badges={badges} userLevel={userLevel} applications={applications} handleDownloadCard={handleDownloadCard} showToast={showToast} />}
+                 
+                 {tab === 'profile-card' && !isClient && (
+                   <ProfileCard 
+                     ref={profileCardRef} 
+                     user={user} 
+                     unlockedSkills={unlockedSkills} 
+                     badges={badges} 
+                     userLevel={userLevel} 
+                     applications={applications} 
+                     handleDownloadCard={handleDownloadCard} 
+                     handleShareToInstagram={handleShareToInstagram}
+                     showToast={showToast} 
+                   />
+                 )}
+
                  {tab === 'records' && <Records applications={applications} />}
                  {tab === 'settings' && <SettingsComp profileForm={profileForm} setProfileForm={setProfileForm} isClient={isClient} handleUpdateProfile={handleUpdateProfile} parentMode={parentMode} setParentMode={setParentMode} />}
                </div>
@@ -839,10 +844,17 @@ const handleUpdateProfile = async (e) => {
       </main>
 
       {/* --- MODALS --- */}
- 
       {modal === 'post-job' && <PostJobModal onClose={() => setModal(null)} onSubmit={handlePostJob} />}
       {modal === 'create-service' && <CreateServiceModal onClose={() => setModal(null)} onSubmit={handleCreateService} />}
-      {modal === 'apply-job' && <ApplyJobModal onClose={() => setModal(null)} onSubmit={handleApplyJob} job={selectedJob} />}
+      {modal === 'apply-job' && (
+        <ApplyJobModal 
+          onClose={() => setModal(null)} 
+          onSubmit={handleApplyJob} 
+          job={selectedJob} 
+          user={user}
+          currentEnergy={energy}
+        />
+      )}
 
       {/* 1. TIMELINE MODAL */}
       {timelineApp && (

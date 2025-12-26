@@ -1,6 +1,8 @@
 import { supabase } from '../supabase';
 
-// --- FETCHING DATA ---
+// ==========================================
+// 1. DATA FETCHING (DASHBOARD & SEARCH)
+// ==========================================
 
 export const fetchDashboardData = async (user) => {
   const isClient = user.type === 'client';
@@ -84,7 +86,20 @@ export const fetchDashboardData = async (user) => {
   }
 };
 
-// --- ACTIONS (JOBS & SERVICES) ---
+// Scalable Search (Replaces client-side filtering)
+export const searchJobsAPI = async (searchTerm) => {
+  if (!searchTerm) return [];
+  const { data, error } = await supabase.rpc('search_jobs', { search_term: searchTerm });
+  if (error) {
+      console.error(error);
+      return [];
+  }
+  return data;
+};
+
+// ==========================================
+// 2. BASIC CRUD (JOBS & SERVICES)
+// ==========================================
 
 export const createJob = async (jobData) => {
   return await supabase.from('jobs').insert([jobData]);
@@ -102,7 +117,9 @@ export const deleteService = async (serviceId) => {
   return await supabase.from('services').delete().eq('id', serviceId);
 };
 
-// --- ACTIONS (APPLICATIONS & PAYMENTS) ---
+// ==========================================
+// 3. APPLICATIONS & STATUS FLOW
+// ==========================================
 
 export const applyForJob = async (applicationData, jobTitle) => {
   const { error } = await supabase.from('applications').insert([applicationData]);
@@ -111,21 +128,6 @@ export const applyForJob = async (applicationData, jobTitle) => {
     await supabase.from('notifications').insert([{ 
       user_id: applicationData.client_id, 
       message: `New application: ${jobTitle}` 
-    }]);
-  }
-  return { error };
-};
-
-export const processPayment = async (appId, amount, freelancerId) => {
-  const { error } = await supabase
-    .from('applications')
-    .update({ status: 'Paid' })
-    .eq('id', appId);
-
-  if (!error) {
-    await supabase.from('notifications').insert([{ 
-      user_id: freelancerId, 
-      message: `💰 Payment received! ₹${(amount * 0.96).toFixed(2)}` 
     }]);
   }
   return { error };
@@ -146,51 +148,42 @@ export const updateApplicationStatus = async (appId, status, freelancerId) => {
   return { error };
 };
 
-// --- USER & UTILS ---
-
-export const clearUserNotifications = async (userId) => {
-  return await supabase.from('notifications').delete().eq('user_id', userId);
+// Secure Action Handler (Replaces direct updates for critical steps)
+export const secureOrderAction = async (action, appId, userId, payload = {}) => {
+  const { data, error } = await supabase.functions.invoke('order-manager', {
+    body: { action, appId, userId, payload }
+  });
+  
+  if (error) return { error };
+  if (data.error) return { error: { message: data.error } }; // Catch backend logic errors
+  return { data };
 };
 
-export const updateUserProfile = async (userId, updates, table) => {
-  return await supabase.from(table).update(updates).eq('id', userId);
+export const checkActionPermission = async (action, appId, userId) => {
+  const { data, error } = await supabase.rpc('check_permission', {
+    action_type: action,
+    app_id: appId,
+    user_id: userId
+  });
+  
+  if (error) return { allowed: false, error };
+  return { allowed: data.allowed, error: null };
 };
 
-export const unlockSkill = async (userId, newSkills) => {
-  return await supabase.from('freelancers').update({ unlocked_skills: newSkills }).eq('id', userId);
-};
+// ==========================================
+// 4. PAYMENTS (CASHFREE & PAYOUTS)
+// ==========================================
 
-
-export const checkAndGrantFirstGigBadge = async (userId) => {
-  // 1. Check count
-  const { count } = await supabase
-    .from('applications')
-    .select('*', { count: 'exact', head: true })
-    .eq('freelancer_id', userId)
-    .eq('status', 'Paid');
-
-  // 2. Grant if it's the first one
-  if (count === 1) {
-    await supabase.from('user_badges').insert({
-      user_id: userId,
-      badge_name: 'First Gig'
-    });
-    return true; // Return true to trigger a confetti or toast in UI
-  }
-  return false;
-};
-
-// 1. Initialize Cashfree Order (Called when Client clicks "Hire")
+// Initialize Cashfree Order
 export const createEscrowSession = async (applicationId, amount, freelancerId) => {
   try {
-    // Call Supabase Edge Function to generate Cashfree Session ID securely
     const { data, error } = await supabase.functions.invoke('payment-gateway', {
       body: {
         action: 'CREATE_ORDER',
         amount: amount,
         orderId: `ORD_${applicationId}_${Date.now()}`,
-        customerId: `CUST_${Date.now()}`, // In real app, use actual user ID
-        customerPhone: '9999999999' // In real app, fetch from user profile
+        customerId: `CUST_${Date.now()}`, 
+        customerPhone: '9999999999' 
       }
     });
 
@@ -202,10 +195,9 @@ export const createEscrowSession = async (applicationId, amount, freelancerId) =
   }
 };
 
-// 2. Verify Payment & Start Escrow (Called after Cashfree success)
+// Verify Payment & Start Escrow
 export const verifyAndStartEscrow = async (orderId, applicationId) => {
   try {
-    // 1. Verify with Backend
     const { data, error } = await supabase.functions.invoke('payment-gateway', {
       body: { action: 'VERIFY_PAYMENT', orderId }
     });
@@ -213,20 +205,17 @@ export const verifyAndStartEscrow = async (orderId, applicationId) => {
     if (error) throw error;
 
     if (data.status === 'SUCCESS') {
-      // 2. Update App Status to ACCEPTED (Work Starts, Money Held)
-      // We mark it as 'escrow_active: true' in the DB (assuming you added this column)
       const { error: dbError } = await supabase
         .from('applications')
         .update({ 
           status: 'Accepted', 
           started_at: new Date().toISOString(),
-          payment_id: orderId, // Store tracking ID
-          is_escrow_held: true  // Logical Flag for Escrow
+          payment_id: orderId, 
+          is_escrow_held: true 
         })
         .eq('id', applicationId);
         
       if (dbError) throw dbError;
-      
       return { success: true };
     } else {
       throw new Error("Payment verification failed at gateway.");
@@ -236,62 +225,27 @@ export const verifyAndStartEscrow = async (orderId, applicationId) => {
   }
 };
 
-// 3. Release Funds (Client releases held money)
-export const releaseEscrowFunds = async (appId, amount, freelancerId) => {
-  // In a real Payouts API, we would trigger a Transfer here.
-  // For Sandbox, we verify the user is the client and update the status.
-  
+// Manual Payment Process (Legacy/Simple Mode)
+export const processPayment = async (appId, amount, freelancerId) => {
   const { error } = await supabase
     .from('applications')
-    .update({ 
-      status: 'Paid', 
-      paid_at: new Date().toISOString(),
-      is_escrow_held: false // Release lock
-    })
+    .update({ status: 'Paid' })
     .eq('id', appId);
 
   if (!error) {
-    // Notify Freelancer
     await supabase.from('notifications').insert([{ 
       user_id: freelancerId, 
-      message: `💸 Payment Released! ₹${amount} has been credited.` 
+      message: `💰 Payment received! ₹${(amount * 0.96).toFixed(2)}` 
     }]);
   }
   return { error };
 };
 
-
-// 1. NEW: Secure Action Handler (Replaces direct updates)
-export const secureOrderAction = async (action, appId, userId, payload = {}) => {
-  const { data, error } = await supabase.functions.invoke('order-manager', {
-    body: { action, appId, userId, payload }
-  });
-  
-  if (error) return { error };
-  if (data.error) return { error: { message: data.error } }; // Catch backend logic errors
-  return { data };
-};
-
-// 2. NEW: Scalable Search (Replaces client-side filtering)
-export const searchJobsAPI = async (searchTerm) => {
-  if (!searchTerm) return [];
-  const { data, error } = await supabase.rpc('search_jobs', { search_term: searchTerm });
-  if (error) {
-      console.error(error);
-      return [];
-  }
-  return data;
-};
-
-
-
-// --- AUTOMATED PAYOUTS ---
+// Automated Payouts (Edge Function)
 export const releasePayout = async (appId, amount, freelancerId) => {
   try {
-    // 1. Calculate Split (Freelancer gets 96%)
     const payoutAmount = (amount * 0.96).toFixed(2);
     
-    // 2. Call Edge Function to trigger transfer
     const { data, error } = await supabase.functions.invoke('payment-gateway', {
       body: {
         action: 'INITIATE_PAYOUT',
@@ -303,7 +257,6 @@ export const releasePayout = async (appId, amount, freelancerId) => {
 
     if (error) throw error;
     
-    // 3. If successful, mark as Paid in DB
     if (data.status === 'SUCCESS' || data.status === 'PENDING') {
         await supabase
             .from('applications')
@@ -324,4 +277,211 @@ export const releasePayout = async (appId, amount, freelancerId) => {
     console.error("Payout Error:", err);
     return { error: err };
   }
+};
+
+// Release Escrow (Simple Database Update - Fallback)
+export const releaseEscrowFunds = async (appId, amount, freelancerId) => {
+  const { error } = await supabase
+    .from('applications')
+    .update({ 
+      status: 'Paid', 
+      paid_at: new Date().toISOString(),
+      is_escrow_held: false 
+    })
+    .eq('id', appId);
+
+  if (!error) {
+    await supabase.from('notifications').insert([{ 
+      user_id: freelancerId, 
+      message: `💸 Payment Released! ₹${amount} has been credited.` 
+    }]);
+  }
+  return { error };
+};
+
+// ==========================================
+// 5. ADMIN ACTIONS (LEVEL 1: FINANCIALS)
+// ==========================================
+
+export const fetchAdminEscrowOrders = async () => {
+  const { data, error } = await supabase
+    .from('applications')
+    .select(`*, client_name, freelancer_name, jobs (title)`)
+    .in('status', ['Accepted', 'Disputed', 'Submitted', 'Completed']) 
+    .eq('is_escrow_held', true)
+    .order('updated_at', { ascending: false });
+
+  return { data, error };
+};
+
+export const adminForceRelease = async (appId, amount, freelancerId) => {
+  const { error } = await supabase
+    .from('applications')
+    .update({ 
+      status: 'Paid', 
+      is_escrow_held: false,
+      paid_at: new Date().toISOString(),
+      rejection_reason: 'Admin Force Release' 
+    })
+    .eq('id', appId);
+    
+  if (!error) {
+     await supabase.from('notifications').insert({
+        user_id: freelancerId,
+        message: `Admin resolved dispute: Payment of ₹${amount} released.`
+     });
+  }
+  return { error };
+};
+
+export const adminForceRefund = async (appId, clientId) => {
+  const { error } = await supabase
+    .from('applications')
+    .update({ 
+      status: 'Cancelled', 
+      is_escrow_held: false,
+      rejection_reason: 'Admin Force Refund'
+    })
+    .eq('id', appId);
+
+  if (!error) {
+     await supabase.from('notifications').insert({
+        user_id: clientId,
+        message: `Admin resolved dispute: Order cancelled and funds refunded.`
+     });
+  }
+  return { error };
+};
+
+// ==========================================
+// 6. FEATURES: REVISIONS, REVIEWS, & ENERGY
+// ==========================================
+
+// --- REVISION SYSTEM ---
+export const requestRevision = async (appId, message, freelancerId) => {
+  const { data: app } = await supabase
+    .from('applications')
+    .select('revision_count')
+    .eq('id', appId)
+    .single();
+
+  const newCount = (app?.revision_count || 0) + 1;
+
+  const { error } = await supabase
+    .from('applications')
+    .update({ 
+      status: 'Revision Requested', 
+      revision_message: message,
+      revision_count: newCount 
+    })
+    .eq('id', appId);
+
+  if (!error) {
+    await supabase.from('notifications').insert([{ 
+      user_id: freelancerId, 
+      message: `⚠️ Revision Requested: "${message.substring(0, 20)}..."` 
+    }]);
+  }
+
+  return { error };
+};
+
+// --- ENERGY SYSTEM ---
+export const getEnergy = async (userId) => {
+  const { data, error } = await supabase
+    .from('freelancers')
+    .select('energy_points')
+    .eq('id', userId)
+    .single();
+  return { energy: data?.energy_points || 0, error };
+};
+
+export const deductEnergy = async (userId, amount) => {
+  const { data: user } = await supabase.from('freelancers').select('energy_points').eq('id', userId).single();
+  if (!user || user.energy_points < amount) {
+    return { error: { message: "Not enough Energy points!" } };
+  }
+
+  const { error } = await supabase
+    .from('freelancers')
+    .update({ energy_points: user.energy_points - amount })
+    .eq('id', userId);
+    
+  return { success: true, newBalance: user.energy_points - amount, error };
+};
+
+export const awardEnergy = async (userId, amount) => {
+  const { data: user } = await supabase.from('freelancers').select('energy_points').eq('id', userId).single();
+  const { error } = await supabase
+    .from('freelancers')
+    .update({ energy_points: (user?.energy_points || 0) + amount })
+    .eq('id', userId);
+  return { error };
+};
+
+// --- REVIEWS SYSTEM ---
+export const submitReview = async (appId, rating, tags, freelancerId) => {
+  const { error } = await supabase
+    .from('applications')
+    .update({ 
+      client_rating: rating, 
+      client_review_tags: tags 
+    })
+    .eq('id', appId);
+
+  if (!error) {
+    await supabase.from('notifications').insert([{ 
+      user_id: freelancerId, 
+      message: `🌟 You received a ${rating}-Star Review!` 
+    }]);
+    
+    // Bonus 5 energy for 5-star review
+    if (rating === 5) {
+        await awardEnergy(freelancerId, 5); 
+    }
+  }
+  return { error };
+};
+
+// --- CLIENT-SIDE HELPERS (Templates) ---
+export const generateCoverLetter = (userName, jobTitle, jobCategory) => {
+  const templates = [
+    `Hi! I saw you're looking for help with ${jobTitle}. I have experience in ${jobCategory} and I'd love to help you. I can start immediately!`,
+    `Hello! I'm ${userName}. I read your project details about ${jobTitle} and I'm confident I can deliver great results. Check out my portfolio!`,
+    `Hi there! I specialize in projects like "${jobTitle}". This matches my skills in ${jobCategory} perfectly. Let's chat so I can share my ideas!`
+  ];
+  return templates[Math.floor(Math.random() * templates.length)];
+};
+
+// ==========================================
+// 7. USER UTILS & BADGES
+// ==========================================
+
+export const clearUserNotifications = async (userId) => {
+  return await supabase.from('notifications').delete().eq('user_id', userId);
+};
+
+export const updateUserProfile = async (userId, updates, table) => {
+  return await supabase.from(table).update(updates).eq('id', userId);
+};
+
+export const unlockSkill = async (userId, newSkills) => {
+  return await supabase.from('freelancers').update({ unlocked_skills: newSkills }).eq('id', userId);
+};
+
+export const checkAndGrantFirstGigBadge = async (userId) => {
+  const { count } = await supabase
+    .from('applications')
+    .select('*', { count: 'exact', head: true })
+    .eq('freelancer_id', userId)
+    .eq('status', 'Paid');
+
+  if (count === 1) {
+    await supabase.from('user_badges').insert({
+      user_id: userId,
+      badge_name: 'First Gig'
+    });
+    return true; 
+  }
+  return false;
 };

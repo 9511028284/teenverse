@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 
 const Button = ({ children, variant = 'primary', className = '', onClick, disabled, icon: Icon }) => {
   const variants = {
@@ -10,7 +10,7 @@ const Button = ({ children, variant = 'primary', className = '', onClick, disabl
     success: "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-200 dark:shadow-none",
     payment: "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-lg shadow-fuchsia-200 dark:shadow-none",
     ai: "bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-lg"
-  };
+     };
   return (
     <button onClick={onClick} disabled={disabled} className={`relative px-6 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2 ${variants[variant]} ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
       {disabled ? <Loader2 size={18} className="animate-spin"/> : Icon && <Icon size={18} />}
@@ -20,3 +20,7 @@ const Button = ({ children, variant = 'primary', className = '', onClick, disabl
 };
 
 export default Button;
+
+
+
+
