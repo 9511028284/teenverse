@@ -154,8 +154,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       // Fetch Energy
       if (!isClient) {
          api.getEnergy(user.id).then(({ energy }) => setEnergy(energy));
-         // Optional: Check Daily Bonus here
-         // api.checkDailyBonus(user.id).then(({ awarded, newBalance }) => { if(awarded) setEnergy(newBalance); });
       }
 
       const { data: badgeData } = await supabase
@@ -427,7 +425,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     const prevApps = [...applications];
     setApplications(apps => apps.map(a => a.id === app.id ? { ...a, status: APP_STATUS.COMPLETED } : a));
     const { error } = await supabase.functions.invoke('order-manager', {
-      body: { action: 'APPROVE_WORK', appId: app.id }
+      body: { action: 'APPROVE_WORK', appId: app.id, userId: user.id }
     });
     if (!error) {
       showToast("Work Approved! Please release payment.", "success");
@@ -469,7 +467,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
-  // Find this function in Dashboard.jsx and replace it entirely
+  // 🔒 MASTER ACTION HANDLER
   const handleAppAction = async (action, app) => {
     
     // 1. Check Parent Mode locally first
@@ -479,39 +477,42 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         return;
     }
 
-    // 2. Handle Client-side only actions
+    // 2. ⚠️ INTERCEPT PAYMENT ACTIONS
+    // If the action is 'accept', we MUST run the payment flow first.
+    if (action === 'accept') {
+        handleAcceptApplication(app); // Call the Cashfree function
+        return; // Stop here! Do not call the backend directly yet.
+    }
+
+    // 3. Handle Client-side only actions
     if (action === 'submit') { setSelectedApp(app); setModal('submit_work'); return; }
     if (action === 'view_submission') { setViewWorkApp(app); return; }
     
-    // 3. Define the Correct Backend Action Names
-    // The keys are what the buttons send, the values are what the Edge Function expects
+    // 4. Define the Correct Backend Action Names for NON-PAYMENT actions
     const backendActionMap = {
-        'accept': 'ACCEPT_APPLICATION',
-        'approve': 'APPROVE_WORK',     // <--- THIS FIXES YOUR ERROR
-        'pay': 'RELEASE_ESCROW',       // "Pay" button actually releases escrow
-        'reject': 'REJECT_APPLICATION' // Optional: if you add rejection logic later
+        'approve': 'APPROVE_WORK',     
+        'pay': 'RELEASE_ESCROW',       
+        'reject': 'REJECT_APPLICATION' 
     };
 
     const backendAction = backendActionMap[action];
     
-    // If it's a known backend action, execute the secure flow
+    // 5. If it's a known backend action, execute the secure flow
     if (backendAction) {
         showToast(`Processing ${action}...`, "info");
         
-        // Call the secure API
         const { error } = await supabase.functions.invoke('order-manager', {
             body: { 
-                action: backendAction,  // Sends 'APPROVE_WORK' instead of 'APPROVE'
+                action: backendAction,
                 appId: app.id, 
                 userId: user.id 
             }
         });
 
         if (error) {
-             // Handle Security Blocks
              const errorBody = error.context?.json ? await error.context.json() : {};
              if (errorBody.isSecurityBlock) {
-                 setParentMode(true); // Lock the UI
+                 setParentMode(true); 
                  showToast("⛔ Security Block: Ask your parent to approve.", "error");
              } else {
                  showToast(error.message || "Action Failed", "error");
@@ -521,16 +522,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
             const now = new Date().toISOString();
             setApplications(prev => prev.map(a => {
                 if (a.id !== app.id) return a;
-                // Optimistic Updates
-                if (action === 'accept') return { ...a, status: 'Accepted', started_at: now };
                 if (action === 'approve') return { ...a, status: 'Completed', completed_at: now };
                 if (action === 'pay') return { ...a, status: 'Paid', paid_at: now, is_escrow_held: false };
                 return a;
             }));
             
             showToast("Action Successful!", "success");
-            
-            // Close any open modals
             if (viewWorkApp) setViewWorkApp(null);
         }
     }
@@ -728,12 +725,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                   <div className="relative">
                       <div className="w-12 h-12 rounded-full bg-white dark:bg-gray-800 p-0.5 ring-2 ring-indigo-100 dark:ring-indigo-900 overflow-hidden">
                         <div className="w-full h-full rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">{user.name ? user.name[0] : <User size={20}/>}</div>
-                     </div>
-                     <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm border-2 border-white dark:border-gray-900">Lv.{userLevel}</div>
+                      </div>
+                      <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-400 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm border-2 border-white dark:border-gray-900">Lv.{userLevel}</div>
                   </div>
                   <div className="overflow-hidden">
                       <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">{user.name?.split(' ')[0] || 'User'} {badges.some(b => b.name === 'Verified Teen') && <ShieldCheck size={12} className="text-blue-500"/>}</h3>
-                     <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.type} Account</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.type} Account</p>
                   </div>
                </div>
                
@@ -839,7 +836,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0"></div>
                                   {n.message}
                                </div>
-                             ))}
+                            ))}
                            </div>
                       </div>
                     )}
@@ -1031,12 +1028,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                               // FINISH LOGIC
                               const finalScore = score + (isCorrect ? 1 : 0);
                               if (finalScore >= 7) { // Pass if 7/10 correct
-                                 handleQuizSelection(modal.category, true); 
+                                  handleQuizSelection(modal.category, true); 
                               } else {
-                                 showToast(`You scored ${finalScore}/10. Try again!`, "error");
-                                 setModal(null);
-                                 setCurrentQuestionIndex(0);
-                                 setScore(0);
+                                  showToast(`You scored ${finalScore}/10. Try again!`, "error");
+                                  setModal(null);
+                                  setCurrentQuestionIndex(0);
+                                  setScore(0);
                               }
                            }
                         }} 

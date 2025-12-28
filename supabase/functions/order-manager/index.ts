@@ -24,57 +24,49 @@ serve(async (req) => {
     // 3. Initialize Admin Client (Bypasses RLS for security checks)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 4. Parse Request - NOW REQUIRES userId
+    // 4. Parse Request
     const { action, appId, userId, payload } = await req.json();
-    console.log(`Received Secure Request -> Action: ${action}, AppID: ${appId}, UserID: ${userId}`);
+    console.log(`[DEBUG] Received Request -> Action: ${action}, AppID: ${appId}, UserID: ${userId}`);
 
     if (!appId || !userId) throw new Error("Missing 'appId' or 'userId' in request body");
 
-// 5. 🛡️ SECURITY: Fetch User Profile (Check both Freelancers and Clients tables)
-    let userProfile = null;
-    let tableChecked = 'none';
-
-    // A. Try finding user in 'freelancers' table
-    const { data: freelancerProfile, error: freelancerError } = await supabaseAdmin
+    // 5. 🛡️ SECURITY: Fetch User Profile (Dual Table Check)
+    // We check 'freelancers' first, then 'clients'
+    
+    // A. Check Freelancers Table
+    const { data: fData, error: fError } = await supabaseAdmin
       .from('freelancers') 
-      .select('parent_mode_enabled, is_banned')
+      .select('id, parent_mode, status') // Correct columns from your schema
       .eq('id', userId)
-      .maybeSingle(); // Use maybeSingle to avoid error if not found immediately
+      .maybeSingle();
 
-    if (freelancerProfile) {
-      userProfile = freelancerProfile;
-      tableChecked = 'freelancers';
-    } else {
-      // B. If not found, try 'clients' table
-      const { data: clientProfile, error: clientError } = await supabaseAdmin
-        .from('clients')
-        .select('parent_mode_enabled, is_banned')
-        .eq('id', userId)
-        .maybeSingle();
-      
-      if (clientProfile) {
-        userProfile = clientProfile;
-        tableChecked = 'clients';
-      }
-    }
+    // B. Check Clients Table
+    const { data: cData, error: cError } = await supabaseAdmin
+      .from('clients') 
+      .select('id, status') // Clients don't have parent_mode
+      .eq('id', userId)
+      .maybeSingle();
 
-    // C. Validation Check
+    // C. Assign Profile
+    const userProfile = fData || cData;
+
     if (!userProfile) {
-       console.error(`User ${userId} not found in 'freelancers' or 'clients'.`);
-       throw new Error("User validation failed: User profile not found.");
+       console.error(`[CRITICAL] User ${userId} not found in 'freelancers' or 'clients'.`);
+       throw new Error("User validation failed: User profile not found. Please create your profile first.");
     }
 
-    console.log(`User found in table: ${tableChecked}`);
-
-    if (userProfile.is_banned) {
+    // 6. 🛡️ Check Ban Status
+    // Your schema uses text status 'active' or 'suspended'
+    if (userProfile.status === 'suspended' || userProfile.status === 'banned') {
         return new Response(JSON.stringify({ error: "Account Suspended" }), { status: 403, headers: corsHeaders });
     }
 
-    // 6. 🛡️ SECURITY: Enforce Parent Mode
-    // Critical actions are blocked if Parent Mode is ON
+    // 7. 🛡️ Enforce Parent Mode
+    // Only verify parent mode if the column exists (it only exists on freelancers)
     const RESTRICTED_ACTIONS = ['APPROVE_WORK', 'RELEASE_ESCROW', 'PAY'];
     
-    if (userProfile.parent_mode_enabled && RESTRICTED_ACTIONS.includes(action)) {
+    // Check if 'parent_mode' exists (is not undefined) AND is explicitly true
+    if (userProfile.parent_mode === true && RESTRICTED_ACTIONS.includes(action)) {
         console.warn(`Blocked Action ${action} for User ${userId} due to Parent Mode.`);
         return new Response(JSON.stringify({ 
             error: "Security Block: Parent Mode is active. Ask your parent to approve this.",
@@ -85,7 +77,7 @@ serve(async (req) => {
         });
     }
 
-    // 7. Fetch Application Data
+    // 8. Fetch Application Data & Verify Ownership
     const { data: app, error: fetchError } = await supabaseAdmin
       .from('applications')
       .select('*')
@@ -94,35 +86,63 @@ serve(async (req) => {
 
     if (fetchError || !app) throw new Error("Application not found");
 
-    // 8. Logic based on action (State Machine)
-   
+    // Ownership Check
+    const isClient = app.client_id === userId;
+    const isFreelancer = app.freelancer_id === userId;
+
+    if (!isClient && !isFreelancer) {
+      throw new Error("Unauthorized: You do not have permission to modify this order.");
+    }
+
+    // 9. Logic based on action (State Machine)
     let updates = {};
     const now = new Date().toISOString();
     
-    if (action === 'ACCEPT_APPLICATION') {
-        updates = { status: 'Accepted', started_at: now }
-    } 
-    else if (action === 'SUBMIT_WORK') {
+    switch (action) {
+      case 'ACCEPT_APPLICATION':
+        // Usually clients "accept" proposals, or system accepts after payment
+        updates = { status: 'Accepted', started_at: now };
+        break;
+
+      case 'SUBMIT_WORK':
+        if (!isFreelancer) throw new Error("Only the freelancer can submit work.");
         updates = { 
-            status: 'Submitted', 
-            submitted_at: now,
-            work_link: payload?.work_link || null,
-            work_message: payload?.work_message || payload?.message || null, // Handle both keys safely
-            
-            // ✅ NEW: Actually save the file URLs to the database
-            work_files: payload?.files || [] 
-        }
-    } 
-    else if (action === 'APPROVE_WORK') {
-        updates = { status: 'Completed', completed_at: now }
-    } 
-    else if (action === 'RELEASE_ESCROW') {
-        if (app.status !== 'Completed') throw new Error("Work must be approved first.");
-        updates = { status: 'Paid', paid_at: now, is_escrow_held: false }
+          status: 'Submitted', 
+          submitted_at: now,
+          work_link: payload?.work_link || null,
+          work_message: payload?.work_message || payload?.message || null,
+          work_files: payload?.files || [] 
+        };
+        break;
+
+      case 'APPROVE_WORK':
+        if (!isClient) throw new Error("Only the client can approve work.");
+        updates = { status: 'Completed', completed_at: now };
+        break;
+
+      case 'RELEASE_ESCROW':
+        if (!isClient) throw new Error("Only the client can release funds.");
+        if (app.status !== 'Completed') throw new Error("Work must be approved (Completed) before releasing escrow.");
+        updates = { status: 'Paid', paid_at: now, is_escrow_held: false };
+        break;
+
+      case 'REJECT_APPLICATION':
+        if (!isClient) throw new Error("Only the client can reject work.");
+        if (app.status === 'Paid') throw new Error("Cannot reject an order that is already paid.");
+        
+        updates = { 
+            status: 'Rejected', 
+            rejection_reason: payload?.reason || "No reason provided",
+            is_escrow_held: false, 
+            completed_at: now 
+        };
+        break;
+
+      default:
+        throw new Error(`Invalid Action: ${action}`);
     }
     
-// ... rest of the file
-    // 9. Update DB
+    // 10. Update DB
     const { error: updateError } = await supabaseAdmin
       .from('applications')
       .update(updates)
@@ -130,14 +150,14 @@ serve(async (req) => {
 
     if (updateError) throw new Error(`Database Update Failed: ${updateError.message}`);
 
-    // 10. Success Response
+    // 11. Success Response
     return new Response(JSON.stringify({ success: true, message: "Order Updated Successfully" }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
 
   } catch (err) {
-    console.error("CRITICAL FUNCTION ERROR:", err);
+    console.error("CRITICAL FUNCTION ERROR:", err.message);
     return new Response(JSON.stringify({ 
       error: err.message, 
       details: "Check Supabase Edge Function Logs." 
