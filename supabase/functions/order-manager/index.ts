@@ -30,17 +30,41 @@ serve(async (req) => {
 
     if (!appId || !userId) throw new Error("Missing 'appId' or 'userId' in request body");
 
-    // 5. 🛡️ SECURITY: Fetch User Profile & Parent Mode Status
-    // We check the DB for the TRUE parent mode status (ignoring frontend)
-    const { data: userProfile, error: userError } = await supabaseAdmin
-      .from('users') // Verify this matches your table name (users/freelancers/clients)
+// 5. 🛡️ SECURITY: Fetch User Profile (Check both Freelancers and Clients tables)
+    let userProfile = null;
+    let tableChecked = 'none';
+
+    // A. Try finding user in 'freelancers' table
+    const { data: freelancerProfile, error: freelancerError } = await supabaseAdmin
+      .from('freelancers') 
       .select('parent_mode_enabled, is_banned')
       .eq('id', userId)
-      .single();
+      .maybeSingle(); // Use maybeSingle to avoid error if not found immediately
 
-    if (userError || !userProfile) {
-        throw new Error("User validation failed: User not found.");
+    if (freelancerProfile) {
+      userProfile = freelancerProfile;
+      tableChecked = 'freelancers';
+    } else {
+      // B. If not found, try 'clients' table
+      const { data: clientProfile, error: clientError } = await supabaseAdmin
+        .from('clients')
+        .select('parent_mode_enabled, is_banned')
+        .eq('id', userId)
+        .maybeSingle();
+      
+      if (clientProfile) {
+        userProfile = clientProfile;
+        tableChecked = 'clients';
+      }
     }
+
+    // C. Validation Check
+    if (!userProfile) {
+       console.error(`User ${userId} not found in 'freelancers' or 'clients'.`);
+       throw new Error("User validation failed: User profile not found.");
+    }
+
+    console.log(`User found in table: ${tableChecked}`);
 
     if (userProfile.is_banned) {
         return new Response(JSON.stringify({ error: "Account Suspended" }), { status: 403, headers: corsHeaders });

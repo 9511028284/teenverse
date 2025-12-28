@@ -175,25 +175,47 @@ export const checkActionPermission = async (action, appId, userId) => {
 // ==========================================
 
 // Initialize Cashfree Order
-export const createEscrowSession = async (applicationId, amount, freelancerId) => {
+// src/services/dashboard.api.js
+
+// ... existing imports
+
+export const createEscrowSession = async (applicationId, amount, freelancerId, clientPhone) => {
   try {
+    // 1. Generate a valid phone number (Real one if available, or a random valid dummy)
+    // Cashfree Sandbox rejects '9999999999' often.
+    const validPhone = clientPhone && clientPhone.length >= 10 
+      ? clientPhone 
+      : String(Math.floor(6000000000 + Math.random() * 900000000));
+
+    // 2. Call the CORRECT Edge Function ('payment-gateway')
     const { data, error } = await supabase.functions.invoke('payment-gateway', {
       body: {
         action: 'CREATE_ORDER',
         amount: amount,
         orderId: `ORD_${applicationId}_${Date.now()}`,
-        customerId: `CUST_${Date.now()}`, 
-        customerPhone: '9999999999' 
+        customerId: `CUST_${Date.now()}`,
+        customerPhone: validPhone // Sending the valid phone
       }
     });
 
-    if (error) throw error;
+    if (error) {
+        console.error("Edge Function Error:", error);
+        throw error;
+    }
+    
+    // 3. Validate Response
+    if (!data || !data.payment_session_id) {
+       throw new Error(data?.message || "Cashfree did not return a session ID");
+    }
+
     return { paymentSessionId: data.payment_session_id, orderId: data.order_id };
   } catch (err) {
     console.error("Payment Init Error:", err);
     return { error: err };
   }
 };
+
+// ... keep other functions
 
 // Verify Payment & Start Escrow
 export const verifyAndStartEscrow = async (orderId, applicationId) => {

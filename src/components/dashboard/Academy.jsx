@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trophy, Lock, Zap, BookOpen, Star, Hexagon } from 'lucide-react';
+import { Trophy, Lock, Zap, BookOpen, Star, Hexagon, Play, CheckCircle2 } from 'lucide-react';
 import Button from '../ui/Button';
 
 const Academy = ({ unlockedSkills, setModal, quizzes }) => {
@@ -41,14 +41,16 @@ const Academy = ({ unlockedSkills, setModal, quizzes }) => {
 
       {/* SKILL TREE GRID */}
       <div>
-         <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-            <Zap className="text-cyan-400"/> Skill Tree
-         </h3>
+         <div className="flex justify-between items-end mb-6">
+             <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <Zap className="text-cyan-400"/> Skill Tree
+             </h3>
+             <span className="text-xs text-gray-500 font-medium">Pass exams to unlock jobs</span>
+         </div>
          
          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {Object.entries(quizzes).map(([key, quiz], index) => {
                const isUnlocked = unlockedSkills.includes(key);
-               
                return (
                   <div key={key} className={`relative group p-1 rounded-[24px] transition-all duration-300 ${isUnlocked ? 'bg-gradient-to-b from-emerald-500 to-teal-500' : 'bg-gray-800 hover:bg-gray-700'}`}>
                      
@@ -58,30 +60,38 @@ const Academy = ({ unlockedSkills, setModal, quizzes }) => {
                         {/* Status Icon */}
                         <div className="absolute top-4 right-4">
                            {isUnlocked 
-                              ? <div className="p-2 bg-emerald-500/20 rounded-full text-emerald-400"><Trophy size={18}/></div>
+                              ? <div className="p-2 bg-emerald-500/20 rounded-full text-emerald-400 shadow-lg shadow-emerald-500/20"><Trophy size={18}/></div>
                               : <div className="p-2 bg-gray-700 rounded-full text-gray-500"><Lock size={18}/></div>
                            }
                         </div>
 
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${isUnlocked ? 'bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-gray-700 text-gray-400'}`}>
-                           <Hexagon size={24} strokeWidth={2}/>
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform group-hover:scale-110 ${isUnlocked ? 'bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)]' : 'bg-gray-700 text-gray-400'}`}>
+                           <Hexagon size={28} strokeWidth={2}/>
                         </div>
 
-                        <h4 className="text-lg font-bold text-white mb-2">{quiz.title || `Module ${index + 1}`}</h4>
-                        <p className="text-sm text-gray-400 mb-6 flex-grow">
-                           {isUnlocked ? "Mastery achieved. Badge added to profile." : "Pass the assessment to unlock this job category."}
+                        <h4 className="text-xl font-bold text-white mb-2">{quiz.title || `Module ${index + 1}`}</h4>
+                        
+                        {/* Course Meta Data */}
+                        <div className="flex gap-4 text-xs font-bold text-gray-500 mb-6 uppercase tracking-wider">
+                           <span className="flex items-center gap-1"><BookOpen size={12}/> 10 Questions</span>
+                           <span className="flex items-center gap-1"><Star size={12}/> {quiz.xp || 1000} XP</span>
+                        </div>
+
+                        <p className="text-sm text-gray-400 mb-6 flex-grow leading-relaxed">
+                           {isUnlocked ? "You have mastered this skill. Badge added to your profile." : "Prove your knowledge to unlock high-paying jobs in this category."}
                         </p>
 
                         {!isUnlocked ? (
                            <Button 
-                              onClick={() => setModal(`quiz-${key}`)} 
-                              className="w-full bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-900/50"
+                              onClick={() => setModal({ type: 'quiz', category: key, data: quiz })} 
+                              className="w-full bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-900/50 py-4"
+                              icon={Play}
                            >
-                              Start Challenge
+                              Start Exam
                            </Button>
                         ) : (
-                           <div className="w-full py-2 text-center text-xs font-bold text-emerald-400 uppercase tracking-widest border border-emerald-500/30 rounded-xl bg-emerald-500/5">
-                              Completed
+                           <div className="w-full py-3 text-center text-xs font-bold text-emerald-400 uppercase tracking-widest border border-emerald-500/30 rounded-xl bg-emerald-500/5 flex items-center justify-center gap-2">
+                              <CheckCircle2 size={14}/> Certified
                            </div>
                         )}
                      </div>

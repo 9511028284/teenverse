@@ -94,6 +94,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [activeChat, setActiveChat] = useState(null); 
   const [energy, setEnergy] = useState(20); // Feature 2: Energy
 
+  // --- QUIZ & ACADEMY STATES ---
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [score, setScore] = useState(0);
+  // Note: modal state is now used for quizzes too: { type: 'quiz', category: 'dev', data: {...} }
+
   // --- HYBRID DELIVERY STATES ---
   const [timelineApp, setTimelineApp] = useState(null);
   const [viewWorkApp, setViewWorkApp] = useState(null);
@@ -110,7 +115,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [portfolioItems, setPortfolioItems] = useState([]);
   const [rawPortfolioText, setRawPortfolioText] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [quizState, setQuizState] = useState({ selected : null, status: 'idle'});
   
   const SAFE_QUIZZES = QUIZZES || {};
   const profileCardRef = useRef(null);
@@ -150,6 +154,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       // Fetch Energy
       if (!isClient) {
          api.getEnergy(user.id).then(({ energy }) => setEnergy(energy));
+         // Optional: Check Daily Bonus here
+         // api.checkDailyBonus(user.id).then(({ awarded, newBalance }) => { if(awarded) setEnergy(newBalance); });
       }
 
       const { data: badgeData } = await supabase
@@ -253,7 +259,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     else { showToast('Service Deleted'); setServices(services.filter(s => s.id !== id)); }
   };
 
-  // --- UPDATED APPLY JOB (Feature 2: Energy) ---
+  // --- APPLY JOB ---
   const handleApplyJob = async (e, energyCost) => {
     e.preventDefault();
     if (parentMode) { showToast("Parent Mode Active", "error"); return; }
@@ -303,50 +309,61 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     showToast("Securing Payment Session...", "info");
 
     try {
-      const { data, error } = await supabase.functions.invoke('secure-payment', {
-        body: { appId: app.id } 
-      });
+      const { paymentSessionId, orderId, error } = await api.createEscrowSession(
+        app.id, 
+        app.bid_amount, 
+        app.freelancer_id,
+        user.phone 
+      );
 
-      if (error || !data) {
-        console.error("Backend Error:", error);
-        throw new Error("Secure Session Failed. Please contact support.");
+      if (error) {
+        throw new Error(error.message || "Secure Session Failed");
       }
 
-      const { payment_session_id, order_id } = data;
-      console.log("✅ Secure Session Created:", payment_session_id);
+      if (!paymentSessionId) {
+        throw new Error("No session ID received.");
+      }
+
+      console.log("✅ Secure Session Created:", paymentSessionId);
       
       cashfree.current.checkout({
-          paymentSessionId: payment_session_id,
+          paymentSessionId: paymentSessionId,
           redirectTarget: "_modal",
       }).then(() => {
           console.log("Popup Closed. Checking status...");
-          handlePaymentVerification(order_id, app);
+          setTimeout(() => handlePaymentVerification(orderId, app), 2000);
       });
 
     } catch (err) {
+      console.error(err);
       showToast(err.message, "error");
     }
   };
 
+  // --- VERIFY PAYMENT ---
   const handlePaymentVerification = async (orderId, app) => {
-      const { data } = await supabase
-        .from('payment_logs')
-        .select('status')
-        .eq('order_id', orderId)
-        .single();
-      
-      if (data && data.status === 'SUCCESS') {
+      showToast("Verifying Payment...", "info");
+
+      const { success, error } = await api.verifyAndStartEscrow(orderId, app.id);
+
+      if (success) {
          showToast("Payment Confirmed! Order Started.", "success");
          setApplications(prev => prev.map(a => 
-            a.id === app.id ? { ...a, status: 'Accepted', started_at: new Date().toISOString() } : a
+            a.id === app.id ? { 
+                ...a, 
+                status: 'Accepted', 
+                started_at: new Date().toISOString(),
+                is_escrow_held: true 
+            } : a
          ));
       } else {
-         showToast("Payment not completed. Order pending.", "warning");
+         console.error("Verification Error:", error);
+         showToast("Payment could not be verified. Please contact support.", "warning");
       }
   };
 
   // --- SUBMIT WORK ---
-  const handleSubmitWork = async (e) => {
+ const handleSubmitWork = async (e) => {
     e.preventDefault();
     if (!selectedApp) {
         showToast("Error: No active application selected.", "error");
@@ -355,7 +372,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
     setModal(null);
     showToast("Uploading work...", "info");
-  
+   
     const formData = new FormData(e.target);
     const workLink = formData.get('work_link');
     const message = formData.get('message');
@@ -373,24 +390,35 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         }
       }
     }
-  
-    const timestamp = new Date().toISOString();
-    const prevApps = [...applications];
-    setApplications(apps => apps.map(a => a.id === selectedApp.id ? { ...a, status: APP_STATUS.SUBMITTED, submitted_at: timestamp } : a));
     
+    const timestamp = new Date().toISOString();
+    
+    console.log("Submitting Work:", {
+        action: 'SUBMIT_WORK', 
+        appId: selectedApp.id, 
+        userId: user.id,
+        payload: { work_link: workLink }
+    });
+
     const { error } = await supabase.functions.invoke('order-manager', {
       body: { 
         action: 'SUBMIT_WORK', 
         appId: selectedApp.id, 
-        payload: { work_link: workLink, message: message, files: uploadedUrls }
+        userId: user.id,
+        payload: { 
+            work_link: workLink, 
+            message: message, 
+            files: uploadedUrls 
+        }
       }
     });
 
     if (error) {
-      setApplications(prevApps); 
       showToast("Submission failed: " + error.message, "error");
     } else {
       showToast("Work Submitted Successfully!", "success");
+      // Optimistic update for UI
+      setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, status: APP_STATUS.SUBMITTED, submitted_at: timestamp } : a));
       setSelectedApp(null); 
     }
   };
@@ -441,41 +469,70 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
+  // Find this function in Dashboard.jsx and replace it entirely
   const handleAppAction = async (action, app) => {
-    if (parentMode && ['pay', 'approve', 'accept'].includes(action)) {
+    
+    // 1. Check Parent Mode locally first
+    const RESTRICTED_ACTIONS = ['approve', 'pay', 'release_escrow'];
+    if (parentMode && RESTRICTED_ACTIONS.includes(action)) {
         showToast("Parent Mode Active: Action Locked", "error");
         return;
     }
 
-    if (['approve', 'pay', 'release_escrow'].includes(action)) {
-        const result = await api.secureOrderAction(action.toUpperCase(), app.id, user.id);
-        if (result.error) {
-            showToast(`❌ ${result.error.message || "Action Blocked"}`, "error");
-            if (result.error.isSecurityBlock) setParentMode(true);
-            return;
+    // 2. Handle Client-side only actions
+    if (action === 'submit') { setSelectedApp(app); setModal('submit_work'); return; }
+    if (action === 'view_submission') { setViewWorkApp(app); return; }
+    
+    // 3. Define the Correct Backend Action Names
+    // The keys are what the buttons send, the values are what the Edge Function expects
+    const backendActionMap = {
+        'accept': 'ACCEPT_APPLICATION',
+        'approve': 'APPROVE_WORK',     // <--- THIS FIXES YOUR ERROR
+        'pay': 'RELEASE_ESCROW',       // "Pay" button actually releases escrow
+        'reject': 'REJECT_APPLICATION' // Optional: if you add rejection logic later
+    };
+
+    const backendAction = backendActionMap[action];
+    
+    // If it's a known backend action, execute the secure flow
+    if (backendAction) {
+        showToast(`Processing ${action}...`, "info");
+        
+        // Call the secure API
+        const { error } = await supabase.functions.invoke('order-manager', {
+            body: { 
+                action: backendAction,  // Sends 'APPROVE_WORK' instead of 'APPROVE'
+                appId: app.id, 
+                userId: user.id 
+            }
+        });
+
+        if (error) {
+             // Handle Security Blocks
+             const errorBody = error.context?.json ? await error.context.json() : {};
+             if (errorBody.isSecurityBlock) {
+                 setParentMode(true); // Lock the UI
+                 showToast("⛔ Security Block: Ask your parent to approve.", "error");
+             } else {
+                 showToast(error.message || "Action Failed", "error");
+             }
+        } else {
+            // Success! Update UI
+            const now = new Date().toISOString();
+            setApplications(prev => prev.map(a => {
+                if (a.id !== app.id) return a;
+                // Optimistic Updates
+                if (action === 'accept') return { ...a, status: 'Accepted', started_at: now };
+                if (action === 'approve') return { ...a, status: 'Completed', completed_at: now };
+                if (action === 'pay') return { ...a, status: 'Paid', paid_at: now, is_escrow_held: false };
+                return a;
+            }));
+            
+            showToast("Action Successful!", "success");
+            
+            // Close any open modals
+            if (viewWorkApp) setViewWorkApp(null);
         }
-    }
-
-    if (action === 'accept') handleAcceptApplication(app);
-    if (action === 'reject') updateStatus(app.id, 'Rejected', app.freelancer_id);
-    if (action === 'submit') { setSelectedApp(app); setModal('submit_work'); }
-    if (action === 'view_submission') setViewWorkApp(app);
-    if (action === 'approve') handleApproveWork(app);
-    if (action === 'pay') handleFinalPayment(app);
-  };
-
-  const updateStatus = async (appId, status, freelancerId) => {
-    const currentApp = applications.find(a => a.id === appId);
-    if (!currentApp) return;
-
-    const prevApps = [...applications];
-    setApplications(applications.map(a => a.id === appId ? { ...a, status } : a));
-    const { error } = await api.updateApplicationStatus(appId, status, freelancerId);
-    if(error) { 
-        setApplications(prevApps); 
-        showToast(error.message, 'error');
-    } else {
-        showToast(`Marked as ${status}`);
     }
   };
 
@@ -511,19 +568,16 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
-  const handleQuizSelection = async (categoryId, answer) => {
-    const correctAnswer = SAFE_QUIZZES[categoryId]?.answer;
-    if (!correctAnswer) return;
-    
-    setQuizState({ selected: answer, status: answer === correctAnswer ? 'correct' : 'incorrect' });
-    if (answer === correctAnswer) {
+  // --- UPDATED QUIZ HANDLER ---
+  const handleQuizSelection = async (categoryId, passed) => {
+    if (passed) {
       setTimeout(async () => {
         const newSkills = [...unlockedSkills, categoryId];
         setUnlockedSkills(newSkills);
         await api.unlockSkill(user.id, newSkills); 
         setUser({ ...user, unlockedSkills: newSkills });
 
-        // --- Feature 2: Award Energy ---
+        // Award Energy
         await api.awardEnergy(user.id, 5); 
         setEnergy(prev => prev + 5);
 
@@ -533,12 +587,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
             setBadges(prev => [...prev, newBadge]);
             await supabase.from('user_badges').insert({ user_id: user.id, badge_name: 'Skill Certified' });
         }
-        setModal(null);
-        setQuizState({ selected: null, status: 'idle' });
+        
         showToast("🎉 Correct! +500 XP & +5 Energy ⚡", "success");
-      }, 1500);
-    } else {
-      setTimeout(() => setQuizState({ selected: null, status: 'idle' }), 1000);
+        setModal(null);
+        setScore(0);
+        setCurrentQuestionIndex(0);
+      }, 1000);
     }
   };
 
@@ -934,22 +988,67 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
          </Modal>
       )}
 
-      {Object.keys(SAFE_QUIZZES).map(key => modal === `quiz-${key}` && (
-         <Modal key={key} title="Skill Assessment" onClose={() => {setModal(null); setQuizState({selected: null, status: 'idle'});}}>
+      {/* --- UPDATED QUIZ MODAL FOR 10 QUESTIONS --- */}
+      {modal?.type === 'quiz' && (
+         <Modal 
+            title={`Exam: ${modal.data.title}`} 
+            onClose={() => {
+               setModal(null); 
+               setCurrentQuestionIndex(0); 
+               setScore(0);
+            }}
+         >
             <div className="space-y-6">
-               <h3 className="text-lg font-bold text-center dark:text-white px-4">{SAFE_QUIZZES[key].question}</h3>
-                <div className="space-y-3">
-                  {SAFE_QUIZZES[key].options.map((opt, i) => (
-                     <button key={i} onClick={() => handleQuizSelection(key, opt)} disabled={quizState.status !== 'idle'} className={`w-full p-4 rounded-xl text-left border-2 transition-all font-medium flex items-center justify-between ${quizState.selected === opt ? (quizState.status === 'correct' ? 'bg-emerald-50 border-emerald-500 text-emerald-700' : 'bg-red-50 border-red-500 text-red-700') : 'bg-white border-gray-100 hover:border-indigo-500 hover:shadow-md dark:bg-[#020617] dark:border-white/10 dark:text-gray-300'}`}>
+               {/* PROGRESS BAR */}
+               <div className="w-full bg-gray-100 dark:bg-white/10 h-2 rounded-full overflow-hidden">
+                  <div 
+                     className="bg-indigo-500 h-full transition-all duration-300"
+                     style={{ width: `${((currentQuestionIndex + 1) / modal.data.questions.length) * 100}%` }}
+                  ></div>
+               </div>
+
+               <div className="flex justify-between items-center text-xs font-bold text-gray-400 uppercase">
+                  <span>Question {currentQuestionIndex + 1} of {modal.data.questions.length}</span>
+                  <span>Score: {score}</span>
+               </div>
+
+               <h3 className="text-xl font-bold dark:text-white px-2">
+                  {modal.data.questions[currentQuestionIndex].q}
+               </h3>
+
+               <div className="space-y-3">
+                  {modal.data.questions[currentQuestionIndex].options.map((opt, i) => (
+                     <button 
+                        key={i} 
+                        onClick={() => {
+                           const isCorrect = opt === modal.data.questions[currentQuestionIndex].a;
+                           if (isCorrect) setScore(score + 1);
+                           
+                           // Next Question or Finish
+                           if (currentQuestionIndex + 1 < modal.data.questions.length) {
+                              setCurrentQuestionIndex(currentQuestionIndex + 1);
+                           } else {
+                              // FINISH LOGIC
+                              const finalScore = score + (isCorrect ? 1 : 0);
+                              if (finalScore >= 7) { // Pass if 7/10 correct
+                                 handleQuizSelection(modal.category, true); 
+                              } else {
+                                 showToast(`You scored ${finalScore}/10. Try again!`, "error");
+                                 setModal(null);
+                                 setCurrentQuestionIndex(0);
+                                 setScore(0);
+                              }
+                           }
+                        }} 
+                        className="w-full p-4 rounded-xl text-left border-2 bg-white dark:bg-[#020617] border-gray-100 dark:border-white/10 hover:border-indigo-500 hover:shadow-md dark:text-gray-300 transition-all font-medium"
+                     >
                         {opt}
-                        {quizState.selected === opt && (quizState.status === 'correct' ? <CheckCircle size={20}/> : <X size={20}/>)}
                      </button>
                   ))}
                </div>
-               {quizState.status === 'correct' && <p className="text-center text-emerald-600 font-bold animate-pulse">Correct! +500 XP Awarded</p>}
             </div>
          </Modal>
-      ))}
+      )}
 
       {paymentModal && <PaymentModal onClose={() => setPaymentModal(null)} onConfirm={processPayment} paymentData={paymentModal} />}
 
