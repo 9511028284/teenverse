@@ -69,6 +69,7 @@ const Overview = ({ user, isClient, totalEarnings, jobsCount, applicationsCount,
       <div className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-6">
          
          {/* CARD 1: EARNINGS (Gradient Mesh) */}
+        {/* CARD 1: EARNINGS (Gradient Mesh) */}
          <div className="col-span-1 md:col-span-3 lg:col-span-4 relative overflow-hidden rounded-[32px] bg-[#1e1b4b] border border-indigo-500/20 p-8 group">
             <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/30 rounded-full blur-[80px] -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700"></div>
             <div className="relative z-10">
@@ -80,9 +81,12 @@ const Overview = ({ user, isClient, totalEarnings, jobsCount, applicationsCount,
                       <TrendingUp size={12}/> +12.5%
                    </div>
                 </div>
-                <p className="text-indigo-300/60 font-mono text-xs uppercase tracking-widest mb-1">{isClient ? 'Total Spent' : 'Lifetime Earnings'}</p>
-                <h3 className="text-5xl font-black text-white tracking-tighter">
-                   ₹{(totalEarnings/1000).toFixed(1)}k
+                <p className="text-indigo-300/60 font-mono text-xs uppercase tracking-widest mb-1">
+                    {isClient ? 'Total Spent' : 'Net Earnings (After Fees)'}
+                </p>
+                <h3 className="text-4xl md:text-5xl font-black text-white tracking-tighter">
+                   {/* UPDATED: Shows full amount with commas (e.g. ₹1,200) instead of '1.2k' */}
+                   ₹{totalEarnings.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </h3>
             </div>
          </div>
