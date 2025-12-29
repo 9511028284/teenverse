@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Users, Briefcase, CheckCircle, XCircle, 
   Trash2, DollarSign, LogOut, Shield, Flag, Package,
-  Clock, AlertTriangle, ShieldCheck, Landmark, Eye, MessageSquare
+  Clock, AlertTriangle, ShieldCheck, Landmark, Eye, MessageSquare, Lock
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import * as api from '../services/dashboard.api'; 
@@ -18,14 +18,15 @@ const AdminDashboard = ({ onLogout }) => {
   const [jobs, setJobs] = useState([]);
   const [services, setServices] = useState([]);
   const [reports, setReports] = useState([]);
-  const [escrowOrders, setEscrowOrders] = useState([]); // From Uploaded File
+  const [escrowOrders, setEscrowOrders] = useState([]); 
   
   const [stats, setStats] = useState({ 
     totalUsers: 0, totalJobs: 0, totalServices: 0, 
-    totalRevenue: 0, activeReports: 0, heldInEscrow: 0 
+    totalRevenue: 0, activeReports: 0, heldInEscrow: 0,
+    pendingKyc: 0 
   });
   
-  // Evidence / Modal States (From Prompt)
+  // Evidence / Modal States
   const [selectedReport, setSelectedReport] = useState(null); 
   const [evidence, setEvidence] = useState(null); 
   const [evidenceLoading, setEvidenceLoading] = useState(false);
@@ -46,7 +47,10 @@ const AdminDashboard = ({ onLogout }) => {
     // 1. Fetch Users
     const { data: clients } = await supabase.from('clients').select('*');
     const { data: freelancers } = await supabase.from('freelancers').select('*');
-    const allUsers = [...(clients || []).map(u => ({...u, role: 'client'})), ...(freelancers || []).map(u => ({...u, role: 'freelancer'}))];
+    const allUsers = [
+        ...(clients || []).map(u => ({...u, role: 'client'})), 
+        ...(freelancers || []).map(u => ({...u, role: 'freelancer'}))
+    ];
     setUsers(allUsers);
 
     // 2. Fetch Jobs
@@ -57,7 +61,7 @@ const AdminDashboard = ({ onLogout }) => {
     const { data: allServices } = await supabase.from('services').select('*');
     setServices(allServices || []);
 
-    // 4. Fetch Reports (With Filter)
+    // 4. Fetch Reports
     const { data: allReports } = await supabase
         .from('reports')
         .select('*')
@@ -65,13 +69,16 @@ const AdminDashboard = ({ onLogout }) => {
         .order('created_at', { ascending: false });
     setReports(allReports || []);
 
-    // 5. Fetch Financials (Escrow) - Critical for Level 1 Admin
+    // 5. Fetch Financials
     const { data: escrows } = await api.fetchAdminEscrowOrders();
     setEscrowOrders(escrows || []);
 
     // 6. Calculate Stats
     const { count: pendingCount } = await supabase.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'pending');
     
+    // Count Pending KYC
+    const pendingKycCount = allUsers.filter(u => u.kyc_status === 'pending').length;
+
     // Revenue & Escrow Math
     const { data: payments } = await supabase.from('applications').select('bid_amount').eq('status', 'Paid');
     const totalRevenue = payments?.reduce((acc, curr) => acc + (Number(curr.bid_amount) * 0.04), 0) || 0;
@@ -84,58 +91,86 @@ const AdminDashboard = ({ onLogout }) => {
       totalServices: allServices?.length || 0,
       totalRevenue,
       activeReports: pendingCount || 0,
-      heldInEscrow: totalHeld
+      heldInEscrow: totalHeld,
+      pendingKyc: pendingKycCount
     });
   };
 
-  // --- EVIDENCE GATHERING LOGIC (New) ---
-  const openCaseFile = async (report) => {
-    setSelectedReport(report);
-    setEvidenceLoading(true);
-    
-    try {
-        // A. Fetch Related Job
-        let jobData = null;
-        if (report.target_type === 'job' && report.target_id) {
-             const { data } = await supabase.from('jobs').select('*').eq('id', report.target_id).single();
-             jobData = data;
+  // --- 🔒 SECURE FILE VIEWING ---
+  const handleViewId = async (pathOrUrl) => {
+    if (!pathOrUrl) return;
+
+    showToast("Generating secure link...", "info");
+
+    // Case 1: It's already a public URL (Legacy Data)
+    if (pathOrUrl.startsWith('http')) {
+        // Try to see if it matches our Supabase pattern to extract path
+        // Pattern: /storage/v1/object/public/id_proofs/{path}
+        const match = pathOrUrl.split('/id_proofs/')[1];
+        if (match) {
+             // It was a public URL, but bucket is now private.
+             // We extract the path and sign it.
+             const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(match, 60);
+             if (error) { showToast("Error signing legacy URL", "error"); return; }
+             window.open(data.signedUrl, '_blank');
+        } else {
+             // Just try opening it (might 404 if private)
+             window.open(pathOrUrl, '_blank');
         }
-
-        // B. Fetch Chat History (Forensics)
-        // We look for messages between these two users
-        const { data: chats } = await supabase
-            .from('messages')
-            .select('*')
-            .or(`sender_id.eq.${report.reporter_id},receiver_id.eq.${report.reporter_id}`)
-            .order('created_at', { ascending: false })
-            .limit(20);
-
-        // Filter strictly between the reporter and the accused
-        const relevantChats = chats?.filter(msg => 
-            (msg.sender_id === report.reporter_id && msg.receiver_id === report.reported_user_id) ||
-            (msg.sender_id === report.reported_user_id && msg.receiver_id === report.reporter_id)
-        ) || [];
-
-        setEvidence({ job: jobData, chats: relevantChats });
-    } catch (err) {
-        console.error("Evidence Error:", err);
-        showToast("Failed to load case context", "error");
-    } finally {
-        setEvidenceLoading(false);
+    } else {
+        // Case 2: It is a clean path (New Data)
+        const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(pathOrUrl, 60); // Valid for 60s
+        if (error || !data) { 
+            showToast("Could not access file. Check bucket permissions.", "error"); 
+            return; 
+        }
+        window.open(data.signedUrl, '_blank');
     }
   };
 
-  // --- ACTIONS ---
+  // --- ACTION HANDLERS ---
+
+  // 🔥 NEW: KYC Approval Logic
+  const handleKycAction = async (userId, role, status) => {
+    const table = role === 'client' ? 'clients' : 'freelancers';
+    let reason = null;
+
+    if (status === 'rejected') {
+        reason = prompt("Enter rejection reason (e.g., 'Blurry ID', 'Underage', 'Fake Document'):");
+        if (!reason) return; // Cancel if no reason provided
+    }
+
+    if (!window.confirm(`Are you sure you want to mark this user as ${status.toUpperCase()}?`)) return;
+
+    const { error } = await supabase
+        .from(table)
+        .update({ 
+            kyc_status: status,
+            kyc_reviewed_at: new Date().toISOString(),
+            kyc_rejection_reason: reason 
+        })
+        .eq('id', userId);
+
+    if (error) {
+        showToast(`Error: ${error.message}`, 'error');
+    } else {
+        showToast(`User KYC ${status.toUpperCase()}`, 'success');
+        // Optimistic Update
+        setUsers(users.map(u => u.id === userId ? { ...u, kyc_status: status } : u));
+        // Update stats
+        if (status !== 'pending') {
+             setStats(prev => ({ ...prev, pendingKyc: Math.max(0, prev.pendingKyc - 1) }));
+        }
+    }
+  };
 
   const handleResolveReport = async (id, newStatus) => {
       const { error } = await supabase.from('reports').update({ status: newStatus }).eq('id', id);
       if(error) showToast("Error updating report", "error");
       else {
           showToast(`Report marked as ${newStatus}`);
-          // Close modal if open
           if (selectedReport?.id === id) setSelectedReport(null);
           
-          // UI Updates
           if (reportFilter !== newStatus) {
             setReports(reports.filter(r => r.id !== id));
           }
@@ -193,6 +228,39 @@ const AdminDashboard = ({ onLogout }) => {
     else { showToast("Order Refunded"); fetchData(); }
   };
 
+  // --- EVIDENCE GATHERING ---
+  const openCaseFile = async (report) => {
+    setSelectedReport(report);
+    setEvidenceLoading(true);
+    
+    try {
+        let jobData = null;
+        if (report.target_type === 'job' && report.target_id) {
+             const { data } = await supabase.from('jobs').select('*').eq('id', report.target_id).single();
+             jobData = data;
+        }
+
+        const { data: chats } = await supabase
+            .from('messages')
+            .select('*')
+            .or(`sender_id.eq.${report.reporter_id},receiver_id.eq.${report.reporter_id}`)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        const relevantChats = chats?.filter(msg => 
+            (msg.sender_id === report.reporter_id && msg.receiver_id === report.reported_user_id) ||
+            (msg.sender_id === report.reported_user_id && msg.receiver_id === report.reporter_id)
+        ) || [];
+
+        setEvidence({ job: jobData, chats: relevantChats });
+    } catch (err) {
+        console.error("Evidence Error:", err);
+        showToast("Failed to load case context", "error");
+    } finally {
+        setEvidenceLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex font-sans">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
@@ -218,6 +286,7 @@ const AdminDashboard = ({ onLogout }) => {
                 {t} 
                 {t === 'reports' && stats.activeReports > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{stats.activeReports}</span>}
                 {t === 'financials' && stats.heldInEscrow > 0 && <span className="ml-auto bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full">₹</span>}
+                {t === 'users' && stats.pendingKyc > 0 && <span className="ml-auto bg-blue-500 text-white text-[10px] px-2 py-0.5 rounded-full">{stats.pendingKyc}</span>}
              </button>
           ))}
         </nav>
@@ -245,8 +314,8 @@ const AdminDashboard = ({ onLogout }) => {
                <p className="text-3xl font-black text-blue-600">₹{stats.heldInEscrow}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
-               <div className="flex justify-between mb-2"><h3 className="text-gray-500 font-bold text-xs uppercase">Active Disputes</h3><Flag className="text-red-500"/></div>
-               <p className="text-3xl font-black text-red-600">{stats.activeReports}</p>
+               <div className="flex justify-between mb-2"><h3 className="text-gray-500 font-bold text-xs uppercase">Pending KYC</h3><ShieldCheck className="text-amber-500"/></div>
+               <p className="text-3xl font-black text-amber-500">{stats.pendingKyc}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
                <div className="flex justify-between mb-2"><h3 className="text-gray-500 font-bold text-xs uppercase">Total Users</h3><Users className="text-purple-500"/></div>
@@ -397,14 +466,15 @@ const AdminDashboard = ({ onLogout }) => {
             </div>
         )}
 
+        {/* --- USERS TAB (UPDATED WITH KYC) --- */}
         {tab === 'users' && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden overflow-x-auto">
             <table className="w-full text-left min-w-[600px]">
               <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 text-sm">
                 <tr>
                   <th className="p-4">Name</th>
-                  <th className="p-4">Role & Status</th>
-                  <th className="p-4">Email</th>
+                  <th className="p-4">Role</th>
+                  <th className="p-4">KYC Status</th>
                   <th className="p-4">ID Proof</th>
                   <th className="p-4 text-right">Actions</th>
                 </tr>
@@ -412,26 +482,57 @@ const AdminDashboard = ({ onLogout }) => {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {users.map(user => (
                   <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                    <td className="p-4 font-medium text-gray-900 dark:text-white">{user.name}</td>
-                    <td className="p-4">
-                        <div className="flex flex-col items-start gap-1">
-                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.role === 'client' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{user.role}</span>
-                            {user.role === 'freelancer' && user.age < 18 && (
-                                user.is_parent_verified 
-                                ? <span className="flex items-center gap-1 text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-200"><ShieldCheck size={10} /> Verified Minor</span>
-                                : <span className="flex items-center gap-1 text-[10px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded border border-orange-200"><AlertTriangle size={10} /> Parent Pending</span>
-                            )}
-                        </div>
+                    <td className="p-4 font-medium text-gray-900 dark:text-white">
+                        {user.name}
+                        <div className="text-xs text-gray-400">{user.email}</div>
                     </td>
-                    <td className="p-4 text-gray-500 dark:text-gray-400 text-sm">{user.email}</td>
+                    <td className="p-4">
+                        <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.role === 'client' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{user.role}</span>
+                    </td>
+                    <td className="p-4">
+                         <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
+                            user.kyc_status === 'approved' ? 'bg-green-100 text-green-700' :
+                            user.kyc_status === 'rejected' ? 'bg-red-100 text-red-700' :
+                            user.kyc_status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                            'bg-gray-100 text-gray-500'
+                        }`}>
+                            {user.kyc_status || 'Not Started'}
+                        </span>
+                    </td>
                     <td className="p-4">
                       {user.id_proof_url ? 
-                        <a href={user.id_proof_url} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline text-sm font-bold">View ID</a> : 
+                        <button 
+                            onClick={() => handleViewId(user.id_proof_url)}
+                            className="text-indigo-600 hover:underline text-sm font-bold flex items-center gap-1"
+                        >
+                            <Eye size={14}/> View ID
+                        </button> : 
                         <span className="text-gray-400 text-sm">None</span>
                       }
                     </td>
-                    <td className="p-4 text-right">
-                      <button onClick={() => handleBanUser(user.id, user.role === 'client' ? 'clients' : 'freelancers')} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                    <td className="p-4 text-right flex justify-end gap-2">
+                      {/* KYC ACTIONS */}
+                      {user.kyc_status === 'pending' && (
+                         <>
+                            <button 
+                                onClick={() => handleKycAction(user.id, user.role, 'approved')}
+                                className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
+                                title="Approve KYC"
+                            >
+                                <CheckCircle size={18} />
+                            </button>
+                            <button 
+                                onClick={() => handleKycAction(user.id, user.role, 'rejected')}
+                                className="p-2 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
+                                title="Reject KYC"
+                            >
+                                <XCircle size={18} />
+                            </button>
+                         </>
+                      )}
+
+                      {/* BAN ACTION */}
+                      <button onClick={() => handleBanUser(user.id, user.role === 'client' ? 'clients' : 'freelancers')} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Ban User">
                         <Trash2 size={18} />
                       </button>
                     </td>

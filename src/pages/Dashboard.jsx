@@ -3,7 +3,8 @@ import {
   Rocket, Menu, LayoutDashboard, Briefcase, FileText, MessageSquare, BookOpen, Sparkles, Settings, LogOut, 
   Award, Sun, Moon, Bell, Search, Filter, PlusCircle, Zap, Lock, Check, Clock, Trash2, ThumbsUp, CreditCard, 
   Receipt, X, CheckCircle, Package, Save, Share2, Download, 
-  Trophy, Unlock, Swords, Heart, Crown, ShieldCheck, FileCheck, Maximize2, Minimize2, User, ListChecks, ChevronRight, Eye
+  Trophy, Unlock, Swords, Heart, Crown, ShieldCheck, FileCheck, Maximize2, Minimize2, User, ListChecks, ChevronRight, Eye,
+  ShieldAlert, UploadCloud // Added for KYC UI
 } from 'lucide-react';
 
 // --- LIBRARIES ---
@@ -71,7 +72,15 @@ const BadgeItem = ({ name, iconName }) => {
 
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
   const isClient = user?.type === 'client';
-  
+
+  const copyReferral = () => {
+    if (user.referral_code) {
+      navigator.clipboard.writeText(user.referral_code);
+      // Simple alert as fallback if showToast isn't passed to Overview
+      showToast("Referral Code Copied to Clipboard! 🚀"); 
+    }
+  };
+    
   // --- UI & TAB STATES ---
   const [tab, setTab] = useState('overview');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -94,10 +103,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [activeChat, setActiveChat] = useState(null); 
   const [energy, setEnergy] = useState(20); // Feature 2: Energy
 
+  // --- KYC STATE ---
+  const [kycFile, setKycFile] = useState(null);
+
   // --- QUIZ & ACADEMY STATES ---
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
-  // Note: modal state is now used for quizzes too: { type: 'quiz', category: 'dev', data: {...} }
 
   // --- HYBRID DELIVERY STATES ---
   const [timelineApp, setTimelineApp] = useState(null);
@@ -111,11 +122,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [parentMode, setParentMode] = useState(false);
   const [unlockedSkills, setUnlockedSkills] = useState(user?.unlockedSkills || []);
   const [badges, setBadges] = useState([]);
-  
+    
   const [portfolioItems, setPortfolioItems] = useState([]);
   const [rawPortfolioText, setRawPortfolioText] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
-  
+    
   const SAFE_QUIZZES = QUIZZES || {};
   const profileCardRef = useRef(null);
 
@@ -153,14 +164,14 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
       // Fetch Energy
       if (!isClient) {
-         api.getEnergy(user.id).then(({ energy }) => setEnergy(energy));
+          api.getEnergy(user.id).then(({ energy }) => setEnergy(energy));
       }
 
       const { data: badgeData } = await supabase
         .from('user_badges')
         .select('badge_name, badges(icon)')
         .eq('user_id', user.id);
-    
+      
       const formattedBadges = badgeData?.map(b => ({
         name: b.badge_name,
         icon: b.badges?.icon || 'Award'
@@ -204,14 +215,80 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   }, [user, isClient, showToast, jobs.length]);
 
   // --- ACTION HANDLERS ---
-  const handleClearNotifications = async () => {
-    const { error } = await api.clearUserNotifications(user.id);
-    if (error) showToast(error.message, 'error'); 
-    else setNotifications([]);
+   
+  // 🔥 NEW: KYC Helper Function (Interceptive)
+  const checkKycLock = (actionType) => {
+    // If user is explicitly approved, pass
+    if (user.kyc_status === 'approved') return true;
+
+    // If pending, just tell them to wait
+    if (user.kyc_status === 'pending') {
+       showToast("⏳ Your verification is under review. Please wait.", "info");
+       return false;
+    }
+
+    // Define restricted actions
+    const BLOCKED_ACTIONS = ['apply_paid', 'accept_job', 'release_escrow', 'post_job'];
+     
+    if (BLOCKED_ACTIONS.includes(actionType)) {
+      // 🚀 TRIGGER THE MODAL INSTEAD OF BLOCKING SILENTLY
+      setModal('kyc_verification'); 
+      return false; // ⛔ Block action
+    }
+    return true;
+  };
+
+ const handleKycSubmit = async (e) => {
+    e.preventDefault();
+    if (!kycFile) return showToast("Please select an ID file.", "error");
+
+    showToast("Uploading secure documents...", "info");
+    
+    try {
+        // 1. Upload File
+        // We use a clean path: userID/timestamp_filename
+        const fileName = `${user.id}/${Date.now()}_kyc`; 
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('id_proofs') // Make sure this bucket is set to PRIVATE in Supabase
+            .upload(fileName, kycFile);
+
+        if (uploadError) throw uploadError;
+
+        // 🛑 CHANGE: Do NOT use getPublicUrl for private buckets.
+        // Instead, we just use the 'fileName' (path) directly.
+        const storedPath = fileName; 
+
+        // 3. Update User Profile with the PATH
+        const table = isClient ? 'clients' : 'freelancers';
+        const { error: dbError } = await supabase
+            .from(table)
+            .update({ 
+                kyc_status: 'pending',
+                id_proof_url: storedPath, // Saving the path, not the URL
+                kyc_submitted_at: new Date().toISOString()
+            })
+            .eq('id', user.id);
+
+        if (dbError) throw dbError;
+
+        // 4. Success!
+        showToast("KYC Submitted! An admin will review it shortly.", "success");
+        setUser({ ...user, kyc_status: 'pending' }); 
+        setModal(null); 
+
+    } catch (err) {
+        // REPLACED CONSOLE ERROR
+        showToast("Verification failed: " + err.message, "error");
+    }
   };
 
   const handlePostJob = async (e) => {
     e.preventDefault();
+    
+    // 🔒 KYC CHECK
+    if (!checkKycLock('post_job')) return;
+
     const formData = new FormData(e.target);
     const budget = parseFloat(formData.get('budget'));
     const title = formData.get('title');
@@ -260,8 +337,13 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   // --- APPLY JOB ---
   const handleApplyJob = async (e, energyCost) => {
     e.preventDefault();
+    
+    // 1. Parent Mode Check
     if (parentMode) { showToast("Parent Mode Active", "error"); return; }
     
+    // 2. 🔒 KYC CHECK
+    if (!checkKycLock('apply_paid')) return;
+      
     if (!isClient && selectedJob) {
       const jobCategory = selectedJob.category || 'dev';
       if (!unlockedSkills.includes(jobCategory)) {
@@ -297,7 +379,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
   // --- CASHFREE: HIRE FLOW ---
   const handleAcceptApplication = async (app) => {
-    console.log("🔒 Starting Secure Hire for App ID:", app.id);
+    // 🔒 KYC CHECK
+    if (!checkKycLock('accept_job')) return;
+
+    // REMOVED LOG: console.log("🔒 Starting Secure Hire for App ID:", app.id);
     
     if (!cashfree.current) {
         showToast("Payment Gateway initializing... please wait.", "error");
@@ -322,18 +407,18 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         throw new Error("No session ID received.");
       }
 
-      console.log("✅ Secure Session Created:", paymentSessionId);
+      // REMOVED LOG: console.log("✅ Secure Session Created:", paymentSessionId);
       
       cashfree.current.checkout({
           paymentSessionId: paymentSessionId,
           redirectTarget: "_modal",
       }).then(() => {
-          console.log("Popup Closed. Checking status...");
+          // REMOVED LOG: console.log("Popup Closed. Checking status...");
           setTimeout(() => handlePaymentVerification(orderId, app), 2000);
       });
 
     } catch (err) {
-      console.error(err);
+      // REPLACED CONSOLE ERROR
       showToast(err.message, "error");
     }
   };
@@ -355,8 +440,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
             } : a
          ));
       } else {
-         console.error("Verification Error:", error);
-         showToast("Payment could not be verified. Please contact support.", "warning");
+         // REPLACED CONSOLE ERROR
+         showToast("Payment verification failed. Please contact support.", "warning");
       }
   };
 
@@ -391,12 +476,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     
     const timestamp = new Date().toISOString();
     
-    console.log("Submitting Work:", {
-        action: 'SUBMIT_WORK', 
-        appId: selectedApp.id, 
-        userId: user.id,
-        payload: { work_link: workLink }
-    });
+    // REMOVED LOG: console.log("Submitting Work:", { ... });
 
     const { error } = await supabase.functions.invoke('order-manager', {
       body: { 
@@ -421,6 +501,22 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
+  // --- NOTIFICATION HANDLER ---
+  const handleClearNotifications = async () => {
+    try {
+      const { error } = await api.clearUserNotifications(user.id);
+      if (error) {
+        showToast(error.message, 'error');
+      } else {
+        setNotifications([]); // Clear local state immediately
+        showToast("Notifications cleared", "success");
+      }
+    } catch (err) {
+      // REPLACED CONSOLE ERROR
+      showToast("Failed to clear notifications: " + err.message, "error");
+    }
+  };
+
   const handleApproveWork = async (app) => {
     const prevApps = [...applications];
     setApplications(apps => apps.map(a => a.id === app.id ? { ...a, status: APP_STATUS.COMPLETED } : a));
@@ -437,6 +533,9 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   };
 
   const handleFinalPayment = async (app) => {
+    // 🔒 KYC CHECK
+    if (!checkKycLock('release_escrow')) return;
+
     if(!window.confirm(`Transfer ₹${(app.bid_amount * 0.96).toFixed(2)} to freelancer?`)) return;
     showToast("Processing Bank Transfer...", "info");
     const { success, error } = await api.releasePayout(app.id, app.bid_amount, app.freelancer_id);
@@ -480,8 +579,13 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     // 2. ⚠️ INTERCEPT PAYMENT ACTIONS
     // If the action is 'accept', we MUST run the payment flow first.
     if (action === 'accept') {
-        handleAcceptApplication(app); // Call the Cashfree function
+        handleAcceptApplication(app); // Call the Cashfree function with KYC check inside
         return; // Stop here! Do not call the backend directly yet.
+    }
+
+    // 2.5 🔒 KYC CHECK for Payouts
+    if (action === 'pay' && !checkKycLock('release_escrow')) {
+        return;
     }
 
     // 3. Handle Client-side only actions
@@ -490,8 +594,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     
     // 4. Define the Correct Backend Action Names for NON-PAYMENT actions
     const backendActionMap = {
-        'approve': 'APPROVE_WORK',     
-        'pay': 'RELEASE_ESCROW',       
+        'approve': 'APPROVE_WORK',      
+        'pay': 'RELEASE_ESCROW',        
         'reject': 'REJECT_APPLICATION' 
     };
 
@@ -624,8 +728,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       link.click();
       showToast("Downloaded successfully!", "success");
     } catch (err) {
-      console.error("Download failed:", err);
-      showToast("Failed to download image.", "error");
+      // REPLACED CONSOLE ERROR
+      showToast("Failed to download image: " + err.message, "error");
     }
   };
 
@@ -653,8 +757,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         link.click();
       }
     } catch (err) {
-      console.error("Share failed:", err);
-      if (err.name !== 'AbortError') showToast("Failed to share.", "error");
+      // REPLACED CONSOLE ERROR
+      if (err.name !== 'AbortError') showToast("Failed to share: " + err.message, "error");
     }
   };
 
@@ -781,10 +885,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                      <SidebarItem id="portfolio" icon={Sparkles} label="AI Portfolio" color="text-violet-500" />
                      <SidebarItem id="profile-card" icon={Share2} label="Share Profile" />
                    </>
-                 )}
-                 <div className="mt-6 mb-2 px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">System</div>
-                 <SidebarItem id="records" icon={ShieldCheck} label="My Records" />
-                 <SidebarItem id="settings" icon={Settings} label="Settings" />
+                  )}
+                  <div className="mt-6 mb-2 px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">System</div>
+                  <SidebarItem id="records" icon={ShieldCheck} label="My Records" />
+                  <SidebarItem id="settings" icon={Settings} label="Settings" />
                </>
              )}
           </div>
@@ -888,13 +992,82 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                  )}
 
                  {tab === 'records' && <Records applications={applications} />}
-                 {tab === 'settings' && <SettingsComp profileForm={profileForm} setProfileForm={setProfileForm} isClient={isClient} handleUpdateProfile={handleUpdateProfile} parentMode={parentMode} setParentMode={setParentMode} />}
+                 {tab === 'settings' && (
+  <SettingsComp 
+    profileForm={profileForm} 
+    setProfileForm={setProfileForm} 
+    isClient={isClient} 
+    handleUpdateProfile={handleUpdateProfile} 
+    parentMode={parentMode} 
+    setParentMode={setParentMode}
+    // 👇 THIS IS THE MISSING PIECE
+    onOpenKyc={() => setModal('kyc_verification')} 
+  />
+)}
                </div>
             </div>
          </div>
       </main>
 
       {/* --- MODALS --- */}
+
+      {/* 🚀 IN-DASHBOARD KYC MODAL */}
+      {modal === 'kyc_verification' && (
+        <Modal title="Identity Verification" onClose={() => setModal(null)}>
+            <div className="space-y-6">
+            
+            {/* HEADER SECTION based on Status */}
+            {user.kyc_status === 'rejected' ? (
+                <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl border border-red-200 dark:border-red-800 flex gap-3 items-start">
+                    <ShieldAlert className="text-red-600 shrink-0" size={24} />
+                    <div>
+                    <h4 className="font-bold text-red-700 dark:text-red-400">Verification Rejected</h4>
+                    <p className="text-sm text-red-600/80 mt-1">Reason: {user.kyc_rejection_reason || "Document unclear"}</p>
+                    <p className="text-xs text-red-500 mt-2 font-bold">Please upload a clearer document.</p>
+                    </div>
+                </div>
+            ) : (
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800 flex gap-3 items-center">
+                    <Lock className="text-blue-600" size={24} />
+                    <div>
+                    <h4 className="font-bold text-blue-700 dark:text-blue-400">Security Check Required</h4>
+                    <p className="text-sm text-blue-600/80">To ensure safety, we need to verify your identity before you can process payments.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* UPLOAD FORM */}
+            <form onSubmit={handleKycSubmit} className="space-y-4">
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Upload Government ID / School ID</label>
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <UploadCloud className="w-8 h-8 mb-3 text-gray-400" />
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                            <span className="font-semibold">{kycFile ? kycFile.name : "Click to upload"}</span>
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">SVG, PNG, JPG or PDF (MAX. 800x400px)</p>
+                        </div>
+                        <input type="file" className="hidden" onChange={(e) => setKycFile(e.target.files[0])} accept="image/*,application/pdf" />
+                    </label>
+                </div>
+
+                <div className="flex items-start gap-2">
+                    <input type="checkbox" required id="kyc-consent" className="mt-1 rounded border-gray-300 text-indigo-600" />
+                    <label htmlFor="kyc-consent" className="text-xs text-gray-500 dark:text-gray-400">
+                    I confirm this document belongs to me. I understand that falsifying identity will result in a permanent ban.
+                    </label>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                    <Button variant="outline" className="flex-1" onClick={() => setModal(null)} type="button">Cancel</Button>
+                    <Button className="flex-1">Submit for Review</Button>
+                </div>
+            </form>
+            </div>
+        </Modal>
+        )}
+
       {modal === 'post-job' && <PostJobModal onClose={() => setModal(null)} onSubmit={handlePostJob} />}
       {modal === 'create-service' && <CreateServiceModal onClose={() => setModal(null)} onSubmit={handleCreateService} />}
       {modal === 'apply-job' && (
@@ -1015,7 +1188,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
                <div className="space-y-3">
                   {modal.data.questions[currentQuestionIndex].options.map((opt, i) => (
-                     <button 
+                      <button 
                         key={i} 
                         onClick={() => {
                            const isCorrect = opt === modal.data.questions[currentQuestionIndex].a;
@@ -1038,9 +1211,9 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                            }
                         }} 
                         className="w-full p-4 rounded-xl text-left border-2 bg-white dark:bg-[#020617] border-gray-100 dark:border-white/10 hover:border-indigo-500 hover:shadow-md dark:text-gray-300 transition-all font-medium"
-                     >
-                        {opt}
-                     </button>
+                      >
+                          {opt}
+                      </button>
                   ))}
                </div>
             </div>

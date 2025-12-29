@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, UploadCloud, ShieldAlert, Mail, ArrowRight, ArrowLeft, 
   User, Briefcase, Check, ChevronRight, Loader2, Lock, 
-  Eye, EyeOff, KeyRound, Sparkles, FileText, MailCheck, Scale
+  Eye, EyeOff, KeyRound, Sparkles, FileText, MailCheck, Scale, Gift
 } from 'lucide-react';
 import { 
   createUserWithEmailAndPassword, 
@@ -80,7 +80,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     gender: 'Male',
     upi: '',
     org: 'No',
-    parentEmail: ''
+    parentEmail: '',
+    referralCode: '' // 🔥 NEW: Referral Code
   });
 
   const [age, setAge] = useState(null);
@@ -176,6 +177,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
         setLoading(true);
         try {
+            // 1. Check Phone Uniqueness
             const { data: fData } = await supabase.from('freelancers').select('phone').eq('phone', formData.phone).single();
             const { data: cData } = await supabase.from('clients').select('phone').eq('phone', formData.phone).single();
 
@@ -184,11 +186,26 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                 return alert("This phone number is already registered.");
             }
             
+            // 🔥 NEW: Check Referral Code Validity (Optional)
+            if (formData.referralCode) {
+                const { data: refUser } = await supabase.rpc('check_referral_code', { code: formData.referralCode });
+                // If RPC doesn't exist, we can fallback to manual check (less efficient but works)
+                // For MVP, let's just do a simple check
+                const { data: refF } = await supabase.from('freelancers').select('id').eq('referral_code', formData.referralCode).single();
+                const { data: refC } = await supabase.from('clients').select('id').eq('referral_code', formData.referralCode).single();
+                
+                if (!refF && !refC) {
+                    setLoading(false);
+                    return alert("Invalid Referral Code. Clear it to proceed or check for typos.");
+                }
+            }
+
             setLoading(false);
             setStep(prev => prev + 1);
         } catch (error) {
             setLoading(false);
-            return alert("Unable to verify phone number. Please check connection.");
+            console.error(error);
+            return alert("Unable to verify details. Please check connection.");
         }
     }
   };
@@ -293,7 +310,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
            }
 
            // --- SECURITY UPGRADE: Server-Side OTP ---
-           // We call the secure Edge Function instead of generating locally
            const { error } = await supabase.functions.invoke('send-parent-otp', {
               body: { 
                 parentEmail: formData.parentEmail, 
@@ -328,7 +344,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     setLoading(true);
 
     // --- SECURITY UPGRADE: Verify via Edge Function ---
-    // We send the OTP to the server to check against the database
     const { data, error } = await supabase.functions.invoke('verify-parent-otp', {
         body: { 
             parentEmail: formData.parentEmail, 
@@ -387,16 +402,23 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     // --- STEP 1: CREATE DATABASE PROFILE ---
     const table = formData.role === 'client' ? 'clients' : 'freelancers';
     
+    // Generate own referral code: Name + 4 random digits
+    const myRefCode = `${formData.name.split(' ')[0].toUpperCase()}${Math.floor(1000 + Math.random() * 9000)}`;
+
     const dbData = formData.role === 'client' 
        ? { 
            id: uid, name: formData.name, email: formData.email, phone: formData.phone, 
-           nationality: formData.nationality, id_proof_url: filePath, is_organisation: formData.org 
+           nationality: formData.nationality, id_proof_url: filePath, is_organisation: formData.org,
+           referral_code: myRefCode, // My unique code
+           referred_by: formData.referralCode || null // Who referred me
          }
        : { 
            id: uid, name: formData.name, email: formData.email, phone: formData.phone, 
            nationality: formData.nationality, id_proof_url: filePath, dob: formData.dob, 
            age: age, gender: formData.gender, upi: formData.upi, 
-           is_parent_verified: isMinor, unlocked_skills: []
+           is_parent_verified: isMinor, unlocked_skills: [],
+           referral_code: myRefCode, // My unique code
+           referred_by: formData.referralCode || null // Who referred me
          };
     
     // --- DATABASE INSERT WITH ROLLBACK ---
@@ -547,27 +569,27 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                    <p className="text-gray-400 mb-8">Enter your credentials to access your workspace.</p>
                    
                    <div className="space-y-5">
-                      <div className="group">
-                        <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email</label>
-                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
-                          <Mail size={18} className="text-gray-500 mr-3"/>
-                          <input type="email" placeholder="name@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} />
-                        </div>
-                      </div>
+                     <div className="group">
+                       <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email</label>
+                       <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
+                         <Mail size={18} className="text-gray-500 mr-3"/>
+                         <input type="email" placeholder="name@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} />
+                       </div>
+                     </div>
 
-                      <div className="group">
-                        <div className="flex justify-between items-center mb-2">
-                           <label className="text-xs font-bold text-gray-500 uppercase ml-1">Password</label>
-                           <button onClick={() => setViewMode('forgot')} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button>
-                        </div>
-                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
-                          <Lock size={18} className="text-gray-500 mr-3"/>
-                          <input type={showPassword ? "text" : "password"} placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} />
-                          <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">
-                              {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
-                          </button>
-                        </div>
-                      </div>
+                     <div className="group">
+                       <div className="flex justify-between items-center mb-2">
+                          <label className="text-xs font-bold text-gray-500 uppercase ml-1">Password</label>
+                          <button onClick={() => setViewMode('forgot')} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button>
+                       </div>
+                       <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
+                         <Lock size={18} className="text-gray-500 mr-3"/>
+                         <input type={showPassword ? "text" : "password"} placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} />
+                         <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">
+                             {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
+                         </button>
+                       </div>
+                     </div>
                    </div>
                    
                    <button onClick={handleFinalSubmit} disabled={loading} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 flex justify-center items-center gap-2">
@@ -702,6 +724,17 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                    <input value={formData.nationality} onChange={(e) => updateField('nationality', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/>
                                 </div>
                              </div>
+                             
+                             {/* 🔥 NEW REFERRAL INPUT */}
+                             <div className="group pt-2">
+                                <label className="text-xs font-bold text-indigo-400 uppercase ml-1 mb-2 block flex items-center gap-1"><Gift size={14}/> Referral Code (Optional)</label>
+                                <input 
+                                    value={formData.referralCode} 
+                                    onChange={(e) => updateField('referralCode', e.target.value.toUpperCase())} 
+                                    className="w-full bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-4 text-white placeholder-indigo-300/50 focus:border-indigo-500 outline-none transition-all uppercase tracking-widest font-mono" 
+                                    placeholder="TEEN1234"
+                                />
+                             </div>
                            </div>
                         )}
 
@@ -725,7 +758,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                             <input type="email" placeholder="Parent's Email Address" value={formData.parentEmail} onChange={(e) => updateField('parentEmail', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white focus:border-orange-500 outline-none"/>
                                          </div>
                                       )}
-                          
+                                      
                                       <div>
                                          {/* LEGAL: Mandatory ID Upload */}
                                          <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Upload ID (Mandatory) <span className="text-red-500">*</span></label>

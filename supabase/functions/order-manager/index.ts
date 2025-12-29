@@ -33,17 +33,17 @@ serve(async (req) => {
     // 5. 🛡️ SECURITY: Fetch User Profile (Dual Table Check)
     // We check 'freelancers' first, then 'clients'
     
-    // A. Check Freelancers Table
+    // A. Check Freelancers Table (Updated to include kyc_status)
     const { data: fData, error: fError } = await supabaseAdmin
       .from('freelancers') 
-      .select('id, parent_mode, status') // Correct columns from your schema
+      .select('id, parent_mode, status, kyc_status') 
       .eq('id', userId)
       .maybeSingle();
 
-    // B. Check Clients Table
+    // B. Check Clients Table (Updated to include kyc_status)
     const { data: cData, error: cError } = await supabaseAdmin
       .from('clients') 
-      .select('id, status') // Clients don't have parent_mode
+      .select('id, status, kyc_status') 
       .eq('id', userId)
       .maybeSingle();
 
@@ -77,7 +77,25 @@ serve(async (req) => {
         });
     }
 
-    // 8. Fetch Application Data & Verify Ownership
+    [cite_start]// 8. 🛡️ NEW: Enforce KYC Verification (The Unhappy Path) [cite: 1]
+    // Blocks money movement if KYC is not approved
+    const KYC_RESTRICTED_ACTIONS = ['ACCEPT_APPLICATION', 'RELEASE_ESCROW'];
+    
+    if (KYC_RESTRICTED_ACTIONS.includes(action)) {
+        if (userProfile.kyc_status !== 'approved') {
+            console.warn(`Blocked Action ${action} for User ${userId} due to KYC Status: ${userProfile.kyc_status}`);
+            return new Response(JSON.stringify({
+                error: "KYC_REQUIRED",
+                message: "Identity verification required before moving funds.",
+                isKycBlock: true
+            }), {
+                status: 403,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+    }
+
+    // 9. Fetch Application Data & Verify Ownership
     const { data: app, error: fetchError } = await supabaseAdmin
       .from('applications')
       .select('*')
@@ -94,7 +112,7 @@ serve(async (req) => {
       throw new Error("Unauthorized: You do not have permission to modify this order.");
     }
 
-    // 9. Logic based on action (State Machine)
+    // 10. Logic based on action (State Machine)
     let updates = {};
     const now = new Date().toISOString();
     
@@ -142,7 +160,7 @@ serve(async (req) => {
         throw new Error(`Invalid Action: ${action}`);
     }
     
-    // 10. Update DB
+    // 11. Update DB
     const { error: updateError } = await supabaseAdmin
       .from('applications')
       .update(updates)
@@ -150,7 +168,7 @@ serve(async (req) => {
 
     if (updateError) throw new Error(`Database Update Failed: ${updateError.message}`);
 
-    // 11. Success Response
+    // 12. Success Response
     return new Response(JSON.stringify({ success: true, message: "Order Updated Successfully" }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,

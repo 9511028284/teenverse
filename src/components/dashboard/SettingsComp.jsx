@@ -1,7 +1,8 @@
 import React from 'react';
 import { 
   Settings, Save, User, Shield, Briefcase, CreditCard, 
-  Smartphone, Globe, Award, Hash, Building, Activity, Zap 
+  Smartphone, Globe, Award, Hash, Building, Activity, Zap,
+  CheckCircle, AlertTriangle, Clock, FileText, ChevronRight, ShieldCheck
 } from 'lucide-react'; 
 import Button from '../ui/Button';
 
@@ -25,7 +26,49 @@ const ModernInput = ({ label, icon: Icon, ...props }) => (
   </div>
 );
 
-const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfile, parentMode, setParentMode }) => {
+const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfile, parentMode, setParentMode, onOpenKyc }) => {
+  
+  // KYC Status Helper
+  const kycStatus = profileForm.kyc_status || 'not_started';
+  
+  const kycConfig = {
+    approved: {
+      color: "bg-emerald-500",
+      lightColor: "bg-emerald-50 dark:bg-emerald-900/20",
+      textColor: "text-emerald-700 dark:text-emerald-400",
+      icon: CheckCircle,
+      title: "Identity Verified",
+      desc: "Your account is fully approved for payments and jobs."
+    },
+    pending: {
+      color: "bg-amber-500",
+      lightColor: "bg-amber-50 dark:bg-amber-900/20",
+      textColor: "text-amber-700 dark:text-amber-400",
+      icon: Clock,
+      title: "Verification in Progress",
+      desc: "Our team is reviewing your documents. This usually takes 24h."
+    },
+    rejected: {
+      color: "bg-red-500",
+      lightColor: "bg-red-50 dark:bg-red-900/20",
+      textColor: "text-red-700 dark:text-red-400",
+      icon: AlertTriangle,
+      title: "Verification Failed",
+      desc: profileForm.kyc_rejection_reason ? `Reason: ${profileForm.kyc_rejection_reason}` : "Document was unclear or invalid."
+    },
+    not_started: {
+      color: "bg-indigo-500",
+      lightColor: "bg-indigo-50 dark:bg-indigo-900/20",
+      textColor: "text-indigo-700 dark:text-indigo-400",
+      icon: ShieldCheck,
+      title: "Verify Identity",
+      desc: "Required to accept paid jobs and withdraw earnings."
+    }
+  };
+
+  const statusUI = kycConfig[kycStatus] || kycConfig.not_started;
+  const StatusIcon = statusUI.icon;
+
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-fade-in pb-10">
       
@@ -38,7 +81,7 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
           <p className="text-gray-500 dark:text-gray-400 font-medium">Manage your identity, visuals, and vault.</p>
         </div>
         
-        {/* Save Button (Floating on Mobile, Fixed here on Desktop) */}
+        {/* Save Button */}
         <Button 
           onClick={handleUpdateProfile} 
           disabled={parentMode} 
@@ -102,7 +145,6 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
             ? 'bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-500/30' 
             : 'bg-white dark:bg-[#1E293B] border-gray-100 dark:border-white/5'
           }`}>
-            {/* Background Pattern */}
             <div className="absolute inset-0 opacity-10 pointer-events-none" style={{backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>
             
             <div>
@@ -132,10 +174,56 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
             </button>
         </div>
 
-        {/* 3. FREELANCER STATS (Span 12 -> 6 on desktop) */}
+        {/* 🔥 3. KYC VERIFICATION CARD (Full Width) */}
+        <div className="col-span-12">
+            <div className={`${statusUI.lightColor} border border-transparent dark:border-white/5 p-1 rounded-[2rem]`}>
+                <div className="bg-white/50 dark:bg-[#1E293B]/80 backdrop-blur-xl rounded-[1.8rem] p-6 flex flex-col md:flex-row items-center gap-6">
+                    {/* Icon Circle */}
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center shrink-0 shadow-lg ${statusUI.color} text-white`}>
+                        <StatusIcon size={32} />
+                    </div>
+
+                    {/* Text */}
+                    <div className="flex-1 text-center md:text-left">
+                        <div className="flex items-center justify-center md:justify-start gap-3 mb-1">
+                            <h3 className={`text-xl font-bold ${statusUI.textColor}`}>{statusUI.title}</h3>
+                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-white/50 dark:bg-black/20 ${statusUI.textColor} border-current opacity-70`}>
+                                {kycStatus.replace('_', ' ')}
+                            </span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                            {statusUI.desc}
+                        </p>
+                    </div>
+
+                    {/* Action Button */}
+                    {kycStatus !== 'approved' && kycStatus !== 'pending' && (
+                        <button 
+                            onClick={onOpenKyc}
+                            className="bg-gray-900 dark:bg-white text-white dark:text-black px-8 py-4 rounded-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                        >
+                            {kycStatus === 'rejected' ? 'Retry Verification' : 'Start Verification'}
+                            <ChevronRight size={18} />
+                        </button>
+                    )}
+                    {kycStatus === 'pending' && (
+                        <div className="bg-white dark:bg-black/20 px-6 py-3 rounded-xl font-bold text-amber-600 dark:text-amber-400 text-sm flex items-center gap-2">
+                            <Clock size={16} className="animate-pulse" /> Review in progress...
+                        </div>
+                    )}
+                    {kycStatus === 'approved' && (
+                        <div className="bg-white dark:bg-black/20 px-6 py-3 rounded-xl font-bold text-emerald-600 dark:text-emerald-400 text-sm flex items-center gap-2 border border-emerald-200 dark:border-emerald-800">
+                            <CheckCircle size={16} /> Identity Secured
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+
+        {/* 4. FREELANCER STATS (Span 12 -> 6 on desktop) */}
         {!isClient && (
           <div className="col-span-12 md:col-span-6 bg-white dark:bg-[#1E293B] p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-lg">
-             <div className="flex items-center gap-3 mb-6">
+              <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                   <Briefcase size={20} />
                 </div>
@@ -168,7 +256,7 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
           </div>
         )}
 
-        {/* 4. BANKING VAULT (Span 12 -> 6 on desktop) */}
+        {/* 5. BANKING VAULT (Span 12 -> 6 on desktop) */}
         {!isClient && (
           <div className="col-span-12 md:col-span-6 relative group">
             {/* Card Background Effect */}
@@ -178,19 +266,19 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
             <div className="relative p-6 h-full flex flex-col justify-between">
               <div className="flex justify-between items-start mb-6">
                 <div>
-                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                     <CreditCard className="text-indigo-400"/> Payout Vault
-                   </h2>
-                   <p className="text-xs text-gray-400 mt-1">Encrypted banking details.</p>
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                      <CreditCard className="text-indigo-400"/> Payout Vault
+                    </h2>
+                    <p className="text-xs text-gray-400 mt-1">Encrypted banking details.</p>
                 </div>
                 <div className="w-12 h-8 rounded-md bg-white/10 border border-white/20 flex items-center justify-center">
-                   <div className="w-6 h-6 rounded-full bg-orange-500/80"></div>
-                   <div className="w-6 h-6 rounded-full bg-yellow-500/80 -ml-3"></div>
+                    <div className="w-6 h-6 rounded-full bg-orange-500/80"></div>
+                    <div className="w-6 h-6 rounded-full bg-yellow-500/80 -ml-3"></div>
                 </div>
               </div>
 
               <div className="space-y-4">
-                 <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-[10px] font-bold text-gray-500 uppercase">Bank Name</label>
                       <input 
@@ -209,9 +297,9 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
                         onChange={e => setProfileForm({...profileForm, ifsc_code: e.target.value.toUpperCase()})}
                       />
                     </div>
-                 </div>
-                 
-                 <div>
+                  </div>
+                  
+                  <div>
                     <label className="text-[10px] font-bold text-gray-500 uppercase">Account Number</label>
                     <input 
                         type="text" 
@@ -220,9 +308,9 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
                         value={profileForm.account_number || ""} 
                         onChange={e => setProfileForm({...profileForm, account_number: e.target.value})}
                     />
-                 </div>
+                  </div>
 
-                 <div>
+                  <div>
                     <label className="text-[10px] font-bold text-gray-500 uppercase">UPI ID (Optional)</label>
                     <input 
                         className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:bg-white/10 outline-none transition-colors"
@@ -230,7 +318,7 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
                         value={profileForm.upi || ""} 
                         onChange={e => setProfileForm({...profileForm, upi: e.target.value})}
                     />
-                 </div>
+                  </div>
               </div>
             </div>
           </div>
