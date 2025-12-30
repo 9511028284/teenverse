@@ -2,29 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, UploadCloud, ShieldAlert, Mail, ArrowRight, ArrowLeft, 
   User, Briefcase, Check, ChevronRight, Loader2, Lock, 
-  Eye, EyeOff, KeyRound, Sparkles, FileText, MailCheck, Scale, Gift
+  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck
 } from 'lucide-react';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signInWithRedirect, 
-  getRedirectResult,  
-  sendPasswordResetEmail,
-  sendEmailVerification, 
-  signOut,
-  GoogleAuthProvider, 
-  GithubAuthProvider, 
-  FacebookAuthProvider, 
-  OAuthProvider 
-} from 'firebase/auth';
-import { auth } from '../firebase';
-import { supabase } from '../supabase';
+import { supabase } from '../supabase'; // ✅ ONLY SUPABASE
 import imageCompression from 'browser-image-compression';
 
 // LEGAL: Version control for the consent text.
 const CONSENT_VERSION = "v1.0_TEENVERSE_PARENT_AGREEMENT_2025";
-const LEGACY_CUTOFF_DATE = new Date('2025-12-16T00:00:00');
 
+// --- STYLES ---
 const styles = `
   @keyframes gradient-xy {
     0%, 100% { background-position: 0% 50%; }
@@ -56,17 +42,16 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
-
+   
   // Verification States
   const [showVerify, setShowVerify] = useState(false);
-  const [verificationSent, setVerificationSent] = useState(false);
-  
+  const [verificationSent, setVerificationSent] = useState(false); // For Email Link
+   
   const [otp, setOtp] = useState('');
-  
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [parentAgreed, setParentAgreed] = useState(false);
-
-  // New State for Social Login flow
+   
+  // Social Login Handling
   const [socialUser, setSocialUser] = useState(null);
 
   const [formData, setFormData] = useState({
@@ -81,46 +66,52 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     upi: '',
     org: 'No',
     parentEmail: '',
-    referralCode: '' // 🔥 NEW: Referral Code
+    referralCode: ''
   });
 
   const [age, setAge] = useState(null);
   const [isMinor, setIsMinor] = useState(false);
 
-  // --- MOBILE LOGIN FIX & ONBOARDING INTERCEPTION ---
+  // --- SUPABASE SESSION & REDIRECT CHECK ---
   useEffect(() => {
-    const checkRedirect = async () => {
+    const checkSession = async () => {
       setLoading(true);
       try {
-        const result = await getRedirectResult(auth);
-        if (result) {
-          const user = result.user;
-          const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.uid).single();
-          const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.uid).single();
+        // 1. Get Active Session
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session) {
+          const user = session.user;
+
+          // 2. Check if Profile Exists
+          const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.id).single();
+          const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.id).single();
 
           if (freelancerData || clientData) {
-            onLogin(`Welcome back ${user.displayName || ''}!`);
+             // ✅ Profile exists -> Log them in
+             onLogin(`Welcome back!`);
           } else {
-            setSocialUser(user);
-            setFormData(prev => ({
-              ...prev,
-              email: user.email,
-              name: user.displayName || '',
-              role: 'freelancer'
-            }));
-            setViewMode('signup');
-            setStep(1);
-            alert("Please complete your profile details to finish signing up.");
+             // ⚠️ User exists in Auth but NO profile -> Redirected from Social Login?
+             setSocialUser(user);
+             setFormData(prev => ({
+               ...prev,
+               email: user.email,
+               name: user.user_metadata?.full_name || user.email.split('@')[0],
+               role: 'freelancer'
+             }));
+             setViewMode('signup');
+             setStep(1);
           }
         }
       } catch (err) {
-        console.error("Redirect Error:", err);
+        console.error("Session Check Error:", err);
       } finally {
         setLoading(false);
       }
     };
-    checkRedirect();
-  }, [onLogin, onSignUpSuccess]);
+    
+    checkSession();
+  }, [onLogin]);
 
   // --- AGE CALCULATION ---
   useEffect(() => {
@@ -177,7 +168,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
         setLoading(true);
         try {
-            // 1. Check Phone Uniqueness
+            // Check Phone Uniqueness via Supabase
             const { data: fData } = await supabase.from('freelancers').select('phone').eq('phone', formData.phone).single();
             const { data: cData } = await supabase.from('clients').select('phone').eq('phone', formData.phone).single();
 
@@ -186,20 +177,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                 return alert("This phone number is already registered.");
             }
             
-            // 🔥 NEW: Check Referral Code Validity (Optional)
-            if (formData.referralCode) {
-                const { data: refUser } = await supabase.rpc('check_referral_code', { code: formData.referralCode });
-                // If RPC doesn't exist, we can fallback to manual check (less efficient but works)
-                // For MVP, let's just do a simple check
-                const { data: refF } = await supabase.from('freelancers').select('id').eq('referral_code', formData.referralCode).single();
-                const { data: refC } = await supabase.from('clients').select('id').eq('referral_code', formData.referralCode).single();
-                
-                if (!refF && !refC) {
-                    setLoading(false);
-                    return alert("Invalid Referral Code. Clear it to proceed or check for typos.");
-                }
-            }
-
             setLoading(false);
             setStep(prev => prev + 1);
         } catch (error) {
@@ -226,7 +203,10 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     if(!formData.email) return alert("Please enter your email address first.");
     setLoading(true);
     try {
-      await sendPasswordResetEmail(auth, formData.email);
+      const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
+        redirectTo: window.location.origin + '?view=reset', // Handle this in App.js if needed
+      });
+      if (error) throw error;
       alert("Password reset link sent to your email!");
       setViewMode('login');
     } catch (err) {
@@ -239,15 +219,14 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const handleSocialLogin = async (providerName) => {
     setLoading(true);
     try {
-      let provider;
-      switch(providerName) {
-        case 'google': provider = new GoogleAuthProvider(); break;
-        case 'github': provider = new GithubAuthProvider(); break;
-        case 'facebook': provider = new FacebookAuthProvider(); break;
-        case 'apple': provider = new OAuthProvider('apple.com'); break;
-        default: return;
-      }
-      await signInWithRedirect(auth, provider);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: providerName,
+        options: {
+            redirectTo: window.location.origin // Redirects back to this page
+        }
+      });
+      if (error) throw error;
+      // Supabase handles the rest. Page will reload.
     } catch (err) {
       console.error(err);
       alert("Social Login Failed: " + err.message);
@@ -255,7 +234,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
-  // --- UPDATED: Secure Submit Logic ---
+  // --- FINAL SUBMIT LOGIC ---
   const handleFinalSubmit = async () => {
     if (viewMode !== 'login' && !agreedToTerms) {
         return alert("You must agree to the Terms & Privacy Policy to continue.");
@@ -263,19 +242,18 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
     setLoading(true);
     try {
+      // === LOGIN FLOW ===
       if (viewMode === 'login') {
-        const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
-        const user = userCredential.user;
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: formData.email,
+            password: formData.password,
+        });
 
-        const creationTime = new Date(user.metadata.creationTime);
-        const isLegacyUser = creationTime < LEGACY_CUTOFF_DATE;
-        if (!user.emailVerified && !isLegacyUser) {
-            await signOut(auth);
-            throw new Error("Please verify your email address before logging in. Check your inbox.");
-        }
-        onLogin('Welcome back!');
+        if (error) throw error;
+        // Success handled by useEffect listener
+       
       } else {
-        // --- SIGNUP LOGIC ---
+        // === SIGNUP FLOW ===
         if (formData.role === 'freelancer') {
             if (!formData.dob) {
                 setLoading(false);
@@ -285,19 +263,19 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                 setLoading(false);
                 return alert("ID Proof upload is MANDATORY.");
             }
-            // SECURITY: File Type Validation
+            // File Type Validation
             const validTypes = ['image/jpeg', 'image/png', 'application/pdf'];
             if (!validTypes.includes(file.type)) {
                 setLoading(false);
                 return alert("Invalid file type. Please upload JPG, PNG or PDF only.");
             }
-
             if (age < 13) {
                 setLoading(false);
                 throw new Error("You must be at least 13 years old to join TeenVerse.");
             }
         }
 
+        // --- Minor Protection ---
         if (formData.role === 'freelancer' && isMinor) {
            if (!formData.parentEmail) {
                setLoading(false);
@@ -309,14 +287,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
              return;
            }
 
-           // --- SECURITY UPGRADE: Server-Side OTP ---
+           // Send OTP via Edge Function
            const { error } = await supabase.functions.invoke('send-parent-otp', {
               body: { 
                 parentEmail: formData.parentEmail, 
                 childName: formData.name 
               }
            });
-
            if (error) {
                console.error(error);
                throw new Error("Failed to send verification code. Please try again.");
@@ -325,7 +302,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
            localStorage.setItem('last_otp_sent', Date.now().toString());
            setShowVerify(true);
            setLoading(false);
-           return; 
+           return;
         }
 
         await completeSignup();
@@ -336,27 +313,24 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
-  // --- UPDATED: Secure Verify Logic ---
+  // --- OTP VERIFY ---
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     if (!parentAgreed) return alert("Parent/Guardian must explicitly consent to the terms.");
     
     setLoading(true);
-
-    // --- SECURITY UPGRADE: Verify via Edge Function ---
+    // Verify via Edge Function
     const { data, error } = await supabase.functions.invoke('verify-parent-otp', {
         body: { 
             parentEmail: formData.parentEmail, 
             otp: otp 
         }
     });
-
     if (error || !data || !data.success) {
         setLoading(false);
         return alert("Invalid or Expired Code. Please check and try again.");
     }
 
-    // If successful, proceed to create account
     try {
         await completeSignup();
     } catch (err) {
@@ -365,17 +339,34 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
+  // --- CORE SIGNUP FUNCTION ---
+  // 🟢 THIS IS WHERE THE FIX IS APPLIED
   const completeSignup = async () => {
     let uid = "";
+    let email = formData.email;
+
+    // 1. Create Auth User (if not already via social)
     if (socialUser) {
-      uid = socialUser.uid;
+        uid = socialUser.id;
+        email = socialUser.email;
     } else {
-      const cred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-      uid = cred.user.uid;
-      await sendEmailVerification(cred.user);
+        const { data, error } = await supabase.auth.signUp({
+            email: formData.email,
+            password: formData.password,
+            options: {
+                data: { full_name: formData.name } // Metadata
+            }
+        });
+        if (error) throw error;
+        if (!data.user) throw new Error("Signup failed. No user returned.");
+        uid = data.user.id;
     }
 
-    // --- SECURE FILE UPLOAD ---
+    if (!uid) {
+        throw new Error("Critical Error: User ID not found. Cannot proceed.");
+    }
+
+    // 2. Upload ID Proof (Secure Bucket)
     let filePath = "";
     if (file) {
       try {
@@ -383,57 +374,72 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         const compressedFile = await imageCompression(file, options);
         
         const fileName = `id_${uid}_${Date.now()}.jpg`;
+        // Ensure bucket 'id_proofs' exists and policies are set!
         const { data: uploadData, error: uploadError } = await supabase.storage
             .from('id_proofs')
             .upload(fileName, compressedFile);
+            
         if (uploadError) throw uploadError;
         filePath = uploadData.path; 
 
       } catch (uploadErr) {
         console.error("Upload failed", uploadErr);
-        // Fallback
-        const fileName = `id_${uid}_${Date.now()}`;
-        const { data: retryData, error: retryError } = await supabase.storage.from('id_proofs').upload(fileName, file);
-        if (retryError) throw retryError;
-        filePath = retryData.path;
+        // Clean rollback: If upload fails, we must stop and ideally clean up Auth user.
+        await supabase.auth.signOut();
+        throw new Error("ID Upload Failed: " + uploadErr.message);
       }
     }
 
-    // --- STEP 1: CREATE DATABASE PROFILE ---
+    // 3. Create Database Profile
     const table = formData.role === 'client' ? 'clients' : 'freelancers';
     
     // Generate own referral code: Name + 4 random digits
     const myRefCode = `${formData.name.split(' ')[0].toUpperCase()}${Math.floor(1000 + Math.random() * 9000)}`;
-
+    
+    // 🟢 RLS FIX: Explicitly setting 'id' to 'uid'
     const dbData = formData.role === 'client' 
        ? { 
-           id: uid, name: formData.name, email: formData.email, phone: formData.phone, 
-           nationality: formData.nationality, id_proof_url: filePath, is_organisation: formData.org,
-           referral_code: myRefCode, // My unique code
-           referred_by: formData.referralCode || null // Who referred me
+           id: uid, // <--- MATCHING AUTH ID
+           name: formData.name, 
+           email: email, 
+           phone: formData.phone, 
+           nationality: formData.nationality, 
+           id_proof_url: filePath, 
+           is_organisation: formData.org,
+           referral_code: myRefCode,
+           referred_by: formData.referralCode || null
          }
        : { 
-           id: uid, name: formData.name, email: formData.email, phone: formData.phone, 
-           nationality: formData.nationality, id_proof_url: filePath, dob: formData.dob, 
-           age: age, gender: formData.gender, upi: formData.upi, 
-           is_parent_verified: isMinor, unlocked_skills: [],
-           referral_code: myRefCode, // My unique code
-           referred_by: formData.referralCode || null // Who referred me
+           id: uid, // <--- MATCHING AUTH ID
+           name: formData.name, 
+           email: email, 
+           phone: formData.phone, 
+           nationality: formData.nationality, 
+           id_proof_url: filePath, 
+           dob: formData.dob, 
+           age: age, 
+           gender: formData.gender, 
+           upi: formData.upi, 
+           is_parent_verified: isMinor, 
+           unlocked_skills: [],
+           referral_code: myRefCode,
+           referred_by: formData.referralCode || null
          };
-    
-    // --- DATABASE INSERT WITH ROLLBACK ---
+
+    console.log("Attempting DB Insert:", dbData); // 🟡 DEBUG LOG
+
+    // Insert with Manual Rollback Check
     const { error } = await supabase.from(table).insert([dbData]);
+    
     if (error) {
-        // CRITICAL ROLLBACK: If DB fails, delete the Auth user.
-        console.error("DB Insert Failed. Rolling back Auth user.", error);
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-            await currentUser.delete().catch(delErr => console.error("Rollback failed", delErr));
-        }
-        throw new Error("Account creation failed. Please try again.");
+        console.error("DB Insert Failed:", error);
+        // ⚠️ CRITICAL: Rollback Auth if DB fails (prevent zombie accounts)
+        await supabase.auth.signOut();
+        // Give a clear error message
+        throw new Error("Database Error: " + error.message);
     }
 
-    // --- STEP 2: LOG CONSENT VIA EDGE FUNCTION ---
+    // 4. Log Parent Consent (If Minor)
     if (isMinor) {
         const { error: logError } = await supabase.functions.invoke('log-parent-consent', {
             body: {
@@ -442,22 +448,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                 consent_version: CONSENT_VERSION
             }
         });
-
-        if (logError) {
-             console.error("Consent Log Failed:", logError);
-             // Fail-safe: If legal logging fails, we must rollback (logout)
-             await signOut(auth);
-             setLoading(false);
-             throw new Error("Unable to verify legal consent server-side. Please try again.");
-        }
+        if (logError) console.error("Consent Log Warning:", logError); 
     }
 
     if (socialUser) {
       onSignUpSuccess();
     } else {
-      await signOut(auth);
-      setLoading(false);
+      // If Email Confirmation is enabled in Supabase settings:
       setVerificationSent(true);
+      setLoading(false);
     }
   };
 
@@ -507,7 +506,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
           <div className="relative z-10">
             <div className="w-12 h-12 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-xl mb-6 flex items-center justify-center shadow-lg shadow-indigo-500/30">
                <Sparkles className="text-white" />
-            </div>
+             </div>
             <h1 className="text-5xl font-black tracking-tighter text-white mb-2 leading-tight">Join the <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Revolution.</span></h1>
             <p className="text-indigo-200/60 mt-4 text-lg">Your skills. Your rules. Your money.</p>
           </div>
@@ -531,13 +530,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-green-500 border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)]">
                   <MailCheck size={40} />
                </div>
-               <h2 className="text-3xl font-bold mb-4">Verify your Email</h2>
+               <h2 className="text-3xl font-bold mb-4">Check your Email</h2>
                <p className="text-gray-300 mb-2">We've sent a verification link to:</p>
                <div className="bg-white/5 border border-white/10 rounded-lg py-2 px-4 inline-block mb-6 font-mono text-indigo-300">
                  {formData.email}
                </div>
                <button onClick={() => { setVerificationSent(false); setViewMode('login'); }} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50">
-                  Return to Login
+                 Return to Login
                </button>
              </div>
           ) : (
@@ -583,7 +582,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                           <button onClick={() => setViewMode('forgot')} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button>
                        </div>
                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
-                         <Lock size={18} className="text-gray-500 mr-3"/>
+                          <Lock size={18} className="text-gray-500 mr-3"/>
                          <input type={showPassword ? "text" : "password"} placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} />
                          <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">
                              {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
@@ -615,41 +614,38 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
               {/* --- VIEW: SIGNUP --- */}
               {viewMode === 'signup' && (
-                 <div className="max-w-md mx-auto w-full">
+                  <div className="max-w-md mx-auto w-full">
                    {showVerify ? (
                       <div className="text-center animate-in zoom-in duration-300">
-                         <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.2)]">
+                          <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.2)]">
                             <ShieldAlert size={40} />
-                         </div>
-                  
-                         <h2 className="text-2xl font-bold mb-2">Guardian Consent Required</h2>
-                         <p className="text-gray-400 mb-6 text-sm">We sent a 6-digit code to <span className="text-white font-mono bg-white/10 px-2 py-0.5 rounded">{formData.parentEmail}</span></p>
-                         
-                         <div className="relative mb-6">
-                            <input className="w-full bg-black/40 border border-gray-700 rounded-xl py-5 text-center text-3xl tracking-[1em] font-mono text-white focus:border-orange-500 focus:shadow-[0_0_20px_rgba(249,115,22,0.2)] outline-none transition-all" placeholder="000000" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} />
-                         </div>
+                          </div>
+                          <h2 className="text-2xl font-bold mb-2">Guardian Consent Required</h2>
+                          <p className="text-gray-400 mb-6 text-sm">We sent a 6-digit code to <span className="text-white font-mono bg-white/10 px-2 py-0.5 rounded">{formData.parentEmail}</span></p>
+                          
+                          <div className="relative mb-6">
+                              <input className="w-full bg-black/40 border border-gray-700 rounded-xl py-5 text-center text-3xl tracking-[1em] font-mono text-white focus:border-orange-500 focus:shadow-[0_0_20px_rgba(249,115,22,0.2)] outline-none transition-all" placeholder="000000" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} />
+                          </div>
 
-                         <div className="mb-8 text-left bg-orange-500/5 p-4 rounded-xl border border-orange-500/20">
-                            <label className="flex items-start gap-3 cursor-pointer">
-                                <input 
-                                    type="checkbox" 
-                                    className="mt-1 w-5 h-5 rounded border-gray-600 bg-black text-orange-600 focus:ring-orange-500"
-                                    checked={parentAgreed}
-                                    onChange={(e) => setParentAgreed(e.target.checked)}
-                                />
-                                <span className="text-xs text-gray-300 leading-relaxed">
-                                    <span className="font-bold text-orange-400">LEGAL DECLARATION:</span> I am the parent/legal guardian of the above child. 
-                                    I consent to my child using TeenVerseHub for non-hazardous digital services and receiving payments. 
-                                    I have reviewed the platform Terms.
-                                </span>
-                            </label>
-                         </div>
-                      
-                         <button onClick={handleVerifyOTP} disabled={loading} className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-900/50">{loading ? 'Verifying...' : 'Verify & Consent'}</button>
-                         <button onClick={() => setShowVerify(false)} className="mt-6 text-gray-500 text-sm hover:text-white transition-colors">Change Parent Email</button>
+                          <div className="mb-8 text-left bg-orange-500/5 p-4 rounded-xl border border-orange-500/20">
+                             <label className="flex items-start gap-3 cursor-pointer">
+                                 <input 
+                                     type="checkbox" 
+                                     className="mt-1 w-5 h-5 rounded border-gray-600 bg-black text-orange-600 focus:ring-orange-500"
+                                     checked={parentAgreed}
+                                     onChange={(e) => setParentAgreed(e.target.checked)}
+                                 />
+                                 <span className="text-xs text-gray-300 leading-relaxed">
+                                      <span className="font-bold text-orange-400">LEGAL DECLARATION:</span> I am the parent/legal guardian of the above child. I consent to my child using TeenVerseHub for non-hazardous digital services and receiving payments. I have reviewed the platform Terms.
+                                 </span>
+                             </label>
+                          </div>
+                       
+                          <button onClick={handleVerifyOTP} disabled={loading} className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-900/50">{loading ? 'Verifying...' : 'Verify & Consent'}</button>
+                          <button onClick={() => setShowVerify(false)} className="mt-6 text-gray-500 text-sm hover:text-white transition-colors">Change Parent Email</button>
                       </div>
                    ) : (
-                   <>
+                    <>
                         <div className="flex justify-between items-center mb-8">
                           {step > 1 ? <button onClick={handleBack} className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"><ArrowLeft size={20}/></button> : <div></div>}
                           <StepIndicator />
@@ -724,8 +720,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                    <input value={formData.nationality} onChange={(e) => updateField('nationality', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/>
                                 </div>
                              </div>
-                             
-                             {/* 🔥 NEW REFERRAL INPUT */}
                              <div className="group pt-2">
                                 <label className="text-xs font-bold text-indigo-400 uppercase ml-1 mb-2 block flex items-center gap-1"><Gift size={14}/> Referral Code (Optional)</label>
                                 <input 
@@ -749,9 +743,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                       <div className="bg-black/30 p-4 rounded-xl border border-gray-700/50">
                                          <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Date of Birth <span className="text-red-500">*</span></label>
                                          <input type="date" value={formData.dob} onChange={(e) => updateField('dob', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none"/>
-                                         {age !== null && <div className={`text-xs mt-2 font-bold px-2 py-1 inline-block rounded ${isMinor ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>Age: {age} {isMinor && "(Parent Verification Required)"}</div>}
+                                          {age !== null && <div className={`text-xs mt-2 font-bold px-2 py-1 inline-block rounded ${isMinor ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>Age: {age} {isMinor && "(Parent Verification Required)"}</div>}
                                       </div>
-          
+                                      
                                       {isMinor && (
                                          <div className="bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl animate-in slide-in-from-top-2">
                                             <div className="flex gap-2 items-center mb-2 text-orange-400"><ShieldAlert size={16}/><span className="text-xs font-bold uppercase">Guardian Email Required</span></div>
@@ -760,7 +754,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                       )}
                                       
                                       <div>
-                                         {/* LEGAL: Mandatory ID Upload */}
                                          <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Upload ID (Mandatory) <span className="text-red-500">*</span></label>
                                          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-700 border-dashed rounded-xl cursor-pointer hover:bg-white/5 hover:border-indigo-500 transition-all group">
                                             <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-400 group-hover:text-indigo-400"><UploadCloud className="w-8 h-8 mb-3" /><p className="text-sm"><span className="font-semibold">{file ? file.name : "Click to upload School ID/Aadhaar"}</span></p></div>
@@ -780,7 +773,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                         checked={agreedToTerms}
                                         onChange={(e) => setAgreedToTerms(e.target.checked)}
                                         className="mt-1 w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-gray-700"
-                                    />
+                                     />
                                     <label htmlFor="terms" className="text-xs text-gray-400 leading-relaxed cursor-pointer select-none">
                                         I agree to the <button type="button" onClick={(e) => handleLegalClick(e, 'terms')} className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold">Terms of Service</button> and <button type="button" onClick={(e) => handleLegalClick(e, 'privacy')} className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold">Privacy Policy</button>.
                                     </label>
