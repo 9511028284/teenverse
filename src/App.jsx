@@ -79,7 +79,7 @@ export default function TeenVerse() {
       
       if (adminCheck) {
         setUser({ id: u.id, email: u.email, name: "Super Admin", type: "admin" });
-        setView('admins');
+        setView('admin');
         showToast('Welcome Admin!');
         setLoading(false);
         return; 
