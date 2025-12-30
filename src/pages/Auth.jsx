@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, ShieldAlert, Mail, ArrowLeft, 
+  X, UploadCloud, ShieldAlert, Mail, ArrowRight, ArrowLeft, 
   User, Briefcase, Check, ChevronRight, Loader2, Lock, 
-  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck, RefreshCw
+  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck
 } from 'lucide-react';
-import { supabase } from '../supabase'; 
+import { supabase } from '../supabase'; // ✅ ONLY SUPABASE
+import imageCompression from 'browser-image-compression';
 
 // LEGAL: Version control for the consent text.
 const CONSENT_VERSION = "v1.0_TEENVERSE_PARENT_AGREEMENT_2025";
+
+
 
 // --- STYLES ---
 const styles = `
@@ -36,22 +39,22 @@ const GithubIcon = () => (<svg viewBox="0 0 24 24" className="w-5 h-5 fill-curre
 
 const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   // --- STATE ---
-  const [viewMode, setViewMode] = useState('login'); 
+  const [viewMode, setViewMode] = useState('login');
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [file, setFile] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
    
   // Verification States
   const [showVerify, setShowVerify] = useState(false);
-  const [verificationSent, setVerificationSent] = useState(false); 
+  const [verificationSent, setVerificationSent] = useState(false); // For Email Link
    
   const [otp, setOtp] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [parentAgreed, setParentAgreed] = useState(false);
    
-  // Social & Password Update
+  // Social Login Handling
   const [socialUser, setSocialUser] = useState(null);
-  const [newPassword, setNewPassword] = useState('');
 
   const [formData, setFormData] = useState({
     role: 'freelancer', 
@@ -71,28 +74,26 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [age, setAge] = useState(null);
   const [isMinor, setIsMinor] = useState(false);
 
-  // --- 1. SUPABASE SESSION & URL HASH CHECK ---
+  // --- SUPABASE SESSION & REDIRECT CHECK ---
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash && hash.includes('type=recovery')) {
-      setViewMode('update_password');
-    }
-
     const checkSession = async () => {
       setLoading(true);
       try {
+        // 1. Get Active Session
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
-          if (hash && hash.includes('type=recovery')) return;
-
           const user = session.user;
-          const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.id).maybeSingle();
-          const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.id).maybeSingle();
+
+          // 2. Check if Profile Exists
+          const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.id).single();
+          const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.id).single();
 
           if (freelancerData || clientData) {
+             // ✅ Profile exists -> Log them in
              onLogin(`Welcome back!`);
           } else {
+             // ⚠️ User exists in Auth but NO profile -> Redirected from Social Login?
              setSocialUser(user);
              setFormData(prev => ({
                ...prev,
@@ -128,12 +129,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       setIsMinor(calculatedAge < 18);
     }
   }, [formData.dob]);
-  
+
+  // --- RATE LIMIT CHECK ---
   const checkOtpRateLimit = () => {
     const lastSent = localStorage.getItem('last_otp_sent');
     if (lastSent) {
       const diff = Date.now() - parseInt(lastSent);
-      if (diff < 60000) { 
+      if (diff < 60000) { // 60 seconds
         const wait = Math.ceil((60000 - diff) / 1000);
         alert(`Please wait ${wait} seconds before sending another OTP.`);
         return false;
@@ -168,8 +170,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
         setLoading(true);
         try {
-            const { data: fData } = await supabase.from('freelancers').select('phone').eq('phone', formData.phone).maybeSingle();
-            const { data: cData } = await supabase.from('clients').select('phone').eq('phone', formData.phone).maybeSingle();
+            // Check Phone Uniqueness via Supabase
+            const { data: fData } = await supabase.from('freelancers').select('phone').eq('phone', formData.phone).single();
+            const { data: cData } = await supabase.from('clients').select('phone').eq('phone', formData.phone).single();
 
             if (fData || cData) {
                 setLoading(false);
@@ -203,7 +206,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: window.location.origin + '#type=recovery',
+        redirectTo: window.location.origin + '?view=reset', // Handle this in App.js if needed
       });
       if (error) throw error;
       alert("Password reset link sent to your email!");
@@ -214,12 +217,103 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       setLoading(false);
     }
   };
-  
+
+  const handleSocialLogin = async (providerName) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: providerName,
+        options: {
+            redirectTo: window.location.origin // Redirects back to this page
+        }
+      });
+      if (error) throw error;
+      // Supabase handles the rest. Page will reload.
+    } catch (err) {
+      console.error(err);
+      alert("Social Login Failed: " + err.message);
+      setLoading(false);
+    }
+  };
+
+  // --- FINAL SUBMIT LOGIC ---
+  const handleFinalSubmit = async () => {
+    if (viewMode !== 'login' && !agreedToTerms) {
+        return alert("You must agree to the Terms & Privacy Policy to continue.");
+    }
+
+    setLoading(true);
+    try {
+      // === LOGIN FLOW ===
+      if (viewMode === 'login') {
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: formData.email,
+            password: formData.password,
+        });
+
+        if (error) throw error;
+        // Success handled by useEffect listener
+       
+      } else {
+        // === SIGNUP FLOW ===
+        if (formData.role === 'freelancer') {
+            if (!formData.dob) {
+                setLoading(false);
+                return alert("Date of Birth is legally required.");
+            }
+
+          
+            if (age < 13) {
+                setLoading(false);
+                throw new Error("You must be at least 13 years old to join TeenVerse.");
+            }
+        }
+
+        // --- Minor Protection ---
+        if (formData.role === 'freelancer' && isMinor) {
+           if (!formData.parentEmail) {
+               setLoading(false);
+               throw new Error("Parent email is required for users under 18.");
+           }
+           
+           if (!checkOtpRateLimit()) {
+             setLoading(false);
+             return;
+           }
+
+           // Send OTP via Edge Function
+           const { error } = await supabase.functions.invoke('send-parent-otp', {
+              body: { 
+                parentEmail: formData.parentEmail, 
+                childName: formData.name 
+              }
+           });
+           if (error) {
+               console.error(error);
+               throw new Error("Failed to send verification code. Please try again.");
+           }
+
+           localStorage.setItem('last_otp_sent', Date.now().toString());
+           setShowVerify(true);
+           setLoading(false);
+           return;
+        }
+
+        await completeSignup();
+      }
+    } catch (err) {
+      alert(err.message);
+      setLoading(false);
+    }
+  };
+
+  // --- OTP VERIFY ---
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     if (!parentAgreed) return alert("Parent/Guardian must explicitly consent to the terms.");
     
     setLoading(true);
+    // Verify via Edge Function
     const { data, error } = await supabase.functions.invoke('verify-parent-otp', {
         body: { 
             parentEmail: formData.parentEmail, 
@@ -239,132 +333,86 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
-  const handleUpdatePassword = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    
-    if (error) {
-       alert("Error updating password: " + error.message);
-    } else {
-       alert("Password updated successfully! Please log in.");
-       setViewMode('login');
-       window.history.replaceState(null, '', window.location.pathname);
-    }
-    setLoading(false);
-  };
-
-  const handleSocialLogin = async (providerName) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: providerName,
-        options: { redirectTo: window.location.origin }
-      });
-      if (error) throw error;
-    } catch (err) {
-      console.error(err);
-      alert("Social Login Failed: " + err.message);
-      setLoading(false);
-    }
-  };
-
-  const handleResendEmail = async () => {
-    setLoading(true);
-    const { error } = await supabase.auth.resend({
-      type: 'signup',
-      email: formData.email,
-    });
-    setLoading(false);
-    if (error) alert(error.message);
-    else alert("Verification email resent! Check your spam folder.");
-  };
-
-  const handleFinalSubmit = async () => {
-    if (viewMode !== 'login' && !agreedToTerms) {
-        return alert("You must agree to the Terms & Privacy Policy to continue.");
-    }
-
-    setLoading(true);
-    try {
-      if (viewMode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({
-            email: formData.email,
-            password: formData.password,
-        });
-        if (error) throw error;
-      } else {
-        if (formData.role === 'freelancer') {
-            if (!formData.dob) { setLoading(false); return alert("Date of Birth is legally required."); }
-            if (age < 13) { setLoading(false); throw new Error("You must be at least 13 years old to join TeenVerse."); }
-        }
-
-        if (formData.role === 'freelancer' && isMinor) {
-           if (!formData.parentEmail) { setLoading(false); throw new Error("Parent email is required for users under 18."); }
-           
-            if (!checkOtpRateLimit()) {
-                setLoading(false);
-                return;
-            }
-
-           const { error } = await supabase.functions.invoke('send-parent-otp', {
-              body: { parentEmail: formData.parentEmail, childName: formData.name }
-           });
-           if (error) {
-                console.error(error); 
-                throw new Error("Failed to send verification code. Please try again.");
-           }
-           
-            localStorage.setItem('last_otp_sent', Date.now().toString());
-            setShowVerify(true);
-            setLoading(false);
-            return;
-        }
-
-        await completeSignup();
-      }
-    } catch (err) {
-      alert(err.message);
-      setLoading(false);
-    }
-  };
-
+  // --- CORE SIGNUP FUNCTION ---
+  // 🟢 THIS IS WHERE THE FIX IS APPLIED
   const completeSignup = async () => {
     let uid = "";
     let email = formData.email;
 
-    // 1. Prepare Metadata for the Trigger
-    // Note: We DO NOT send the file here. We wait for login (IdUploadModal).
-    const metadata = {
-        full_name: formData.name,
-        role: formData.role,
-        phone: formData.phone,
-        nationality: formData.nationality,
-        dob: formData.dob,
-        gender: formData.gender,
-        org: formData.org || '',
-        is_minor: isMinor,
-    };
-
+    // 1. Create Auth User (if not already via social)
     if (socialUser) {
         uid = socialUser.id;
         email = socialUser.email;
-        // For social user, we might need to manually update profile since they are already 'signed up' in Auth
-        // But for now, let's assume the basic trigger flow works or handle separately.
     } else {
         const { data, error } = await supabase.auth.signUp({
             email: formData.email,
             password: formData.password,
-            options: { data: metadata } // <--- Pass data to Trigger
+            options: {
+                data: { full_name: formData.name } // Metadata
+            }
         });
-        
         if (error) throw error;
-        if (!data.user) throw new Error("User creation failed.");
+        if (!data.user) throw new Error("Signup failed. No user returned.");
         uid = data.user.id;
     }
+
+    if (!uid) {
+        throw new Error("Critical Error: User ID not found. Cannot proceed.");
+    }
+
+
+
+    // 3. Create Database Profile
+    const table = formData.role === 'client' ? 'clients' : 'freelancers';
     
+    // Generate own referral code: Name + 4 random digits
+    const myRefCode = `${formData.name.split(' ')[0].toUpperCase()}${Math.floor(1000 + Math.random() * 9000)}`;
+    
+    // 🟢 RLS FIX: Explicitly setting 'id' to 'uid'
+    const dbData = formData.role === 'client' 
+       ? { 
+           id: uid, // <--- MATCHING AUTH ID
+           name: formData.name, 
+           email: email, 
+           phone: formData.phone, 
+           nationality: formData.nationality, 
+           id_proof_url: filePath, 
+           is_organisation: formData.org,
+           referral_code: myRefCode,
+           referred_by: formData.referralCode || null
+         }
+       : { 
+           id: uid, // <--- MATCHING AUTH ID
+           name: formData.name, 
+           email: email, 
+           phone: formData.phone, 
+           nationality: formData.nationality, 
+            
+           dob: formData.dob, 
+           age: age, 
+           gender: formData.gender, 
+           upi: formData.upi, 
+           is_parent_verified: isMinor, 
+           unlocked_skills: [],
+           referral_code: myRefCode,
+           referred_by: formData.referralCode || null
+         };
+
+    console.log("Attempting DB Insert:", dbData); // 🟡 DEBUG LOG
+
+    // Insert with Manual Rollback Check
+    const { error } = await supabase.from(table).insert([dbData]);
+    
+    if (error) {
+        console.error("DB Insert Failed:", error);
+        // ⚠️ CRITICAL: Rollback Auth if DB fails (prevent zombie accounts)
+        await supabase.auth.signOut();
+        // Give a clear error message
+        throw new Error("Database Error: " + error.message);
+    }
+
     // 4. Log Parent Consent (If Minor)
-    if (isMinor && uid) {
+    if (isMinor) {
         const { error: logError } = await supabase.functions.invoke('log-parent-consent', {
             body: {
                 user_id: uid,
@@ -378,11 +426,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     if (socialUser) {
       onSignUpSuccess();
     } else {
-       setVerificationSent(true); 
-       setLoading(false);
+      // If Email Confirmation is enabled in Supabase settings:
+      setVerificationSent(true);
+      setLoading(false);
     }
   };
 
+  // --- SUB-COMPONENTS ---
   const StepIndicator = () => (
     <div className="flex gap-2 mb-8 justify-center">
       {[1, 2, 3, 4].map(i => (
@@ -392,9 +442,16 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   );
 
   const SocialButton = ({ icon, onClick, label }) => (
-    <button type="button" onClick={onClick} className="flex-1 bg-white/5 border border-white/10 hover:border-indigo-500/50 hover:bg-white/10 p-3 rounded-xl flex justify-center items-center transition-all duration-300 group relative overflow-hidden" title={label}>
+    <button 
+      type="button" 
+      onClick={onClick}
+      className="flex-1 bg-white/5 border border-white/10 hover:border-indigo-500/50 hover:bg-white/10 p-3 rounded-xl flex justify-center items-center transition-all duration-300 group relative overflow-hidden"
+      title={label}
+    >
       <div className="absolute inset-0 bg-indigo-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
-      <div className="relative transform group-hover:scale-110 transition-transform">{icon}</div>
+      <div className="relative transform group-hover:scale-110 transition-transform">
+        {icon}
+      </div>
     </button>
   );
 
@@ -408,97 +465,129 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   return (
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4 font-sans text-gray-100 relative overflow-hidden">
       <style>{styles}</style>
+      
       <div className="absolute inset-0 bg-gradient-to-br from-[#0f111a] via-[#1a103c] to-[#0f111a] animate-gradient z-0"></div>
       <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 z-0 pointer-events-none"></div>
 
       <div className="w-full max-w-5xl h-[85vh] glass-panel rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row relative z-10">
         <button onClick={() => setView('home')} className="absolute top-6 right-6 z-20 text-gray-400 hover:text-white transition-colors bg-black/20 p-2 rounded-full hover:bg-white/10"><X size={20} /></button>
 
+        {/* LEFT PANEL */}
         <div className="hidden md:flex w-2/5 relative overflow-hidden flex-col justify-between p-12 bg-black/20">
           <div className="absolute inset-0 bg-indigo-600/10 mix-blend-overlay"></div>
           <div className="relative z-10">
-            <div className="w-12 h-12 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-xl mb-6 flex items-center justify-center shadow-lg shadow-indigo-500/30"><Sparkles className="text-white" /></div>
+            <div className="w-12 h-12 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-xl mb-6 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+               <Sparkles className="text-white" />
+             </div>
             <h1 className="text-5xl font-black tracking-tighter text-white mb-2 leading-tight">Join the <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Revolution.</span></h1>
             <p className="text-indigo-200/60 mt-4 text-lg">Your skills. Your rules. Your money.</p>
           </div>
-          <div className="relative z-10"><LegalFooter mobile={false} /></div>
+          <div className="relative z-10">
+             <LegalFooter mobile={false} />
+          </div>
         </div>
 
+        {/* RIGHT PANEL */}
         <div className="flex-1 p-8 md:p-12 overflow-y-auto relative flex flex-col justify-center bg-gradient-to-b from-transparent to-black/40">
-          {loading && (<div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm rounded-3xl"><Loader2 size={40} className="animate-spin text-indigo-500" /></div>)}
+          
+          {loading && (
+             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm rounded-3xl">
+                <Loader2 size={40} className="animate-spin text-indigo-500" />
+             </div>
+          )}
 
+          {/* --- VIEW: EMAIL VERIFICATION SENT --- */}
           {verificationSent ? (
              <div className="max-w-md mx-auto w-full text-center animate-in fade-in zoom-in duration-500">
-               <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-green-500 border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)]"><MailCheck size={40} /></div>
+               <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-green-500 border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.2)]">
+                  <MailCheck size={40} />
+               </div>
                <h2 className="text-3xl font-bold mb-4">Check your Email</h2>
                <p className="text-gray-300 mb-2">We've sent a verification link to:</p>
-               <div className="bg-white/5 border border-white/10 rounded-lg py-2 px-4 inline-block mb-6 font-mono text-indigo-300">{formData.email}</div>
-               
-               <button onClick={async () => { 
-                   const { data: { session } } = await supabase.auth.getSession(); 
-                   if (session) onSignUpSuccess(); 
-                   else alert("Please click the verification link in your email first."); 
-                 }} 
-                 className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 mb-4"
-               >
-                 I have Verified
+               <div className="bg-white/5 border border-white/10 rounded-lg py-2 px-4 inline-block mb-6 font-mono text-indigo-300">
+                 {formData.email}
+               </div>
+               <button onClick={() => { setVerificationSent(false); setViewMode('login'); }} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50">
+                 Return to Login
                </button>
-               
-               <button onClick={handleResendEmail} disabled={loading} className="text-xs text-indigo-400 hover:text-indigo-300 underline mb-6 block mx-auto flex items-center gap-1">
-                 <RefreshCw size={12}/> Didn't receive it? Resend Email
-               </button>
-
-               <button onClick={() => { setVerificationSent(false); setViewMode('login'); }} className="text-gray-400 hover:text-white text-sm">Return to Login</button>
              </div>
           ) : (
             <>
-              {viewMode === 'update_password' && (
-                <div className="max-w-md mx-auto w-full animate-in fade-in zoom-in duration-500">
-                  <button onClick={() => setViewMode('login')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 text-sm font-bold transition-colors"><ArrowLeft size={16}/> Cancel</button>
-                  <h2 className="text-3xl font-bold mb-2">Set New Password</h2>
-                  <p className="text-gray-400 mb-6">Enter your new secure password below.</p>
-                  <form onSubmit={handleUpdatePassword} className="space-y-4">
-                    <div className="group">
-                      <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">New Password</label>
-                      <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
-                        <Lock size={18} className="text-gray-500 mr-3"/>
-                        <input type="password" placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6}/>
-                      </div>
-                    </div>
-                    <button type="submit" disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg">{loading ? <Loader2 className="animate-spin"/> : 'Update Password'}</button>
-                  </form>
-                </div>
-              )}
-
+              {/* --- VIEW: FORGOT PASSWORD --- */}
               {viewMode === 'forgot' && (
                  <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-right-4 duration-300">
                    <button onClick={() => setViewMode('login')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 text-sm font-bold transition-colors"><ArrowLeft size={16}/> Back to Login</button>
                    <h2 className="text-3xl font-bold mb-2">Reset Password</h2>
                    <form onSubmit={handleForgotPassword} className="space-y-4">
-                     <div className="group"><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email Address</label><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Mail size={18} className="text-gray-500 mr-3"/><input type="email" placeholder="you@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required /></div></div>
-                     <button type="submit" disabled={loading} className="w-full bg-white text-black font-bold py-4 rounded-xl transition-all flex justify-center items-center shadow-lg shadow-white/10">{loading ? <Loader2 className="animate-spin"/> : 'Send Reset Link'}</button>
+                     <div className="group">
+                        <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email Address</label>
+                        <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
+                          <Mail size={18} className="text-gray-500 mr-3"/>
+                          <input type="email" placeholder="you@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required />
+                        </div>
+                     </div>
+                     <button type="submit" disabled={loading} className="w-full bg-white text-black font-bold py-4 rounded-xl transition-all flex justify-center items-center shadow-lg shadow-white/10">
+                         {loading ? <Loader2 className="animate-spin"/> : 'Send Reset Link'}
+                     </button>
                    </form>
                  </div>
               )}
 
+              {/* --- VIEW: LOGIN --- */}
               {viewMode === 'login' && (
                 <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
                    <h2 className="text-3xl font-bold mb-2">Welcome Back</h2>
-                   <p className="text-gray-400 mb-8">Enter your credentials.</p>
+                   <p className="text-gray-400 mb-8">Enter your credentials to access your workspace.</p>
+                   
                    <div className="space-y-5">
-                     <div className="group"><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email</label><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Mail size={18} className="text-gray-500 mr-3"/><input type="email" placeholder="name@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} /></div></div>
-                     <div className="group"><div className="flex justify-between items-center mb-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Password</label><button onClick={() => setViewMode('forgot')} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button></div><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Lock size={18} className="text-gray-500 mr-3"/><input type={showPassword ? "text" : "password"} placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} /><button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></div>
+                     <div className="group">
+                       <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email</label>
+                       <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
+                         <Mail size={18} className="text-gray-500 mr-3"/>
+                         <input type="email" placeholder="name@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} />
+                       </div>
+                     </div>
+
+                     <div className="group">
+                       <div className="flex justify-between items-center mb-2">
+                          <label className="text-xs font-bold text-gray-500 uppercase ml-1">Password</label>
+                          <button onClick={() => setViewMode('forgot')} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button>
+                       </div>
+                       <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
+                          <Lock size={18} className="text-gray-500 mr-3"/>
+                         <input type={showPassword ? "text" : "password"} placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} />
+                         <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">
+                             {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
+                         </button>
+                       </div>
+                     </div>
                    </div>
-                   <button onClick={handleFinalSubmit} disabled={loading} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 flex justify-center items-center gap-2">{loading ? <Loader2 className="animate-spin"/> : 'Log In'}</button>
-                   <div className="flex items-center gap-4 my-8"><div className="h-px bg-white/10 flex-1"></div><span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Or continue with</span><div className="h-px bg-white/10 flex-1"></div></div>
-                   <div className="flex gap-3"><SocialButton icon={<GoogleIcon />} onClick={() => handleSocialLogin('google')} label="Google" /><SocialButton icon={<GithubIcon />} onClick={() => handleSocialLogin('github')} label="GitHub" /></div>
-                   <p className="mt-8 text-center text-gray-500 text-sm">Don't have an account? <button onClick={() => setViewMode('signup')} className="text-white font-bold hover:underline">Sign Up</button></p>
+                   
+                   <button onClick={handleFinalSubmit} disabled={loading} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 flex justify-center items-center gap-2">
+                      {loading ? <Loader2 className="animate-spin"/> : 'Log In'}
+                   </button>
+
+                   <div className="flex items-center gap-4 my-8">
+                     <div className="h-px bg-white/10 flex-1"></div>
+                     <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Or continue with</span>
+                     <div className="h-px bg-white/10 flex-1"></div>
+                   </div>
+
+                   <div className="flex gap-3">
+                      <SocialButton icon={<GoogleIcon />} onClick={() => handleSocialLogin('google')} label="Google" />
+                      <SocialButton icon={<GithubIcon />} onClick={() => handleSocialLogin('github')} label="GitHub" />
+                   </div>
+
+                   <p className="mt-8 text-center text-gray-500 text-sm">
+                     Don't have an account? <button onClick={() => setViewMode('signup')} className="text-white font-bold hover:underline">Sign Up</button>
+                   </p>
                 </div>
               )}
 
+              {/* --- VIEW: SIGNUP --- */}
               {viewMode === 'signup' && (
                   <div className="max-w-md mx-auto w-full">
-                     {showVerify ? (
+                   {showVerify ? (
                       <div className="text-center animate-in zoom-in duration-300">
                           <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.2)]">
                             <ShieldAlert size={40} />
@@ -529,11 +618,11 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                       </div>
                    ) : (
                     <>
-                     <div className="flex justify-between items-center mb-8">
+                        <div className="flex justify-between items-center mb-8">
                           {step > 1 ? <button onClick={handleBack} className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"><ArrowLeft size={20}/></button> : <div></div>}
                           <StepIndicator />
                           <div className="w-8"></div> 
-                     </div>
+                        </div>
 
                         {/* STEP 1: ROLE */}
                         {step === 1 && (
@@ -542,30 +631,57 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                             <p className="text-gray-400 mb-8">Choose how you want to use Teenverse.</p>
                             <div className="grid gap-4">
                               {['freelancer', 'client'].map((r) => (
-                                 <button key={r} onClick={() => updateField('role', r)} className={`p-6 rounded-2xl border transition-all text-left relative overflow-hidden group ${formData.role === r ? 'border-indigo-500 bg-indigo-500/10 shadow-[0_0_20px_rgba(99,102,241,0.15)]' : 'border-gray-700 bg-white/5 hover:border-gray-600'}`}>
-                                    <div className="flex justify-between items-start mb-2 relative z-10"><div className={`p-3 rounded-xl ${formData.role === r ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400'}`}>{r === 'freelancer' ? <User size={24}/> : <Briefcase size={24}/>}</div>{formData.role === r && <div className="bg-indigo-500 text-white p-1 rounded-full"><Check size={14}/></div>}</div>
+                                 <button 
+                                    key={r}
+                                    onClick={() => updateField('role', r)}
+                                    className={`p-6 rounded-2xl border transition-all text-left relative overflow-hidden group ${formData.role === r ? 'border-indigo-500 bg-indigo-500/10 shadow-[0_0_20px_rgba(99,102,241,0.15)]' : 'border-gray-700 bg-white/5 hover:border-gray-600'}`}
+                                 >
+                                    <div className="flex justify-between items-start mb-2 relative z-10">
+                                       <div className={`p-3 rounded-xl ${formData.role === r ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                                          {r === 'freelancer' ? <User size={24}/> : <Briefcase size={24}/>}
+                                       </div>
+                                       {formData.role === r && <div className="bg-indigo-500 text-white p-1 rounded-full"><Check size={14}/></div>}
+                                    </div>
                                     <h3 className="text-xl font-bold capitalize relative z-10">{r}</h3>
+                                    <p className="text-sm text-gray-400 mt-1 relative z-10">{r === 'freelancer' ? 'I am a teen looking for work.' : 'I want to hire talent.'}</p>
                                  </button>
                               ))}
                             </div>
                           </div>
                         )}
 
-                        {/* STEP 2: CREDENTIALS */}
+                        {/* STEP 2: CREDENTIALS (Only show if NOT social user) */}
                         {step === 2 && !socialUser && (
                            <div className="animate-in slide-in-from-right-8 duration-500 space-y-5">
-                             <div><h2 className="text-3xl font-bold mb-2">Credentials</h2></div>
-                             <div className="group"><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email</label><input type="email" value={formData.email} onChange={(e) => updateField('email', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/></div>
-                             <div className="group"><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Password</label><input type="password" value={formData.password} onChange={(e) => updateField('password', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/></div>
+                             <div>
+                                <h2 className="text-3xl font-bold mb-2">Credentials</h2>
+                                <p className="text-gray-400 mb-6">Secure your account.</p>
+                             </div>
+                             <div className="group">
+                               <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email</label>
+                               <input type="email" value={formData.email} onChange={(e) => updateField('email', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 focus:bg-black/50 outline-none transition-all" placeholder="name@example.com"/>
+                             </div>
+                             <div className="group">
+                               <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Password</label>
+                               <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4 transition-all focus-within:border-indigo-500 focus-within:bg-black/50">
+                                  <input type={showPassword ? "text" : "password"} value={formData.password} onChange={(e) => updateField('password', e.target.value)} className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" placeholder="••••••••"/>
+                                  <button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button>
+                               </div>
+                             </div>
                            </div>
                         )}
 
-                        {/* STEP 3: PERSONAL */}
+                        {/* STEP 3: PERSONAL & PHONE */}
                         {step === 3 && (
                            <div className="animate-in slide-in-from-right-8 duration-500 space-y-5">
-                             <div><h2 className="text-3xl font-bold mb-2">Personal Info</h2></div>
-                             <div className="group"><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Name</label><input value={formData.name} onChange={(e) => updateField('name', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/></div>
-                             <div className="group"><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Phone</label><input type="tel" value={formData.phone} onChange={(e) => updateField('phone', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/></div>
+                             <div>
+                                <h2 className="text-3xl font-bold mb-2">Personal Info</h2>
+                                <p className="text-gray-400 mb-6">Tell us about yourself.</p>
+                             </div>
+                             <div className="group">
+                                <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Full Name</label>
+                                <input value={formData.name} onChange={(e) => updateField('name', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all"/>
+                             </div>
                              <div className="flex gap-4">
                                 <div className="flex-1 group">
                                    <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Phone (India)</label>
@@ -592,12 +708,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                         {step === 4 && (
                            <div className="animate-in slide-in-from-right-8 duration-500">
                              <h2 className="text-3xl font-bold mb-2">Final Step</h2>
+                             <p className="text-gray-400 mb-6">Almost there!</p>
                              <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
                                 {formData.role === 'freelancer' ? (
                                    <>
                                       <div className="bg-black/30 p-4 rounded-xl border border-gray-700/50">
-                                         <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">DOB</label>
-                                         <input type="date" value={formData.dob} onChange={(e) => updateField('dob', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white"/>
+                                         <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Date of Birth <span className="text-red-500">*</span></label>
+                                         <input type="date" value={formData.dob} onChange={(e) => updateField('dob', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none"/>
                                           {age !== null && <div className={`text-xs mt-2 font-bold px-2 py-1 inline-block rounded ${isMinor ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>Age: {age} {isMinor && "(Parent Verification Required)"}</div>}
                                       </div>
                                       
@@ -608,24 +725,48 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                          </div>
                                       )}
                                       
-                                      {/* 🛑 REMOVED: ID Upload Input (Moved to Dashboard/KYC) */}
+                                      
                                    </>
                                 ) : (
-                                   <div><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Organization</label><input placeholder="Optional" onChange={(e) => updateField('org', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white"/></div>
+                                   <div><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Organization Name</label><input placeholder="Company Name (Optional)" onChange={(e) => updateField('org', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white focus:border-indigo-500 outline-none"/></div>
                                 )}
-                                <div className="flex items-start gap-3 mt-6"><input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} /><label className="text-xs text-gray-400">I agree to Terms & Privacy.</label></div>
+
+                                <div className="flex items-start gap-3 mt-6 p-3 bg-white/5 rounded-xl border border-white/5">
+                                    <input 
+                                        type="checkbox" 
+                                        id="terms" 
+                                        checked={agreedToTerms}
+                                        onChange={(e) => setAgreedToTerms(e.target.checked)}
+                                        className="mt-1 w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 bg-gray-700"
+                                     />
+                                    <label htmlFor="terms" className="text-xs text-gray-400 leading-relaxed cursor-pointer select-none">
+                                        I agree to the <button type="button" onClick={(e) => handleLegalClick(e, 'terms')} className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold">Terms of Service</button> and <button type="button" onClick={(e) => handleLegalClick(e, 'privacy')} className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold">Privacy Policy</button>.
+                                    </label>
+                                </div>
                              </div>
                            </div>
                         )}
 
                         <div className="mt-8 pt-6 border-t border-white/10 flex justify-end">
-                           {step < 4 ? <button onClick={handleNext} disabled={loading} className="bg-white text-black hover:bg-gray-200 px-8 py-3 rounded-xl font-bold">Next</button> : <button onClick={handleFinalSubmit} disabled={loading} className="bg-indigo-600 text-white hover:bg-indigo-500 px-8 py-3 rounded-xl font-bold">Create Account</button>}
+                           {step < 4 ? (
+                              <button onClick={handleNext} disabled={loading} className="bg-white text-black hover:bg-gray-200 px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50">
+                                {loading ? <Loader2 className="animate-spin" size={18}/> : <>Next <ChevronRight size={18}/></>}
+                              </button>
+                           ) : (
+                              <button onClick={handleFinalSubmit} disabled={loading} className="bg-indigo-600 text-white hover:bg-indigo-500 px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-900/50 disabled:opacity-50">{loading ? <Loader2 className="animate-spin"/> : 'Create Account'}</button>
+                           )}
                         </div>
-                         <div className="mt-8 text-center">{!socialUser && <button onClick={() => setViewMode('login')} className="text-gray-500 text-sm hover:text-white">Already have an account? Log In</button>}</div>
+                        
+                        <div className="mt-8 text-center">
+                           {!socialUser && (
+                              <button onClick={() => setViewMode('login')} className="text-gray-500 text-sm hover:text-white transition-colors">Already have an account? Log In</button>
+                           )}
+                        </div>
+
                          <LegalFooter mobile={true} />
-                  </>
-            )}
-            </div>
+                      </>
+                   )}
+                 </div>
               )}
             </>
           )}
@@ -634,4 +775,5 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     </div>
   );
 };
+
 export default Auth;
