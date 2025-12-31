@@ -4,7 +4,6 @@ import Toast from './components/ui/Toast';
 import { Loader2 } from 'lucide-react';
 
 // Pages
-// Assuming these exist in your project structure
 import LandingPage from './pages/LandingPage';
 import Auth from './pages/Auth'; 
 import Dashboard from './pages/Dashboard';
@@ -53,6 +52,7 @@ export default function TeenVerse() {
   // Helper to process user data from DB
   const handleSession = async (session) => {
     if (!session) {
+      // Only reset view if we are on a protected route
       if (view !== 'parent-approval' && view !== 'landing' && view !== 'legal' && view !== 'auth') {
          setUser(null);
          setView('home');
@@ -63,7 +63,7 @@ export default function TeenVerse() {
 
     const u = session.user;
     
-    // Avoid re-fetching if user is already loaded
+    // Avoid re-fetching if user is already loaded and matching
     if (user && user.id === u.id) {
         setLoading(false);
         return;
@@ -85,7 +85,7 @@ export default function TeenVerse() {
         return; 
       }
 
-      // B. CHECK CLIENT
+      // B. CHECK CLIENT PROFILE
       let { data: c } = await supabase
         .from('clients')
         .select('*')
@@ -99,7 +99,7 @@ export default function TeenVerse() {
           return;
       }
 
-      // C. CHECK FREELANCER
+      // C. CHECK FREELANCER PROFILE
       let { data: f } = await supabase
         .from('freelancers')
         .select('*')
@@ -109,12 +109,16 @@ export default function TeenVerse() {
       if (f) { 
           setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] }); 
           setView('dashboard'); 
+          setLoading(false);
+          return;
       }
       
-      // New User / Profile Not Created Yet
+      // 4. NEW USER (Google/GitHub Login) -> HAS AUTH BUT NO PROFILE
+      // 🛑 FORCE REDIRECT TO AUTH PAGE TO COMPLETE SETUP
       if (!c && !f && !adminCheck) {
-           setUser({ id: u.id, email: u.email, name: u.user_metadata?.full_name || "New User" });
-           // Ideally stay on 'auth' or go to a 'setup' page
+           console.log("New Social User detected. Redirecting to setup...");
+           setUser(null); // Ensure no partial user state so Auth page treats them correctly
+           setView('auth'); // <--- THIS IS THE FIX: Send them to Auth to pick Role/Phone/DOB
       }
 
     } catch (err) {

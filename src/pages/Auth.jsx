@@ -2,15 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, UploadCloud, ShieldAlert, Mail, ArrowRight, ArrowLeft, 
   User, Briefcase, Check, ChevronRight, Loader2, Lock, 
-  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck
+  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../supabase'; // ✅ ONLY SUPABASE
 import imageCompression from 'browser-image-compression';
 
 // LEGAL: Version control for the consent text.
 const CONSENT_VERSION = "v1.0_TEENVERSE_PARENT_AGREEMENT_2025";
-
-
 
 // --- STYLES ---
 const styles = `
@@ -42,7 +40,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [viewMode, setViewMode] = useState('login');
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [file, setFile] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
    
   // Verification States
@@ -53,8 +50,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [parentAgreed, setParentAgreed] = useState(false);
    
-  // Social Login Handling
+  // Social & Password Update
   const [socialUser, setSocialUser] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
 
   const [formData, setFormData] = useState({
     role: 'freelancer', 
@@ -76,6 +74,12 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   // --- SUPABASE SESSION & REDIRECT CHECK ---
   useEffect(() => {
+    // Check if user is coming from a Password Reset Link (Magic Link)
+    const hash = window.location.hash;
+    if (hash && hash.includes('type=recovery')) {
+      setViewMode('update_password');
+    }
+
     const checkSession = async () => {
       setLoading(true);
       try {
@@ -83,11 +87,14 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
+          // If we are in recovery mode, don't auto-login yet
+          if (hash && hash.includes('type=recovery')) return;
+
           const user = session.user;
 
           // 2. Check if Profile Exists
-          const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.id).single();
-          const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.id).single();
+          const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.id).maybeSingle();
+          const { data: clientData } = await supabase.from('clients').select('id').eq('id', user.id).maybeSingle();
 
           if (freelancerData || clientData) {
              // ✅ Profile exists -> Log them in
@@ -171,8 +178,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         setLoading(true);
         try {
             // Check Phone Uniqueness via Supabase
-            const { data: fData } = await supabase.from('freelancers').select('phone').eq('phone', formData.phone).single();
-            const { data: cData } = await supabase.from('clients').select('phone').eq('phone', formData.phone).single();
+            const { data: fData } = await supabase.from('freelancers').select('phone').eq('phone', formData.phone).maybeSingle();
+            const { data: cData } = await supabase.from('clients').select('phone').eq('phone', formData.phone).maybeSingle();
 
             if (fData || cData) {
                 setLoading(false);
@@ -206,7 +213,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: window.location.origin + '?view=reset', // Handle this in App.js if needed
+        redirectTo: window.location.origin + '#type=recovery', // Handle this in App.js if needed
       });
       if (error) throw error;
       alert("Password reset link sent to your email!");
@@ -236,6 +243,34 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    
+    if (error) {
+       alert("Error updating password: " + error.message);
+    } else {
+       alert("Password updated successfully! Please log in.");
+       setViewMode('login');
+       // Clean URL
+       window.history.replaceState(null, '', window.location.pathname);
+    }
+    setLoading(false);
+  };
+
+  // --- EMAIL VERIFICATION RESEND ---
+  const handleResendEmail = async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: formData.email,
+    });
+    setLoading(false);
+    if (error) alert(error.message);
+    else alert("Verification email resent! Check your spam folder.");
+  };
+
   // --- FINAL SUBMIT LOGIC ---
   const handleFinalSubmit = async () => {
     if (viewMode !== 'login' && !agreedToTerms) {
@@ -262,7 +297,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                 return alert("Date of Birth is legally required.");
             }
 
-          
             if (age < 13) {
                 setLoading(false);
                 throw new Error("You must be at least 13 years old to join TeenVerse.");
@@ -334,85 +368,85 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   // --- CORE SIGNUP FUNCTION ---
-  // 🟢 THIS IS WHERE THE FIX IS APPLIED
   const completeSignup = async () => {
     let uid = "";
     let email = formData.email;
 
-    // 1. Create Auth User (if not already via social)
+    // --- SCENARIO A: SOCIAL LOGIN (User already exists in Auth, but needs DB row) ---
     if (socialUser) {
         uid = socialUser.id;
         email = socialUser.email;
-    } else {
-        const { data, error } = await supabase.auth.signUp({
-            email: formData.email,
-            password: formData.password,
-            options: {
-                data: { full_name: formData.name } // Metadata
-            }
-        });
-        if (error) throw error;
-        if (!data.user) throw new Error("Signup failed. No user returned.");
-        uid = data.user.id;
+
+        // Manual DB Insert (Because Trigger won't fire for existing users)
+        const table = formData.role === 'client' ? 'clients' : 'freelancers';
+        const myRefCode = `${formData.name.split(' ')[0].toUpperCase()}${Math.floor(1000 + Math.random() * 9000)}`;
+
+        const dbData = formData.role === 'client' 
+         ? { 
+             id: uid, 
+             name: formData.name, 
+             email: email, 
+             phone: formData.phone, 
+             nationality: formData.nationality, 
+             // id_proof_url is handled in dashboard
+             is_organisation: formData.org,
+             referral_code: myRefCode,
+             referred_by: formData.referralCode || null
+           }
+         : { 
+             id: uid, 
+             name: formData.name, 
+             email: email, 
+             phone: formData.phone, 
+             nationality: formData.nationality, 
+             // id_proof_url is handled in dashboard
+             dob: formData.dob, 
+             age: age, 
+             gender: formData.gender, 
+             upi: formData.upi, 
+             is_parent_verified: isMinor, 
+             unlocked_skills: [],
+             referral_code: myRefCode,
+             referred_by: formData.referralCode || null
+           };
+
+        const { error } = await supabase.from(table).insert([dbData]);
+        if (error) {
+            console.error("Social DB Insert Failed:", error);
+            throw new Error("Could not save profile: " + error.message);
+        }
+        
+        // Social Signup Complete!
+        onSignUpSuccess(); 
+        return; 
     }
 
-    if (!uid) {
-        throw new Error("Critical Error: User ID not found. Cannot proceed.");
-    }
-
-
-
-    // 3. Create Database Profile
-    const table = formData.role === 'client' ? 'clients' : 'freelancers';
+    // --- SCENARIO B: EMAIL SIGNUP (New User, Trigger handles DB) ---
     
-    // Generate own referral code: Name + 4 random digits
-    const myRefCode = `${formData.name.split(' ')[0].toUpperCase()}${Math.floor(1000 + Math.random() * 9000)}`;
+    // Prepare Metadata for the Trigger
+    const metadata = {
+        full_name: formData.name,
+        role: formData.role,
+        phone: formData.phone,
+        nationality: formData.nationality,
+        dob: formData.dob,
+        gender: formData.gender,
+        org: formData.org || '',
+        is_minor: isMinor,
+    };
+
+    const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: { data: metadata } // <--- Pass data to Trigger
+    });
     
-    // 🟢 RLS FIX: Explicitly setting 'id' to 'uid'
-    const dbData = formData.role === 'client' 
-       ? { 
-           id: uid, // <--- MATCHING AUTH ID
-           name: formData.name, 
-           email: email, 
-           phone: formData.phone, 
-           nationality: formData.nationality, 
-           id_proof_url: filePath, 
-           is_organisation: formData.org,
-           referral_code: myRefCode,
-           referred_by: formData.referralCode || null
-         }
-       : { 
-           id: uid, // <--- MATCHING AUTH ID
-           name: formData.name, 
-           email: email, 
-           phone: formData.phone, 
-           nationality: formData.nationality, 
-            
-           dob: formData.dob, 
-           age: age, 
-           gender: formData.gender, 
-           upi: formData.upi, 
-           is_parent_verified: isMinor, 
-           unlocked_skills: [],
-           referral_code: myRefCode,
-           referred_by: formData.referralCode || null
-         };
+    if (error) throw error;
+    if (!data.user) throw new Error("User creation failed.");
+    uid = data.user.id;
 
-    console.log("Attempting DB Insert:", dbData); // 🟡 DEBUG LOG
-
-    // Insert with Manual Rollback Check
-    const { error } = await supabase.from(table).insert([dbData]);
-    
-    if (error) {
-        console.error("DB Insert Failed:", error);
-        // ⚠️ CRITICAL: Rollback Auth if DB fails (prevent zombie accounts)
-        await supabase.auth.signOut();
-        // Give a clear error message
-        throw new Error("Database Error: " + error.message);
-    }
-
-    // 4. Log Parent Consent (If Minor)
-    if (isMinor) {
+    // Log Consent
+    if (isMinor && uid) {
         const { error: logError } = await supabase.functions.invoke('log-parent-consent', {
             body: {
                 user_id: uid,
@@ -423,13 +457,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         if (logError) console.error("Consent Log Warning:", logError); 
     }
 
-    if (socialUser) {
-      onSignUpSuccess();
-    } else {
-      // If Email Confirmation is enabled in Supabase settings:
-      setVerificationSent(true);
-      setLoading(false);
-    }
+    // If Email Confirmation is enabled in Supabase settings:
+    setVerificationSent(true);
+    setLoading(false);
   };
 
   // --- SUB-COMPONENTS ---
@@ -507,12 +537,58 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                <div className="bg-white/5 border border-white/10 rounded-lg py-2 px-4 inline-block mb-6 font-mono text-indigo-300">
                  {formData.email}
                </div>
-               <button onClick={() => { setVerificationSent(false); setViewMode('login'); }} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50">
+               
+                {/* MANUAL CHECK BUTTON */}
+               <button onClick={async () => { 
+                   const { data: { session } } = await supabase.auth.getSession(); 
+                   if (session) onSignUpSuccess(); 
+                   else alert("Please click the verification link in your email first."); 
+                 }} 
+                 className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 mb-4"
+               >
+                 I have Verified
+               </button>
+
+               <button onClick={handleResendEmail} disabled={loading} className="text-xs text-indigo-400 hover:text-indigo-300 underline mb-6 block mx-auto flex items-center gap-1 justify-center">
+                 <RefreshCw size={12}/> Didn't receive it? Resend Email
+               </button>
+
+               <button onClick={() => { setVerificationSent(false); setViewMode('login'); }} className="w-full text-gray-400 hover:text-white text-sm">
                  Return to Login
                </button>
              </div>
           ) : (
             <>
+              {/* --- VIEW: UPDATE PASSWORD (Triggered by Email Link) --- */}
+              {viewMode === 'update_password' && (
+                <div className="max-w-md mx-auto w-full animate-in fade-in zoom-in duration-500">
+                  <button onClick={() => setViewMode('login')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 text-sm font-bold transition-colors"><ArrowLeft size={16}/> Cancel</button>
+                  <h2 className="text-3xl font-bold mb-2">Set New Password</h2>
+                  <p className="text-gray-400 mb-6">Enter your new secure password below.</p>
+                  
+                  <form onSubmit={handleUpdatePassword} className="space-y-4">
+                    <div className="group">
+                      <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">New Password</label>
+                      <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
+                        <Lock size={18} className="text-gray-500 mr-3"/>
+                        <input 
+                          type="password" 
+                          placeholder="••••••••" 
+                          className="bg-transparent border-none outline-none w-full py-4 text-white" 
+                          value={newPassword} 
+                          onChange={(e) => setNewPassword(e.target.value)} 
+                          required
+                          minLength={6}
+                        />
+                      </div>
+                    </div>
+                    <button type="submit" disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl shadow-lg">
+                      {loading ? <Loader2 className="animate-spin"/> : 'Update Password'}
+                    </button>
+                  </form>
+                </div>
+              )}
+
               {/* --- VIEW: FORGOT PASSWORD --- */}
               {viewMode === 'forgot' && (
                  <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-right-4 duration-300">
