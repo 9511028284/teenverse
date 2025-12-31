@@ -50,9 +50,10 @@ export default function TeenVerse() {
   }, []);
 
   // Helper to process user data from DB
+// Helper to process user data from DB
   const handleSession = async (session) => {
+    // 1. No Session? Go Home.
     if (!session) {
-      // Only reset view if we are on a protected route
       if (view !== 'parent-approval' && view !== 'landing' && view !== 'legal' && view !== 'auth') {
          setUser(null);
          setView('home');
@@ -62,68 +63,46 @@ export default function TeenVerse() {
     }
 
     const u = session.user;
-    
-    // Avoid re-fetching if user is already loaded and matching
-    if (user && user.id === u.id) {
-        setLoading(false);
-        return;
-    }
 
     try {
-      // A. CHECK ADMIN
-      const { data: adminCheck } = await supabase
-        .from('admins')
-        .select('*')
-        .eq('email', u.email)
-        .maybeSingle();
-      
+      // 2. CHECK ADMIN
+      const { data: adminCheck } = await supabase.from('admins').select('*').eq('email', u.email).maybeSingle();
       if (adminCheck) {
-        setUser({ id: u.id, email: u.email, name: "Super Admin", type: "admin" });
+        setUser({ ...u, type: "admin" });
         setView('admin');
-        showToast('Welcome Admin!');
         setLoading(false);
         return; 
       }
 
-      // B. CHECK CLIENT PROFILE
-      let { data: c } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', u.id)
-        .maybeSingle();
-
+      // 3. CHECK IF CLIENT PROFILE EXISTS
+      let { data: c } = await supabase.from('clients').select('*').eq('id', u.id).maybeSingle();
       if (c) { 
           setUser({ ...c, type: 'client' }); 
-          setView('dashboard'); 
+          setView('dashboard'); // ✅ Only go to dashboard if profile exists
           setLoading(false);
           return;
       }
 
-      // C. CHECK FREELANCER PROFILE
-      let { data: f } = await supabase
-        .from('freelancers')
-        .select('*')
-        .eq('id', u.id)
-        .maybeSingle();
-      
+      // 4. CHECK IF FREELANCER PROFILE EXISTS
+      let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
       if (f) { 
           setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] }); 
-          setView('dashboard'); 
+          setView('dashboard'); // ✅ Only go to dashboard if profile exists
           setLoading(false);
           return;
       }
       
-      // 4. NEW USER (Google/GitHub Login) -> HAS AUTH BUT NO PROFILE
-      // 🛑 FORCE REDIRECT TO AUTH PAGE TO COMPLETE SETUP
-      if (!c && !f && !adminCheck) {
-           console.log("New Social User detected. Redirecting to setup...");
-           setUser(null); // Ensure no partial user state so Auth page treats them correctly
-           setView('auth'); // <--- THIS IS THE FIX: Send them to Auth to pick Role/Phone/DOB
-      }
+      // 5. 🛑 TRAP: LOGGED IN BUT NO PROFILE (Google/GitHub User)
+      // If we reach here, they have a Google Session, but NO database row.
+      console.log("User logged in via Social, but profile missing. Redirecting to setup...");
+      
+      // DO NOT set 'dashboard'. Force 'auth'.
+      setUser(null); 
+      setView('auth'); 
+      setLoading(false);
 
     } catch (err) {
       console.error("Profile Fetch Error:", err);
-    } finally {
       setLoading(false);
     }
   };
