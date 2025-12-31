@@ -1,12 +1,26 @@
 import React from 'react';
-import { Code, PenTool, Video, Music, ShieldCheck, Star, Zap } from 'lucide-react';
+import { 
+  Code, PenTool, Video, Music, ShieldCheck, Star, Zap, Feather 
+} from 'lucide-react';
 
+// --- REQUIRED FOR DASHBOARD LOGIC (Fixes the crash) ---
+export const APP_STATUS = {
+  PENDING: 'Pending',
+  ACCEPTED: 'Accepted',
+  REJECTED: 'Rejected',
+  SUBMITTED: 'Submitted',
+  COMPLETED: 'Completed',
+  PAID: 'Paid',
+  DISPUTED: 'Disputed'
+};
+
+// --- THEME COLORS ---
 export const COLORS = {
   primary: "from-indigo-600 to-violet-600",
   secondary: "from-emerald-500 to-teal-500",
 };
 
-// --- NEW: REQUIRED FOR DROPDOWNS ---
+// --- REQUIRED FOR DROPDOWNS ---
 export const LOCAL_CATEGORIES = {
   'dev': 'Development',
   'design': 'Design',
@@ -57,6 +71,7 @@ export const CATEGORIES = [
   },
 ];
 
+// --- QUIZZES ---
 export const QUIZZES = {
   dev: {
     title: "Web Development 101",

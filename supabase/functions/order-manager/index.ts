@@ -77,7 +77,7 @@ serve(async (req) => {
         });
     }
 
-    [cite_start]// 8. 🛡️ NEW: Enforce KYC Verification (The Unhappy Path) [cite: 1]
+    // 8. 🛡️ NEW: Enforce KYC Verification (The Unhappy Path)
     // Blocks money movement if KYC is not approved
     const KYC_RESTRICTED_ACTIONS = ['ACCEPT_APPLICATION', 'RELEASE_ESCROW'];
     
