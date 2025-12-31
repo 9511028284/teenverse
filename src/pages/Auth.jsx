@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, UploadCloud, ShieldAlert, Mail, ArrowRight, ArrowLeft, 
   User, Briefcase, Check, ChevronRight, Loader2, Lock, 
-  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck, RefreshCw
+  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck, RefreshCw, ShieldCheck
 } from 'lucide-react';
-import { supabase } from '../supabase'; // ⚠️ Check path: '../supabase' or './supabase' based on folder structure
-import imageCompression from 'browser-image-compression';
+import { supabase } from '../supabase'; 
+import { Turnstile } from '@marsidev/react-turnstile'; // 🆕 IMPORT TURNSTILE
 
 // LEGAL: Version control for the consent text.
 const CONSENT_VERSION = "v1.0_TEENVERSE_PARENT_AGREEMENT_2025";
+const CLOUDFLARE_SITE_KEY = import.meta.env.VITE_CLOUDFLARE_SITE_KEY; // 🆕 GET KEY
 
 // --- STYLES ---
 const styles = `
@@ -50,6 +51,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [parentAgreed, setParentAgreed] = useState(false);
    
+  // 🛡️ SECURITY STATES
+  const [captchaToken, setCaptchaToken] = useState(null); // 🆕 Captcha State
+
   // Social & Password Update
   const [socialUser, setSocialUser] = useState(null);
   const [newPassword, setNewPassword] = useState('');
@@ -71,6 +75,17 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   const [age, setAge] = useState(null);
   const [isMinor, setIsMinor] = useState(false);
+
+  // --- 🔒 DEVICE FINGERPRINTING ---
+  const getDeviceFingerprint = () => {
+    return {
+        userAgent: navigator.userAgent,
+        language: navigator.language,
+        screenSize: `${window.screen.width}x${window.screen.height}`,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        platform: navigator.platform
+    };
+  };
 
   // --- 1. SUPABASE SESSION & URL HASH CHECK ---
   useEffect(() => {
@@ -94,7 +109,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
           if (freelancerData || clientData) {
              onLogin(`Welcome back!`);
           } else {
-             // New Social User Logic
              setSocialUser(user);
              setFormData(prev => ({
                ...prev,
@@ -206,6 +220,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
         redirectTo: window.location.origin + '#type=recovery',
+        options: { captchaToken } // 🆕 PASS CAPTCHA IF APPLICABLE
       });
       if (error) throw error;
       alert("Password reset link sent to your email!");
@@ -283,6 +298,14 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   const handleFinalSubmit = async () => {
+    // 🛡️ CAPTCHA CHECK
+    if (CLOUDFLARE_SITE_KEY && !captchaToken && viewMode === 'login') {
+        return alert("Please complete the security check.");
+    }
+    if (CLOUDFLARE_SITE_KEY && !captchaToken && viewMode === 'signup' && step === 4) {
+        return alert("Please complete the security check.");
+    }
+
     if (viewMode !== 'login' && !agreedToTerms) {
         return alert("You must agree to the Terms & Privacy Policy to continue.");
     }
@@ -293,8 +316,10 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         const { error } = await supabase.auth.signInWithPassword({
             email: formData.email,
             password: formData.password,
+            options: { captchaToken } // 🆕 PASSING TOKEN TO SUPABASE
         });
         if (error) throw error;
+        
       } else {
         if (formData.role === 'freelancer') {
             if (!formData.dob) { setLoading(false); return alert("Date of Birth is legally required."); }
@@ -317,10 +342,10 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                 throw new Error("Failed to send verification code. Please try again.");
            }
            
-            localStorage.setItem('last_otp_sent', Date.now().toString());
-            setShowVerify(true);
-            setLoading(false);
-            return;
+           localStorage.setItem('last_otp_sent', Date.now().toString());
+           setShowVerify(true);
+           setLoading(false);
+           return;
         }
 
         await completeSignup();
@@ -328,17 +353,30 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     } catch (err) {
       alert(err.message);
       setLoading(false);
+      setCaptchaToken(null); // Reset on failure
     }
   };
 
   const completeSignup = async () => {
     let uid = "";
     let email = formData.email;
+    const deviceMeta = getDeviceFingerprint(); 
 
     // --- SCENARIO A: SOCIAL USER (Manual Insert) ---
     if (socialUser) {
         uid = socialUser.id;
         email = socialUser.email;
+
+        // 1. Create Base User
+        const { error: userError } = await supabase.from('users').upsert({
+            id: uid,
+            email: email,
+            full_name: formData.name,
+            avatar_url: socialUser.user_metadata?.avatar_url,
+            raw_app_meta_data: { device: deviceMeta } 
+        });
+
+        if (userError) console.error("User Creation Failed:", userError);
 
         const table = formData.role === 'client' ? 'clients' : 'freelancers';
         const myRefCode = `${formData.name.split(' ')[0].toUpperCase()}${Math.floor(1000 + Math.random() * 9000)}`;
@@ -350,7 +388,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
              email: email, 
              phone: formData.phone, 
              nationality: formData.nationality, 
-             // ID handled in dashboard
              is_organisation: formData.org,
              referral_code: myRefCode,
              referred_by: formData.referralCode || null
@@ -361,7 +398,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
              email: email, 
              phone: formData.phone, 
              nationality: formData.nationality, 
-             // ID handled in dashboard
              dob: formData.dob, 
              age: age, 
              gender: formData.gender, 
@@ -378,11 +414,22 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
             throw new Error("Could not save profile: " + error.message);
         }
         
+        // 2. LOG CONSENT
+        if (isMinor) {
+            await supabase.functions.invoke('log-parent-consent', {
+                body: {
+                    user_id: uid,
+                    parent_email: formData.parentEmail,
+                    consent_version: CONSENT_VERSION
+                }
+            });
+        }
+        
         onSignUpSuccess(); 
         return; 
     }
 
-    // --- SCENARIO B: EMAIL USER (Trigger) ---
+    // --- SCENARIO B: EMAIL USER ---
     const metadata = {
         full_name: formData.name,
         role: formData.role,
@@ -392,12 +439,16 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         gender: formData.gender,
         org: formData.org || '',
         is_minor: isMinor,
+        device_fingerprint: deviceMeta 
     };
 
     const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        options: { data: metadata } 
+        options: { 
+            data: metadata,
+            captchaToken: captchaToken // 🆕 PASS CAPTCHA
+        } 
     });
     
     if (error) throw error;
@@ -513,6 +564,12 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                    <h2 className="text-3xl font-bold mb-2">Reset Password</h2>
                    <form onSubmit={handleForgotPassword} className="space-y-4">
                      <div className="group"><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email Address</label><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Mail size={18} className="text-gray-500 mr-3"/><input type="email" placeholder="you@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required /></div></div>
+                     {/* 🛡️ CAPTCHA FOR FORGOT PASSWORD */}
+                     {CLOUDFLARE_SITE_KEY && (
+                         <div className="my-2 flex justify-center">
+                             <Turnstile siteKey={CLOUDFLARE_SITE_KEY} onSuccess={setCaptchaToken} theme="dark" />
+                         </div>
+                     )}
                      <button type="submit" disabled={loading} className="w-full bg-white text-black font-bold py-4 rounded-xl transition-all flex justify-center items-center shadow-lg shadow-white/10">{loading ? <Loader2 className="animate-spin"/> : 'Send Reset Link'}</button>
                    </form>
                  </div>
@@ -526,7 +583,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                      <div className="group"><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email</label><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Mail size={18} className="text-gray-500 mr-3"/><input type="email" placeholder="name@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} /></div></div>
                      <div className="group"><div className="flex justify-between items-center mb-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Password</label><button onClick={() => setViewMode('forgot')} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button></div><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Lock size={18} className="text-gray-500 mr-3"/><input type={showPassword ? "text" : "password"} placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} /><button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></div>
                    </div>
-                   <button onClick={handleFinalSubmit} disabled={loading} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 flex justify-center items-center gap-2">{loading ? <Loader2 className="animate-spin"/> : 'Log In'}</button>
+                   
+                   {/* 🛡️ CLOUDFLARE TURNSTILE WIDGET (LOGIN) */}
+                   {CLOUDFLARE_SITE_KEY && (
+                     <div className="mt-6 flex justify-center">
+                        <Turnstile siteKey={CLOUDFLARE_SITE_KEY} onSuccess={setCaptchaToken} theme="dark" />
+                     </div>
+                   )}
+
+                   <button onClick={handleFinalSubmit} disabled={loading} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 flex justify-center items-center gap-2">{loading ? <Loader2 className="animate-spin"/> : 'Log In'}</button>
                    <div className="flex items-center gap-4 my-8"><div className="h-px bg-white/10 flex-1"></div><span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Or continue with</span><div className="h-px bg-white/10 flex-1"></div></div>
                    <div className="flex gap-3"><SocialButton icon={<GoogleIcon />} onClick={() => handleSocialLogin('google')} label="Google" /><SocialButton icon={<GithubIcon />} onClick={() => handleSocialLogin('github')} label="GitHub" /></div>
                    <p className="mt-8 text-center text-gray-500 text-sm">Don't have an account? <button onClick={() => setViewMode('signup')} className="text-white font-bold hover:underline">Sign Up</button></p>
@@ -535,42 +600,42 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
               {viewMode === 'signup' && (
                   <div className="max-w-md mx-auto w-full">
-                     {showVerify ? (
-                      <div className="text-center animate-in zoom-in duration-300">
-                          <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.2)]">
-                            <ShieldAlert size={40} />
-                          </div>
-                          <h2 className="text-2xl font-bold mb-2">Guardian Consent Required</h2>
-                          <p className="text-gray-400 mb-6 text-sm">We sent a 6-digit code to <span className="text-white font-mono bg-white/10 px-2 py-0.5 rounded">{formData.parentEmail}</span></p>
-                          
-                          <div className="relative mb-6">
-                              <input className="w-full bg-black/40 border border-gray-700 rounded-xl py-5 text-center text-3xl tracking-[1em] font-mono text-white focus:border-orange-500 focus:shadow-[0_0_20px_rgba(249,115,22,0.2)] outline-none transition-all" placeholder="000000" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} />
-                          </div>
+                      {showVerify ? (
+                       <div className="text-center animate-in zoom-in duration-300">
+                           <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.2)]">
+                             <ShieldAlert size={40} />
+                           </div>
+                           <h2 className="text-2xl font-bold mb-2">Guardian Consent Required</h2>
+                           <p className="text-gray-400 mb-6 text-sm">We sent a 6-digit code to <span className="text-white font-mono bg-white/10 px-2 py-0.5 rounded">{formData.parentEmail}</span></p>
+                           
+                           <div className="relative mb-6">
+                               <input className="w-full bg-black/40 border border-gray-700 rounded-xl py-5 text-center text-3xl tracking-[1em] font-mono text-white focus:border-orange-500 focus:shadow-[0_0_20px_rgba(249,115,22,0.2)] outline-none transition-all" placeholder="000000" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} />
+                           </div>
 
-                          <div className="mb-8 text-left bg-orange-500/5 p-4 rounded-xl border border-orange-500/20">
-                             <label className="flex items-start gap-3 cursor-pointer">
-                                 <input 
+                           <div className="mb-8 text-left bg-orange-500/5 p-4 rounded-xl border border-orange-500/20">
+                              <label className="flex items-start gap-3 cursor-pointer">
+                                  <input 
                                      type="checkbox" 
                                      className="mt-1 w-5 h-5 rounded border-gray-600 bg-black text-orange-600 focus:ring-orange-500"
                                      checked={parentAgreed}
                                      onChange={(e) => setParentAgreed(e.target.checked)}
-                                 />
-                                 <span className="text-xs text-gray-300 leading-relaxed">
-                                      <span className="font-bold text-orange-400">LEGAL DECLARATION:</span> I am the parent/legal guardian of the above child. I consent to my child using TeenVerseHub for non-hazardous digital services and receiving payments. I have reviewed the platform Terms.
-                                 </span>
-                             </label>
-                          </div>
-                       
-                          <button onClick={handleVerifyOTP} disabled={loading} className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-900/50">{loading ? 'Verifying...' : 'Verify & Consent'}</button>
-                          <button onClick={() => setShowVerify(false)} className="mt-6 text-gray-500 text-sm hover:text-white transition-colors">Change Parent Email</button>
+                                  />
+                                  <span className="text-xs text-gray-300 leading-relaxed">
+                                       <span className="font-bold text-orange-400">LEGAL DECLARATION:</span> I am the parent/legal guardian of the above child. I consent to my child using TeenVerseHub for non-hazardous digital services and receiving payments. I have reviewed the platform Terms.
+                                  </span>
+                              </label>
+                           </div>
+                         
+                           <button onClick={handleVerifyOTP} disabled={loading} className="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-orange-900/50">{loading ? 'Verifying...' : 'Verify & Consent'}</button>
+                           <button onClick={() => setShowVerify(false)} className="mt-6 text-gray-500 text-sm hover:text-white transition-colors">Change Parent Email</button>
+                       </div>
+                    ) : (
+                     <>
+                      <div className="flex justify-between items-center mb-8">
+                           {step > 1 ? <button onClick={handleBack} className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"><ArrowLeft size={20}/></button> : <div></div>}
+                           <StepIndicator />
+                           <div className="w-8"></div> 
                       </div>
-                   ) : (
-                    <>
-                     <div className="flex justify-between items-center mb-8">
-                          {step > 1 ? <button onClick={handleBack} className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"><ArrowLeft size={20}/></button> : <div></div>}
-                          <StepIndicator />
-                          <div className="w-8"></div> 
-                     </div>
 
                         {/* STEP 1: ROLE */}
                         {step === 1 && (
@@ -635,7 +700,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                       <div className="bg-black/30 p-4 rounded-xl border border-gray-700/50">
                                          <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">DOB</label>
                                          <input type="date" value={formData.dob} onChange={(e) => updateField('dob', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white"/>
-                                          {age !== null && <div className={`text-xs mt-2 font-bold px-2 py-1 inline-block rounded ${isMinor ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>Age: {age} {isMinor && "(Parent Verification Required)"}</div>}
+                                         {age !== null && <div className={`text-xs mt-2 font-bold px-2 py-1 inline-block rounded ${isMinor ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>Age: {age} {isMinor && "(Parent Verification Required)"}</div>}
                                       </div>
                                       
                                       {isMinor && (
@@ -648,7 +713,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                 ) : (
                                    <div><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Organization</label><input placeholder="Optional" onChange={(e) => updateField('org', e.target.value)} className="w-full bg-black/30 border border-gray-700/50 rounded-xl p-4 text-white"/></div>
                                 )}
+                                
                                 <div className="flex items-start gap-3 mt-6"><input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} /><label className="text-xs text-gray-400">I agree to Terms & Privacy.</label></div>
+                                
+                                {/* 🛡️ CLOUDFLARE TURNSTILE WIDGET (SIGNUP) */}
+                                {CLOUDFLARE_SITE_KEY && (
+                                    <div className="mt-4 flex justify-center">
+                                        <Turnstile siteKey={CLOUDFLARE_SITE_KEY} onSuccess={setCaptchaToken} theme="dark" />
+                                    </div>
+                                )}
                              </div>
                            </div>
                         )}

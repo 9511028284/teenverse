@@ -2,64 +2,67 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Users, Briefcase, CheckCircle, XCircle, 
   Trash2, DollarSign, LogOut, Shield, Flag, Package,
-  Clock, AlertTriangle, ShieldCheck, Landmark, Eye, MessageSquare, Lock
-} from 'lucide-react';
-import { supabase } from '../supabase';
-import * as api from '../services/dashboard.api'; 
-import Toast from '../components/ui/Toast';
+  Clock, AlertTriangle, ShieldCheck, Landmark, Eye, MessageSquare, Lock,
+  Activity // Added Activity icon for Logs
+} from 'lucide-react'; // [cite: 515]
+import { supabase } from '../supabase'; // 
+import * as api from '../services/dashboard.api'; // 
+import Toast from '../components/ui/Toast'; // 
+import { logAction } from '../services/logger'; // 🆕 IMPORT LOGGER
 
 const AdminDashboard = ({ onLogout }) => {
   // --- STATE ---
-  const [tab, setTab] = useState('overview');
-  const [reportFilter, setReportFilter] = useState('pending');
+  const [tab, setTab] = useState('overview'); // [cite: 517]
+  const [reportFilter, setReportFilter] = useState('pending'); // [cite: 518]
   
   // Data States
   const [users, setUsers] = useState([]);
-  const [jobs, setJobs] = useState([]);
-  const [services, setServices] = useState([]);
-  const [reports, setReports] = useState([]);
-  const [escrowOrders, setEscrowOrders] = useState([]); 
+  const [jobs, setJobs] = useState([]); // [cite: 518]
+  const [services, setServices] = useState([]); // [cite: 519]
+  const [reports, setReports] = useState([]); // [cite: 519]
+  const [escrowOrders, setEscrowOrders] = useState([]); // [cite: 519]
+  const [auditLogs, setAuditLogs] = useState([]); // 🆕 AUDIT LOGS STATE
   
   const [stats, setStats] = useState({ 
     totalUsers: 0, totalJobs: 0, totalServices: 0, 
     totalRevenue: 0, activeReports: 0, heldInEscrow: 0,
     pendingKyc: 0 
-  });
+  }); // [cite: 520]
   
   // Evidence / Modal States
   const [selectedReport, setSelectedReport] = useState(null); 
   const [evidence, setEvidence] = useState(null); 
-  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceLoading, setEvidenceLoading] = useState(false); // [cite: 522]
 
   const [toast, setToast] = useState(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ message: msg, type });
     setTimeout(() => setToast(null), 3000);
-  };
+  }; // [cite: 523]
 
   useEffect(() => {
     fetchData();
-  }, [reportFilter]); 
+  }, [reportFilter, tab]); // 🆕 Refetch when tab changes to 'logs'
 
   // --- DATA FETCHING ---
   const fetchData = async () => {
     // 1. Fetch Users
-    const { data: clients } = await supabase.from('clients').select('*');
-    const { data: freelancers } = await supabase.from('freelancers').select('*');
+    const { data: clients } = await supabase.from('clients').select('*'); // [cite: 525]
+    const { data: freelancers } = await supabase.from('freelancers').select('*'); // [cite: 526]
     const allUsers = [
         ...(clients || []).map(u => ({...u, role: 'client'})), 
         ...(freelancers || []).map(u => ({...u, role: 'freelancer'}))
     ];
-    setUsers(allUsers);
+    setUsers(allUsers); // [cite: 527]
 
     // 2. Fetch Jobs
     const { data: allJobs } = await supabase.from('jobs').select('*');
-    setJobs(allJobs || []);
+    setJobs(allJobs || []); // [cite: 527]
 
     // 3. Fetch Services
     const { data: allServices } = await supabase.from('services').select('*');
-    setServices(allServices || []);
+    setServices(allServices || []); // [cite: 528]
 
     // 4. Fetch Reports
     const { data: allReports } = await supabase
@@ -67,23 +70,33 @@ const AdminDashboard = ({ onLogout }) => {
         .select('*')
         .eq('status', reportFilter) 
         .order('created_at', { ascending: false });
-    setReports(allReports || []);
+    setReports(allReports || []); // [cite: 529]
 
     // 5. Fetch Financials
     const { data: escrows } = await api.fetchAdminEscrowOrders();
-    setEscrowOrders(escrows || []);
+    setEscrowOrders(escrows || []); // [cite: 531]
 
-    // 6. Calculate Stats
-    const { count: pendingCount } = await supabase.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'pending');
+    // 🆕 6. FETCH AUDIT LOGS (Only if on logs tab)
+    if (tab === 'logs') {
+        const { data: logs } = await supabase
+            .from('audit_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(100);
+        setAuditLogs(logs || []);
+    }
+
+    // 7. Calculate Stats
+    const { count: pendingCount } = await supabase.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'pending'); // [cite: 531]
     
     // Count Pending KYC
-    const pendingKycCount = allUsers.filter(u => u.kyc_status === 'pending').length;
+    const pendingKycCount = allUsers.filter(u => u.kyc_status === 'pending').length; // [cite: 532]
 
     // Revenue & Escrow Math
-    const { data: payments } = await supabase.from('applications').select('bid_amount').eq('status', 'Paid');
-    const totalRevenue = payments?.reduce((acc, curr) => acc + (Number(curr.bid_amount) * 0.04), 0) || 0;
+    const { data: payments } = await supabase.from('applications').select('bid_amount').eq('status', 'Paid'); // [cite: 533]
+    const totalRevenue = payments?.reduce((acc, curr) => acc + (Number(curr.bid_amount) * 0.04), 0) || 0; // [cite: 534]
     
-    const totalHeld = escrows?.reduce((acc, curr) => acc + (Number(curr.bid_amount) || 0), 0) || 0;
+    const totalHeld = escrows?.reduce((acc, curr) => acc + (Number(curr.bid_amount) || 0), 0) || 0; // [cite: 535]
 
     setStats({
       totalUsers: allUsers.length,
@@ -93,51 +106,52 @@ const AdminDashboard = ({ onLogout }) => {
       activeReports: pendingCount || 0,
       heldInEscrow: totalHeld,
       pendingKyc: pendingKycCount
-    });
+    }); // [cite: 536]
   };
 
   // --- 🔒 SECURE FILE VIEWING ---
   const handleViewId = async (pathOrUrl) => {
     if (!pathOrUrl) return;
 
-    showToast("Generating secure link...", "info");
+    showToast("Generating secure link...", "info"); // [cite: 538]
 
     // Case 1: It's already a public URL (Legacy Data)
     if (pathOrUrl.startsWith('http')) {
-        // Try to see if it matches our Supabase pattern to extract path
-        // Pattern: /storage/v1/object/public/id_proofs/{path}
         const match = pathOrUrl.split('/id_proofs/')[1];
         if (match) {
-             // It was a public URL, but bucket is now private.
-             // We extract the path and sign it.
-             const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(match, 60);
+             const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(match, 60); // [cite: 540]
              if (error) { showToast("Error signing legacy URL", "error"); return; }
+             
+             // 🆕 Log View Action
+             await logAction('ADMIN', 'VIEW_ID_PROOF_LEGACY', { path: match });
              window.open(data.signedUrl, '_blank');
         } else {
-             // Just try opening it (might 404 if private)
              window.open(pathOrUrl, '_blank');
         }
     } else {
         // Case 2: It is a clean path (New Data)
-        const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(pathOrUrl, 60); // Valid for 60s
+        const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(pathOrUrl, 60); // [cite: 543]
         if (error || !data) { 
             showToast("Could not access file. Check bucket permissions.", "error"); 
             return; 
         }
+        
+        // 🆕 Log View Action
+        await logAction('ADMIN', 'VIEW_ID_PROOF', { path: pathOrUrl });
         window.open(data.signedUrl, '_blank');
     }
   };
 
   // --- ACTION HANDLERS ---
 
-  // 🔥 NEW: KYC Approval Logic
+  // 🔥 KYC Approval Logic
   const handleKycAction = async (userId, role, status) => {
-    const table = role === 'client' ? 'clients' : 'freelancers';
+    const table = role === 'client' ? 'clients' : 'freelancers'; // [cite: 546]
     let reason = null;
 
     if (status === 'rejected') {
         reason = prompt("Enter rejection reason (e.g., 'Blurry ID', 'Underage', 'Fake Document'):");
-        if (!reason) return; // Cancel if no reason provided
+        if (!reason) return; 
     }
 
     if (!window.confirm(`Are you sure you want to mark this user as ${status.toUpperCase()}?`)) return;
@@ -149,15 +163,18 @@ const AdminDashboard = ({ onLogout }) => {
             kyc_reviewed_at: new Date().toISOString(),
             kyc_rejection_reason: reason 
         })
-        .eq('id', userId);
+        .eq('id', userId); // [cite: 549]
 
     if (error) {
         showToast(`Error: ${error.message}`, 'error');
     } else {
         showToast(`User KYC ${status.toUpperCase()}`, 'success');
+        
+        // 🆕 Log KYC Action
+        await logAction('ADMIN', `KYC_${status.toUpperCase()}`, { userId, role, reason });
+        
         // Optimistic Update
-        setUsers(users.map(u => u.id === userId ? { ...u, kyc_status: status } : u));
-        // Update stats
+        setUsers(users.map(u => u.id === userId ? { ...u, kyc_status: status } : u)); // [cite: 552]
         if (status !== 'pending') {
              setStats(prev => ({ ...prev, pendingKyc: Math.max(0, prev.pendingKyc - 1) }));
         }
@@ -165,10 +182,13 @@ const AdminDashboard = ({ onLogout }) => {
   };
 
   const handleResolveReport = async (id, newStatus) => {
-      const { error } = await supabase.from('reports').update({ status: newStatus }).eq('id', id);
+      const { error } = await supabase.from('reports').update({ status: newStatus }).eq('id', id); // [cite: 554]
       if(error) showToast("Error updating report", "error");
       else {
           showToast(`Report marked as ${newStatus}`);
+          // 🆕 Log Report Resolution
+          await logAction('ADMIN', 'RESOLVE_REPORT', { reportId: id, status: newStatus });
+          
           if (selectedReport?.id === id) setSelectedReport(null);
           
           if (reportFilter !== newStatus) {
@@ -186,11 +206,15 @@ const AdminDashboard = ({ onLogout }) => {
     const { error } = await supabase
         .from(table)
         .update({ status: 'banned' }) 
-        .eq('id', id);
+        .eq('id', id); // [cite: 559]
 
     if (error) showToast(error.message, 'error');
     else {
         showToast("User banned successfully");
+        
+        // 🆕 Log Ban Action
+        await logAction('ADMIN', 'BAN_USER', { targetId: id, table });
+        
         if (selectedReport) {
             handleResolveReport(selectedReport.id, 'resolved');
         } else {
@@ -201,31 +225,49 @@ const AdminDashboard = ({ onLogout }) => {
   
   const handleDeleteJob = async (id) => {
        if(!window.confirm("Admin: Delete this job?")) return;
-       const { error } = await supabase.from('jobs').delete().eq('id', id);
+       const { error } = await supabase.from('jobs').delete().eq('id', id); // [cite: 564]
        if (error) showToast(error.message, 'error');
-       else { showToast("Job deleted"); fetchData(); }
+       else { 
+         showToast("Job deleted"); 
+         await logAction('ADMIN', 'DELETE_JOB', { jobId: id });
+         fetchData(); 
+       }
   };
 
   const handleDeleteService = async (id) => {
        if(!window.confirm("Admin: Delete this gig?")) return;
-       const { error } = await supabase.from('services').delete().eq('id', id);
+       const { error } = await supabase.from('services').delete().eq('id', id); // [cite: 566]
        if (error) showToast(error.message, 'error');
-       else { showToast("Service deleted"); fetchData(); }
+       else { 
+         showToast("Service deleted"); 
+         await logAction('ADMIN', 'DELETE_SERVICE', { serviceId: id });
+         fetchData(); 
+       }
   };
 
   // --- FINANCIAL ACTIONS ---
   const handleForceRelease = async (app) => {
     if(!window.confirm(`⚠️ ADMIN OVERRIDE:\n\nForce transfer ₹${app.bid_amount} to Freelancer (${app.freelancer_name})?`)) return;
-    const { error } = await api.adminForceRelease(app.id, app.bid_amount, app.freelancer_id);
+    const { error } = await api.adminForceRelease(app.id, app.bid_amount, app.freelancer_id); // [cite: 568]
     if(error) showToast(error.message, 'error');
-    else { showToast("Funds Released"); fetchData(); }
+    else { 
+        showToast("Funds Released");
+        // 🆕 Log Money Movement
+        await logAction('ADMIN', 'FORCE_RELEASE_FUNDS', { appId: app.id, amount: app.bid_amount });
+        fetchData(); 
+    }
   };
 
   const handleForceRefund = async (app) => {
     if(!window.confirm(`⚠️ ADMIN OVERRIDE:\n\nForce refund ₹${app.bid_amount} to Client (${app.client_name})?`)) return;
-    const { error } = await api.adminForceRefund(app.id, app.client_id);
+    const { error } = await api.adminForceRefund(app.id, app.client_id); // [cite: 570]
     if(error) showToast(error.message, 'error');
-    else { showToast("Order Refunded"); fetchData(); }
+    else { 
+        showToast("Order Refunded"); 
+        // 🆕 Log Money Movement
+        await logAction('ADMIN', 'FORCE_REFUND_FUNDS', { appId: app.id, amount: app.bid_amount });
+        fetchData(); 
+    }
   };
 
   // --- EVIDENCE GATHERING ---
@@ -237,7 +279,7 @@ const AdminDashboard = ({ onLogout }) => {
         let jobData = null;
         if (report.target_type === 'job' && report.target_id) {
              const { data } = await supabase.from('jobs').select('*').eq('id', report.target_id).single();
-             jobData = data;
+             jobData = data; // [cite: 573]
         }
 
         const { data: chats } = await supabase
@@ -245,12 +287,12 @@ const AdminDashboard = ({ onLogout }) => {
             .select('*')
             .or(`sender_id.eq.${report.reporter_id},receiver_id.eq.${report.reporter_id}`)
             .order('created_at', { ascending: false })
-            .limit(20);
+            .limit(20); // [cite: 574]
 
         const relevantChats = chats?.filter(msg => 
             (msg.sender_id === report.reporter_id && msg.receiver_id === report.reported_user_id) ||
             (msg.sender_id === report.reported_user_id && msg.receiver_id === report.reporter_id)
-        ) || [];
+        ) || []; // [cite: 575]
 
         setEvidence({ job: jobData, chats: relevantChats });
     } catch (err) {
@@ -271,7 +313,7 @@ const AdminDashboard = ({ onLogout }) => {
           <Shield size={24} /> Admin Panel
         </div>
         <nav className="flex-1 p-4 space-y-2">
-          {['overview', 'financials', 'reports', 'users', 'jobs', 'services'].map((t) => (
+          {['overview', 'financials', 'reports', 'users', 'jobs', 'services', 'logs'].map((t) => (
              <button 
                 key={t}
                 onClick={() => setTab(t)} 
@@ -283,6 +325,7 @@ const AdminDashboard = ({ onLogout }) => {
                 {t === 'users' && <Users size={18} />}
                 {t === 'jobs' && <Briefcase size={18} />}
                 {t === 'services' && <Package size={18} />}
+                {t === 'logs' && <Activity size={18} />} {/* 🆕 Log Icon */}
                 {t} 
                 {t === 'reports' && stats.activeReports > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{stats.activeReports}</span>}
                 {t === 'financials' && stats.heldInEscrow > 0 && <span className="ml-auto bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full">₹</span>}
@@ -570,6 +613,39 @@ const AdminDashboard = ({ onLogout }) => {
                  </div>
              )}
           </div>
+        )}
+
+        {/* 🆕 NEW AUDIT LOGS TAB */}
+        {tab === 'logs' && (
+             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                    <h3 className="font-bold text-lg dark:text-white flex items-center gap-2"><Activity className="text-blue-500"/> System Audit Trail</h3>
+                    <p className="text-xs text-gray-500">Immutable record of all admin and critical system actions.</p>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-500 text-xs uppercase">
+                            <tr>
+                                <th className="p-4">Timestamp</th>
+                                <th className="p-4">Admin/User</th>
+                                <th className="p-4">Action</th>
+                                <th className="p-4">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {auditLogs.map((log) => (
+                                <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                                    <td className="p-4 text-gray-400 font-mono text-xs">{new Date(log.created_at).toLocaleString()}</td>
+                                    <td className="p-4 font-bold text-gray-700 dark:text-gray-300">{log.user_id ? log.user_id.slice(0,8) : 'SYSTEM'}</td>
+                                    <td className="p-4"><span className="bg-blue-50 text-blue-600 px-2 py-1 rounded text-xs font-bold">{log.action}</span></td>
+                                    <td className="p-4 text-xs font-mono text-gray-500 max-w-xs truncate">{JSON.stringify(log.details)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {auditLogs.length === 0 && <div className="p-8 text-center text-gray-400">No logs found or logger not active.</div>}
+                </div>
+             </div>
         )}
       </main>
 

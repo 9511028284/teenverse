@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Menu, LayoutDashboard, Briefcase, FileText, MessageSquare, BookOpen, Sparkles, Settings, 
   Award, Sun, Moon, Bell, Crown, Swords, ShieldCheck, ListChecks, Package, Share2, User,
-  Lock, Eye // Kept simple icons needed for inline rendering
+  Lock, Eye, RefreshCw // 🆕 Added RefreshCw icon
 } from 'lucide-react';
 
 // --- LIBRARIES ---
@@ -10,7 +10,7 @@ import { toPng, toBlob } from 'html-to-image';
 
 // --- SUPABASE & UTILS ---
 import { supabase } from '../supabase';
-import { QUIZZES, APP_STATUS } from '../utils/constants'; // Kept basic constants
+import { QUIZZES, APP_STATUS } from '../utils/constants'; 
 
 // UI Components
 import Button from '../components/ui/Button';
@@ -337,6 +337,23 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       }
   };
 
+  // 🆕 PAYMENT RECOVERY HANDLER
+  const handleVerifyPaymentStatus = async (appId, orderId) => {
+     showToast("Checking Gateway Status...", "info");
+     const { success, status, error } = await api.checkPaymentStatus(orderId);
+     
+     if (success && status === 'PAID') {
+         // Auto-correct the database
+         await api.verifyAndStartEscrow(orderId, appId);
+         showToast("Payment Found! Order Started.", "success");
+         setApplications(prev => prev.map(a => 
+            a.id === appId ? { ...a, status: 'Accepted', started_at: new Date().toISOString() } : a
+         ));
+     } else {
+         showToast("Payment still pending or failed at gateway.", "warning");
+     }
+  };
+
   const handleSubmitWork = async (e) => {
     e.preventDefault();
     if (!selectedApp) {
@@ -428,6 +445,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     if (action === 'pay' && !checkKycLock('release_escrow')) { return; }
     if (action === 'submit') { setSelectedApp(app); setModal('submit_work'); return; }
     if (action === 'view_submission') { setViewWorkApp(app); return; }
+    
+    // 🆕 Add verification handler access
+    if (action === 'verify_payment') {
+         handleVerifyPaymentStatus(app.id, app.escrow_order_id);
+         return;
+    }
     
     const backendActionMap = { 'approve': 'APPROVE_WORK', 'pay': 'RELEASE_ESCROW', 'reject': 'REJECT_APPLICATION' };
     const backendAction = backendActionMap[action];
