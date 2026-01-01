@@ -3,150 +3,184 @@ import {
   LayoutDashboard, Users, Briefcase, CheckCircle, XCircle, 
   Trash2, DollarSign, LogOut, Shield, Flag, Package,
   Clock, AlertTriangle, ShieldCheck, Landmark, Eye, MessageSquare, Lock,
-  Activity // Added Activity icon for Logs
-} from 'lucide-react'; // [cite: 515]
-import { supabase } from '../supabase'; // 
-import * as api from '../services/dashboard.api'; // 
-import Toast from '../components/ui/Toast'; // 
-import { logAction } from '../services/logger'; // 🆕 IMPORT LOGGER
+  Activity
+} from 'lucide-react';
+import { supabase } from '../supabase'; 
+import * as api from '../services/dashboard.api'; 
+import Toast from '../components/ui/Toast'; 
+import { logAction } from '../services/logger'; 
 
 const AdminDashboard = ({ onLogout }) => {
   // --- STATE ---
-  const [tab, setTab] = useState('overview'); // [cite: 517]
-  const [reportFilter, setReportFilter] = useState('pending'); // [cite: 518]
+  const [tab, setTab] = useState('overview');
+  const [reportFilter, setReportFilter] = useState('pending');
   
   // Data States
   const [users, setUsers] = useState([]);
-  const [jobs, setJobs] = useState([]); // [cite: 518]
-  const [services, setServices] = useState([]); // [cite: 519]
-  const [reports, setReports] = useState([]); // [cite: 519]
-  const [escrowOrders, setEscrowOrders] = useState([]); // [cite: 519]
-  const [auditLogs, setAuditLogs] = useState([]); // 🆕 AUDIT LOGS STATE
+  const [jobs, setJobs] = useState([]);
+  const [services, setServices] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [escrowOrders, setEscrowOrders] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]); 
   
+  // 🆕 PAGINATION STATE
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const ITEMS_PER_PAGE = 20;
+
   const [stats, setStats] = useState({ 
     totalUsers: 0, totalJobs: 0, totalServices: 0, 
     totalRevenue: 0, activeReports: 0, heldInEscrow: 0,
     pendingKyc: 0 
-  }); // [cite: 520]
+  });
   
   // Evidence / Modal States
   const [selectedReport, setSelectedReport] = useState(null); 
   const [evidence, setEvidence] = useState(null); 
-  const [evidenceLoading, setEvidenceLoading] = useState(false); // [cite: 522]
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
 
   const [toast, setToast] = useState(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ message: msg, type });
     setTimeout(() => setToast(null), 3000);
-  }; // [cite: 523]
+  };
 
+  // --- MAIN EFFECT ROUTER ---
   useEffect(() => {
-    fetchData();
-  }, [reportFilter, tab]); // 🆕 Refetch when tab changes to 'logs'
+    if (tab !== 'users') setPage(0);
+    loadTabData();
+  }, [tab, reportFilter, page]); 
 
-  // --- DATA FETCHING ---
-  const fetchData = async () => {
-    // 1. Fetch Users
-    const { data: clients } = await supabase.from('clients').select('*'); // [cite: 525]
-    const { data: freelancers } = await supabase.from('freelancers').select('*'); // [cite: 526]
+  const loadTabData = async () => {
+    if (tab === 'overview') await fetchOverviewData();
+    else if (tab === 'users') await fetchUsersPaginated(page);
+    else if (tab === 'jobs') await fetchJobs();
+    else if (tab === 'services') await fetchServices();
+    else if (tab === 'reports') await fetchReports();
+    else if (tab === 'financials') await fetchFinancials();
+    else if (tab === 'logs') await fetchLogs();
+  };
+
+  // --- 1. OPTIMIZED OVERVIEW FETCH ---
+  const fetchOverviewData = async () => {
+    const [
+        clientsCount, freelancersCount, jobsCount, servicesCount, 
+        pendingReports, paymentsRes, escrowsRes, pendingKycRes
+    ] = await Promise.all([
+        supabase.from('clients').select('id', { count: 'exact', head: true }),
+        supabase.from('freelancers').select('id', { count: 'exact', head: true }),
+        supabase.from('jobs').select('id', { count: 'exact', head: true }),
+        supabase.from('services').select('id', { count: 'exact', head: true }),
+        supabase.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('applications').select('bid_amount').eq('status', 'Paid'),
+        api.fetchAdminEscrowOrders(),
+        Promise.all([
+             supabase.from('clients').select('id', { count: 'exact', head: true }).eq('kyc_status', 'pending'),
+             supabase.from('freelancers').select('id', { count: 'exact', head: true }).eq('kyc_status', 'pending')
+        ])
+    ]);
+
+    const totalRevenue = (paymentsRes.data || []).reduce((acc, curr) => acc + (Number(curr.bid_amount) * 0.04), 0);
+    const totalHeld = (escrowsRes.data || []).reduce((acc, curr) => acc + (Number(curr.bid_amount) || 0), 0);
+    const totalPendingKyc = (pendingKycRes[0].count || 0) + (pendingKycRes[1].count || 0);
+
+    setStats({
+        totalUsers: (clientsCount.count || 0) + (freelancersCount.count || 0),
+        totalJobs: jobsCount.count || 0,
+        totalServices: servicesCount.count || 0,
+        totalRevenue,
+        activeReports: pendingReports.count || 0,
+        heldInEscrow: totalHeld,
+        pendingKyc: totalPendingKyc
+    });
+  };
+
+  // --- 2. PAGINATED USERS FETCH ---
+  const fetchUsersPaginated = async (pageNumber) => {
+    const from = pageNumber * ITEMS_PER_PAGE;
+    const to = from + ITEMS_PER_PAGE - 1;
+
+    const [clientsRes, freelancersRes] = await Promise.all([
+        supabase.from('clients').select('*', { count: 'exact' }).range(from, to),
+        supabase.from('freelancers').select('*', { count: 'exact' }).range(from, to)
+    ]);
+
     const allUsers = [
-        ...(clients || []).map(u => ({...u, role: 'client'})), 
-        ...(freelancers || []).map(u => ({...u, role: 'freelancer'}))
+        ...(clientsRes.data || []).map(u => ({...u, role: 'client'})), 
+        ...(freelancersRes.data || []).map(u => ({...u, role: 'freelancer'}))
     ];
-    setUsers(allUsers); // [cite: 527]
+    
+    setUsers(allUsers);
+    const maxCount = Math.max(clientsRes.count || 0, freelancersRes.count || 0);
+    setTotalPages(Math.ceil(maxCount / ITEMS_PER_PAGE));
+  };
 
-    // 2. Fetch Jobs
-    const { data: allJobs } = await supabase.from('jobs').select('*');
-    setJobs(allJobs || []); // [cite: 527]
+  // --- OTHER DATA FETCHERS ---
+  const fetchJobs = async () => {
+    const { data } = await supabase.from('jobs').select('*').limit(50);
+    setJobs(data || []);
+  };
 
-    // 3. Fetch Services
-    const { data: allServices } = await supabase.from('services').select('*');
-    setServices(allServices || []); // [cite: 528]
+  const fetchServices = async () => {
+    const { data } = await supabase.from('services').select('*').limit(50);
+    setServices(data || []);
+  };
 
-    // 4. Fetch Reports
-    const { data: allReports } = await supabase
+  const fetchReports = async () => {
+    const { data } = await supabase
         .from('reports')
         .select('*')
         .eq('status', reportFilter) 
-        .order('created_at', { ascending: false });
-    setReports(allReports || []); // [cite: 529]
-
-    // 5. Fetch Financials
-    const { data: escrows } = await api.fetchAdminEscrowOrders();
-    setEscrowOrders(escrows || []); // [cite: 531]
-
-    // 🆕 6. FETCH AUDIT LOGS (Only if on logs tab)
-    if (tab === 'logs') {
-        const { data: logs } = await supabase
-            .from('audit_logs')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(100);
-        setAuditLogs(logs || []);
-    }
-
-    // 7. Calculate Stats
-    const { count: pendingCount } = await supabase.from('reports').select('id', { count: 'exact', head: true }).eq('status', 'pending'); // [cite: 531]
-    
-    // Count Pending KYC
-    const pendingKycCount = allUsers.filter(u => u.kyc_status === 'pending').length; // [cite: 532]
-
-    // Revenue & Escrow Math
-    const { data: payments } = await supabase.from('applications').select('bid_amount').eq('status', 'Paid'); // [cite: 533]
-    const totalRevenue = payments?.reduce((acc, curr) => acc + (Number(curr.bid_amount) * 0.04), 0) || 0; // [cite: 534]
-    
-    const totalHeld = escrows?.reduce((acc, curr) => acc + (Number(curr.bid_amount) || 0), 0) || 0; // [cite: 535]
-
-    setStats({
-      totalUsers: allUsers.length,
-      totalJobs: allJobs?.length || 0,
-      totalServices: allServices?.length || 0,
-      totalRevenue,
-      activeReports: pendingCount || 0,
-      heldInEscrow: totalHeld,
-      pendingKyc: pendingKycCount
-    }); // [cite: 536]
+        .order('created_at', { ascending: false })
+        .limit(50);
+    setReports(data || []);
   };
 
-  // --- 🔒 SECURE FILE VIEWING ---
+  const fetchFinancials = async () => {
+    const { data } = await api.fetchAdminEscrowOrders();
+    setEscrowOrders(data || []);
+  };
+
+  const fetchLogs = async () => {
+    const { data } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+    setAuditLogs(data || []);
+  };
+
+  // --- SECURE FILE VIEWING ---
   const handleViewId = async (pathOrUrl) => {
     if (!pathOrUrl) return;
 
-    showToast("Generating secure link...", "info"); // [cite: 538]
+    showToast("Generating secure link...", "info");
 
-    // Case 1: It's already a public URL (Legacy Data)
     if (pathOrUrl.startsWith('http')) {
         const match = pathOrUrl.split('/id_proofs/')[1];
         if (match) {
-             const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(match, 60); // [cite: 540]
+             const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(match, 60);
              if (error) { showToast("Error signing legacy URL", "error"); return; }
-             
-             // 🆕 Log View Action
              await logAction('ADMIN', 'VIEW_ID_PROOF_LEGACY', { path: match });
              window.open(data.signedUrl, '_blank');
         } else {
              window.open(pathOrUrl, '_blank');
         }
     } else {
-        // Case 2: It is a clean path (New Data)
-        const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(pathOrUrl, 60); // [cite: 543]
+        const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(pathOrUrl, 60);
         if (error || !data) { 
             showToast("Could not access file. Check bucket permissions.", "error"); 
             return; 
         }
-        
-        // 🆕 Log View Action
         await logAction('ADMIN', 'VIEW_ID_PROOF', { path: pathOrUrl });
         window.open(data.signedUrl, '_blank');
     }
   };
 
   // --- ACTION HANDLERS ---
-
-  // 🔥 KYC Approval Logic
   const handleKycAction = async (userId, role, status) => {
-    const table = role === 'client' ? 'clients' : 'freelancers'; // [cite: 546]
+    const table = role === 'client' ? 'clients' : 'freelancers';
     let reason = null;
 
     if (status === 'rejected') {
@@ -163,34 +197,28 @@ const AdminDashboard = ({ onLogout }) => {
             kyc_reviewed_at: new Date().toISOString(),
             kyc_rejection_reason: reason 
         })
-        .eq('id', userId); // [cite: 549]
+        .eq('id', userId);
 
     if (error) {
         showToast(`Error: ${error.message}`, 'error');
     } else {
         showToast(`User KYC ${status.toUpperCase()}`, 'success');
-        
-        // 🆕 Log KYC Action
         await logAction('ADMIN', `KYC_${status.toUpperCase()}`, { userId, role, reason });
         
-        // Optimistic Update
-        setUsers(users.map(u => u.id === userId ? { ...u, kyc_status: status } : u)); // [cite: 552]
-        if (status !== 'pending') {
+        setUsers(users.map(u => u.id === userId ? { ...u, kyc_status: status } : u));
+        if (status !== 'pending' && tab === 'users') {
              setStats(prev => ({ ...prev, pendingKyc: Math.max(0, prev.pendingKyc - 1) }));
         }
     }
   };
 
   const handleResolveReport = async (id, newStatus) => {
-      const { error } = await supabase.from('reports').update({ status: newStatus }).eq('id', id); // [cite: 554]
+      const { error } = await supabase.from('reports').update({ status: newStatus }).eq('id', id);
       if(error) showToast("Error updating report", "error");
       else {
           showToast(`Report marked as ${newStatus}`);
-          // 🆕 Log Report Resolution
           await logAction('ADMIN', 'RESOLVE_REPORT', { reportId: id, status: newStatus });
-          
           if (selectedReport?.id === id) setSelectedReport(null);
-          
           if (reportFilter !== newStatus) {
             setReports(reports.filter(r => r.id !== id));
           }
@@ -206,94 +234,83 @@ const AdminDashboard = ({ onLogout }) => {
     const { error } = await supabase
         .from(table)
         .update({ status: 'banned' }) 
-        .eq('id', id); // [cite: 559]
+        .eq('id', id);
 
     if (error) showToast(error.message, 'error');
     else {
         showToast("User banned successfully");
-        
-        // 🆕 Log Ban Action
         await logAction('ADMIN', 'BAN_USER', { targetId: id, table });
-        
         if (selectedReport) {
             handleResolveReport(selectedReport.id, 'resolved');
         } else {
-            fetchData();
+            loadTabData();
         }
     }
   };
   
   const handleDeleteJob = async (id) => {
        if(!window.confirm("Admin: Delete this job?")) return;
-       const { error } = await supabase.from('jobs').delete().eq('id', id); // [cite: 564]
+       const { error } = await supabase.from('jobs').delete().eq('id', id);
        if (error) showToast(error.message, 'error');
        else { 
          showToast("Job deleted"); 
          await logAction('ADMIN', 'DELETE_JOB', { jobId: id });
-         fetchData(); 
+         loadTabData(); 
        }
   };
 
   const handleDeleteService = async (id) => {
        if(!window.confirm("Admin: Delete this gig?")) return;
-       const { error } = await supabase.from('services').delete().eq('id', id); // [cite: 566]
+       const { error } = await supabase.from('services').delete().eq('id', id);
        if (error) showToast(error.message, 'error');
        else { 
          showToast("Service deleted"); 
          await logAction('ADMIN', 'DELETE_SERVICE', { serviceId: id });
-         fetchData(); 
+         loadTabData(); 
        }
   };
 
-  // --- FINANCIAL ACTIONS ---
   const handleForceRelease = async (app) => {
     if(!window.confirm(`⚠️ ADMIN OVERRIDE:\n\nForce transfer ₹${app.bid_amount} to Freelancer (${app.freelancer_name})?`)) return;
-    const { error } = await api.adminForceRelease(app.id, app.bid_amount, app.freelancer_id); // [cite: 568]
+    const { error } = await api.adminForceRelease(app.id, app.bid_amount, app.freelancer_id);
     if(error) showToast(error.message, 'error');
     else { 
         showToast("Funds Released");
-        // 🆕 Log Money Movement
         await logAction('ADMIN', 'FORCE_RELEASE_FUNDS', { appId: app.id, amount: app.bid_amount });
-        fetchData(); 
+        loadTabData(); 
     }
   };
 
   const handleForceRefund = async (app) => {
     if(!window.confirm(`⚠️ ADMIN OVERRIDE:\n\nForce refund ₹${app.bid_amount} to Client (${app.client_name})?`)) return;
-    const { error } = await api.adminForceRefund(app.id, app.client_id); // [cite: 570]
+    const { error } = await api.adminForceRefund(app.id, app.client_id);
     if(error) showToast(error.message, 'error');
     else { 
         showToast("Order Refunded"); 
-        // 🆕 Log Money Movement
         await logAction('ADMIN', 'FORCE_REFUND_FUNDS', { appId: app.id, amount: app.bid_amount });
-        fetchData(); 
+        loadTabData(); 
     }
   };
 
-  // --- EVIDENCE GATHERING ---
   const openCaseFile = async (report) => {
     setSelectedReport(report);
     setEvidenceLoading(true);
-    
     try {
         let jobData = null;
         if (report.target_type === 'job' && report.target_id) {
              const { data } = await supabase.from('jobs').select('*').eq('id', report.target_id).single();
-             jobData = data; // [cite: 573]
+             jobData = data;
         }
-
         const { data: chats } = await supabase
             .from('messages')
             .select('*')
             .or(`sender_id.eq.${report.reporter_id},receiver_id.eq.${report.reporter_id}`)
             .order('created_at', { ascending: false })
-            .limit(20); // [cite: 574]
-
+            .limit(20);
         const relevantChats = chats?.filter(msg => 
             (msg.sender_id === report.reporter_id && msg.receiver_id === report.reported_user_id) ||
             (msg.sender_id === report.reported_user_id && msg.receiver_id === report.reporter_id)
-        ) || []; // [cite: 575]
-
+        ) || [];
         setEvidence({ job: jobData, chats: relevantChats });
     } catch (err) {
         console.error("Evidence Error:", err);
@@ -302,6 +319,26 @@ const AdminDashboard = ({ onLogout }) => {
         setEvidenceLoading(false);
     }
   };
+
+  const PaginationControls = () => (
+    <div className="flex justify-center gap-4 mt-6 items-center">
+        <button 
+            disabled={page === 0}
+            onClick={() => setPage(p => Math.max(0, p - 1))}
+            className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg text-sm font-bold disabled:opacity-50"
+        >
+            Previous
+        </button>
+        <span className="text-sm font-mono text-gray-500">Page {page + 1} of {totalPages || 1}</span>
+        <button 
+            disabled={page >= totalPages - 1}
+            onClick={() => setPage(p => p + 1)}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold disabled:opacity-50"
+        >
+            Next
+        </button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex font-sans">
@@ -325,7 +362,7 @@ const AdminDashboard = ({ onLogout }) => {
                 {t === 'users' && <Users size={18} />}
                 {t === 'jobs' && <Briefcase size={18} />}
                 {t === 'services' && <Package size={18} />}
-                {t === 'logs' && <Activity size={18} />} {/* 🆕 Log Icon */}
+                {t === 'logs' && <Activity size={18} />} 
                 {t} 
                 {t === 'reports' && stats.activeReports > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{stats.activeReports}</span>}
                 {t === 'financials' && stats.heldInEscrow > 0 && <span className="ml-auto bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full">₹</span>}
@@ -367,7 +404,6 @@ const AdminDashboard = ({ onLogout }) => {
           </div>
         )}
 
-        {/* --- FINANCIALS / ESCROW TAB --- */}
         {tab === 'financials' && (
           <div className="space-y-6">
             <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-700 flex items-center gap-3">
@@ -404,28 +440,20 @@ const AdminDashboard = ({ onLogout }) => {
                                     </div>
                                 </td>
                                 <td className="p-4">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${
+                                     <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${
                                         order.status === 'Disputed' ? 'bg-red-100 text-red-700' : 
                                         order.status === 'Completed' ? 'bg-green-100 text-green-700' :
                                         'bg-blue-100 text-blue-700'}`}>
                                         {order.status}
-                                    </span>
+                                   </span>
                                 </td>
                                 <td className="p-4 text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <button 
-                                            onClick={() => handleForceRelease(order)}
-                                            className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
-                                            title="Pay Freelancer"
-                                        >
+                                     <div className="flex justify-end gap-2">
+                                        <button onClick={() => handleForceRelease(order)} className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1" title="Pay Freelancer">
                                             <CheckCircle size={14}/> Pay Teen
                                         </button>
-                                        <button 
-                                            onClick={() => handleForceRefund(order)}
-                                            className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
-                                            title="Refund Client"
-                                        >
-                                            <XCircle size={14}/> Refund
+                                        <button onClick={() => handleForceRefund(order)} className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1" title="Refund Client">
+                                             <XCircle size={14}/> Refund
                                         </button>
                                     </div>
                                 </td>
@@ -438,20 +466,11 @@ const AdminDashboard = ({ onLogout }) => {
           </div>
         )}
         
-        {/* REPORTS TAB */}
         {tab === 'reports' && (
             <div className="space-y-6">
                 <div className="flex bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 w-fit">
                   {['pending', 'resolved', 'dismissed'].map((status) => (
-                    <button
-                      key={status}
-                      onClick={() => setReportFilter(status)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${
-                        reportFilter === status 
-                          ? 'bg-red-500 text-white shadow-md' 
-                          : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'
-                      }`}
-                    >
+                    <button key={status} onClick={() => setReportFilter(status)} className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${ reportFilter === status ? 'bg-red-500 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700' }`}>
                       {status}
                     </button>
                   ))}
@@ -465,10 +484,10 @@ const AdminDashboard = ({ onLogout }) => {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                        {reports.map(report => (
+                      {reports.map(report => (
                             <div key={report.id} className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-4">
                                 <div className="flex justify-between items-start">
-                                    <div className="flex items-center gap-2">
+                                     <div className="flex items-center gap-2">
                                         <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase tracking-wide ${
                                             report.reason === 'Harassment/Bullying' ? 'bg-red-100 text-red-700' :
                                             report.reason === 'Spam/Scam' ? 'bg-orange-100 text-orange-700' :
@@ -481,114 +500,100 @@ const AdminDashboard = ({ onLogout }) => {
                                         </span>
                                     </div>
                                     {reportFilter === 'pending' && (
-                                        <button 
-                                            onClick={() => openCaseFile(report)}
-                                            className="text-xs flex items-center gap-1 bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-100 transition-colors"
-                                        >
+                                        <button onClick={() => openCaseFile(report)} className="text-xs flex items-center gap-1 bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-100 transition-colors">
                                             <Eye size={12} /> Review Evidence
                                         </button>
                                     )}
-                                </div>
+                                  </div>
                                 <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700 text-sm italic text-gray-600 dark:text-gray-300">
                                     "{report.details || 'No details provided'}"
                                 </div>
                                 <div className="grid grid-cols-2 gap-4 text-xs text-gray-500">
-                                    <div><span className="font-bold uppercase block mb-1">Reporter</span><span className="font-mono bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded select-all">{report.reporter_id.slice(0,8)}...</span></div>
+                                     <div><span className="font-bold uppercase block mb-1">Reporter</span><span className="font-mono bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded select-all">{report.reporter_id.slice(0,8)}...</span></div>
                                     <div><span className="font-bold uppercase block mb-1">Reported</span><span className="font-mono bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded select-all">{report.reported_user_id.slice(0,8)}...</span></div>
                                 </div>
-                                {reportFilter === 'pending' && (
+                                 {reportFilter === 'pending' && (
                                     <div className="flex gap-2 mt-2 pt-4 border-t border-gray-100 dark:border-gray-700">
                                         <button onClick={() => handleResolveReport(report.id, 'dismissed')} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"><XCircle size={16}/> Dismiss</button>
                                         <button onClick={() => handleBanUser(report.reported_user_id, 'freelancers')} className="px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg" title="Ban User"><Trash2 size={18}/></button>
-                                    </div>
+                                      </div>
                                 )}
                             </div>
-                        ))}
+                      ))}
                     </div>
                 )}
             </div>
         )}
 
-        {/* --- USERS TAB (UPDATED WITH KYC) --- */}
+        {/* --- USERS TAB (UPDATED WITH PAGINATION & KYC) --- */}
         {tab === 'users' && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden overflow-x-auto">
-            <table className="w-full text-left min-w-[600px]">
-              <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 text-sm">
-                <tr>
-                  <th className="p-4">Name</th>
-                  <th className="p-4">Role</th>
-                  <th className="p-4">KYC Status</th>
-                  <th className="p-4">ID Proof</th>
-                  <th className="p-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {users.map(user => (
-                  <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                    <td className="p-4 font-medium text-gray-900 dark:text-white">
-                        {user.name}
-                        <div className="text-xs text-gray-400">{user.email}</div>
-                    </td>
-                    <td className="p-4">
-                        <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.role === 'client' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{user.role}</span>
-                    </td>
-                    <td className="p-4">
-                         <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
-                            user.kyc_status === 'approved' ? 'bg-green-100 text-green-700' :
-                            user.kyc_status === 'rejected' ? 'bg-red-100 text-red-700' :
-                            user.kyc_status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                            'bg-gray-100 text-gray-500'
-                        }`}>
-                            {user.kyc_status || 'Not Started'}
-                        </span>
-                    </td>
-                    <td className="p-4">
-                      {user.id_proof_url ? 
-                        <button 
-                            onClick={() => handleViewId(user.id_proof_url)}
-                            className="text-indigo-600 hover:underline text-sm font-bold flex items-center gap-1"
-                        >
-                            <Eye size={14}/> View ID
-                        </button> : 
-                        <span className="text-gray-400 text-sm">None</span>
-                      }
-                    </td>
-                    <td className="p-4 text-right flex justify-end gap-2">
-                      {/* KYC ACTIONS */}
-                      {user.kyc_status === 'pending' && (
-                         <>
-                            <button 
-                                onClick={() => handleKycAction(user.id, user.role, 'approved')}
-                                className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
-                                title="Approve KYC"
-                            >
-                                <CheckCircle size={18} />
-                            </button>
-                            <button 
-                                onClick={() => handleKycAction(user.id, user.role, 'rejected')}
-                                className="p-2 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors"
-                                title="Reject KYC"
-                            >
-                                <XCircle size={18} />
-                            </button>
-                         </>
-                      )}
-
-                      {/* BAN ACTION */}
-                      <button onClick={() => handleBanUser(user.id, user.role === 'client' ? 'clients' : 'freelancers')} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Ban User">
-                        <Trash2 size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex flex-col gap-4">
+             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden overflow-x-auto">
+                <table className="w-full text-left min-w-[600px]">
+                  <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400 text-sm">
+                    <tr>
+                      <th className="p-4">Name</th>
+                      <th className="p-4">Role</th>
+                      <th className="p-4">KYC Status</th>
+                      <th className="p-4">ID Proof</th>
+                      <th className="p-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {users.map(user => (
+                      <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                        <td className="p-4 font-medium text-gray-900 dark:text-white">
+                            {user.name}
+                            <div className="text-xs text-gray-400">{user.email}</div>
+                        </td>
+                        <td className="p-4">
+                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.role === 'client' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{user.role}</span>
+                        </td>
+                        <td className="p-4">
+                             <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
+                                user.kyc_status === 'approved' ? 'bg-green-100 text-green-700' :
+                                user.kyc_status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                user.kyc_status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                'bg-gray-100 text-gray-500'
+                            }`}>
+                                {user.kyc_status || 'Not Started'}
+                            </span>
+                        </td>
+                        <td className="p-4">
+                          {user.id_proof_url ? 
+                            <button onClick={() => handleViewId(user.id_proof_url)} className="text-indigo-600 hover:underline text-sm font-bold flex items-center gap-1">
+                                 <Eye size={14}/> View ID
+                            </button> : 
+                            <span className="text-gray-400 text-sm">None</span>
+                          }
+                          </td>
+                        <td className="p-4 text-right flex justify-end gap-2">
+                          {user.kyc_status === 'pending' && (
+                              <>
+                                <button onClick={() => handleKycAction(user.id, user.role, 'approved')} className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg transition-colors" title="Approve KYC">
+                                    <CheckCircle size={18} />
+                                </button>
+                                <button onClick={() => handleKycAction(user.id, user.role, 'rejected')} className="p-2 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg transition-colors" title="Reject KYC">
+                                    <XCircle size={18} />
+                                </button>
+                             </>
+                          )}
+                          <button onClick={() => handleBanUser(user.id, user.role === 'client' ? 'clients' : 'freelancers')} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Ban User">
+                            <Trash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <PaginationControls />
           </div>
         )}
         
         {(tab === 'jobs' || tab === 'services') && (
           <div className="grid gap-4">
-            {(tab === 'jobs' ? jobs : services).map(item => (
+             {(tab === 'jobs' ? jobs : services).map(item => (
               <div key={item.id} className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <h3 className="font-bold text-lg text-gray-900 dark:text-white">{item.title}</h3>
@@ -599,10 +604,7 @@ const AdminDashboard = ({ onLogout }) => {
                     </span>
                   </p>
                 </div>
-                <button 
-                    onClick={() => tab === 'jobs' ? handleDeleteJob(item.id) : handleDeleteService(item.id)} 
-                    className="w-full sm:w-auto px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100 transition-colors"
-                >
+                <button onClick={() => tab === 'jobs' ? handleDeleteJob(item.id) : handleDeleteService(item.id)} className="w-full sm:w-auto px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100 transition-colors">
                   Delete {tab === 'jobs' ? 'Job' : 'Service'}
                 </button>
               </div>
@@ -615,7 +617,6 @@ const AdminDashboard = ({ onLogout }) => {
           </div>
         )}
 
-        {/* 🆕 NEW AUDIT LOGS TAB */}
         {tab === 'logs' && (
              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div className="p-6 border-b border-gray-200 dark:border-gray-700">
@@ -676,7 +677,6 @@ const AdminDashboard = ({ onLogout }) => {
                         </div>
                     ) : (
                         <>
-                            {/* 1. Job Context */}
                             {evidence?.job && (
                                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
                                     <h4 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase mb-2 flex items-center gap-2"><Briefcase size={14}/> Job Context</h4>
@@ -688,7 +688,6 @@ const AdminDashboard = ({ onLogout }) => {
                                 </div>
                             )}
 
-                            {/* 2. Chat History */}
                             <div>
                                 <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2"><MessageSquare size={14}/> Recent Chat Logs</h4>
                                 <div className="bg-gray-50 dark:bg-black/40 p-4 rounded-xl h-64 overflow-y-auto space-y-3 border border-gray-100 dark:border-gray-800">
@@ -721,16 +720,10 @@ const AdminDashboard = ({ onLogout }) => {
 
                 {/* Modal Actions */}
                 <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex gap-3">
-                    <button 
-                        onClick={() => handleResolveReport(selectedReport.id, 'dismissed')} 
-                        className="flex-1 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                    >
+                    <button onClick={() => handleResolveReport(selectedReport.id, 'dismissed')} className="flex-1 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                         Dismiss Report
                     </button>
-                    <button 
-                        onClick={() => handleBanUser(selectedReport.reported_user_id, 'freelancers')} // Default assumption
-                        className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-500/30 flex items-center justify-center gap-2"
-                    >
+                    <button onClick={() => handleBanUser(selectedReport.reported_user_id, 'freelancers')} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-500/30 flex items-center justify-center gap-2">
                         <Trash2 size={18}/> Ban User & Resolve
                     </button>
                 </div>

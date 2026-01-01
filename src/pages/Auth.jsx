@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, UploadCloud, ShieldAlert, Mail, ArrowRight, ArrowLeft, 
   User, Briefcase, Check, ChevronRight, Loader2, Lock, 
-  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck, RefreshCw, ShieldCheck
+  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck, RefreshCw
 } from 'lucide-react';
 import { supabase } from '../supabase'; 
-import { Turnstile } from '@marsidev/react-turnstile'; // 🆕 IMPORT TURNSTILE
+import { Turnstile } from '@marsidev/react-turnstile'; 
 
 // LEGAL: Version control for the consent text.
 const CONSENT_VERSION = "v1.0_TEENVERSE_PARENT_AGREEMENT_2025";
-const CLOUDFLARE_SITE_KEY = import.meta.env.VITE_CLOUDFLARE_SITE_KEY; // 🆕 GET KEY
+const CLOUDFLARE_SITE_KEY = import.meta.env.VITE_CLOUDFLARE_SITE_KEY; 
 
 // --- STYLES ---
 const styles = `
@@ -52,7 +52,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [parentAgreed, setParentAgreed] = useState(false);
    
   // 🛡️ SECURITY STATES
-  const [captchaToken, setCaptchaToken] = useState(null); // 🆕 Captcha State
+  const [captchaToken, setCaptchaToken] = useState(null); 
+  const turnstileRef = useRef(); // 🆕 REF TO RESET CAPTCHA
 
   // Social & Password Update
   const [socialUser, setSocialUser] = useState(null);
@@ -220,13 +221,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
         redirectTo: window.location.origin + '#type=recovery',
-        options: { captchaToken } // 🆕 PASS CAPTCHA IF APPLICABLE
+        options: { captchaToken } 
       });
       if (error) throw error;
       alert("Password reset link sent to your email!");
       setViewMode('login');
     } catch (err) {
       alert(err.message);
+      turnstileRef.current?.reset(); // Reset on error
+      setCaptchaToken(null);
     } finally {
       setLoading(false);
     }
@@ -316,7 +319,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         const { error } = await supabase.auth.signInWithPassword({
             email: formData.email,
             password: formData.password,
-            options: { captchaToken } // 🆕 PASSING TOKEN TO SUPABASE
+            options: { captchaToken } 
         });
         if (error) throw error;
         
@@ -352,8 +355,12 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       }
     } catch (err) {
       alert(err.message);
+      // 🆕 AUTO-RESET CAPTCHA ON ERROR
+      if (turnstileRef.current) {
+          turnstileRef.current.reset();
+      }
+      setCaptchaToken(null); 
       setLoading(false);
-      setCaptchaToken(null); // Reset on failure
     }
   };
 
@@ -367,7 +374,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         uid = socialUser.id;
         email = socialUser.email;
 
-        // 1. Create Base User
         const { error: userError } = await supabase.from('users').upsert({
             id: uid,
             email: email,
@@ -414,7 +420,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
             throw new Error("Could not save profile: " + error.message);
         }
         
-        // 2. LOG CONSENT
         if (isMinor) {
             await supabase.functions.invoke('log-parent-consent', {
                 body: {
@@ -447,7 +452,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         password: formData.password,
         options: { 
             data: metadata,
-            captchaToken: captchaToken // 🆕 PASS CAPTCHA
+            captchaToken: captchaToken 
         } 
     });
     
@@ -564,10 +569,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                    <h2 className="text-3xl font-bold mb-2">Reset Password</h2>
                    <form onSubmit={handleForgotPassword} className="space-y-4">
                      <div className="group"><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email Address</label><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Mail size={18} className="text-gray-500 mr-3"/><input type="email" placeholder="you@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required /></div></div>
-                     {/* 🛡️ CAPTCHA FOR FORGOT PASSWORD */}
                      {CLOUDFLARE_SITE_KEY && (
                          <div className="my-2 flex justify-center">
-                             <Turnstile siteKey={CLOUDFLARE_SITE_KEY} onSuccess={setCaptchaToken} theme="dark" />
+                             <Turnstile 
+                                ref={turnstileRef} 
+                                siteKey={CLOUDFLARE_SITE_KEY} 
+                                onSuccess={setCaptchaToken} 
+                                onExpire={() => setCaptchaToken(null)}
+                                theme="dark" 
+                             />
                          </div>
                      )}
                      <button type="submit" disabled={loading} className="w-full bg-white text-black font-bold py-4 rounded-xl transition-all flex justify-center items-center shadow-lg shadow-white/10">{loading ? <Loader2 className="animate-spin"/> : 'Send Reset Link'}</button>
@@ -584,10 +594,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                      <div className="group"><div className="flex justify-between items-center mb-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Password</label><button onClick={() => setViewMode('forgot')} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button></div><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Lock size={18} className="text-gray-500 mr-3"/><input type={showPassword ? "text" : "password"} placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} /><button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></div>
                    </div>
                    
-                   {/* 🛡️ CLOUDFLARE TURNSTILE WIDGET (LOGIN) */}
                    {CLOUDFLARE_SITE_KEY && (
                      <div className="mt-6 flex justify-center">
-                        <Turnstile siteKey={CLOUDFLARE_SITE_KEY} onSuccess={setCaptchaToken} theme="dark" />
+                        <Turnstile 
+                            ref={turnstileRef} 
+                            siteKey={CLOUDFLARE_SITE_KEY} 
+                            onSuccess={setCaptchaToken} 
+                            onExpire={() => setCaptchaToken(null)}
+                            theme="dark" 
+                        />
                      </div>
                    )}
 
@@ -719,7 +734,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                 {/* 🛡️ CLOUDFLARE TURNSTILE WIDGET (SIGNUP) */}
                                 {CLOUDFLARE_SITE_KEY && (
                                     <div className="mt-4 flex justify-center">
-                                        <Turnstile siteKey={CLOUDFLARE_SITE_KEY} onSuccess={setCaptchaToken} theme="dark" />
+                                        <Turnstile 
+                                            ref={turnstileRef} 
+                                            siteKey={CLOUDFLARE_SITE_KEY} 
+                                            onSuccess={setCaptchaToken} 
+                                            onExpire={() => setCaptchaToken(null)}
+                                            theme="dark" 
+                                        />
                                     </div>
                                 )}
                              </div>

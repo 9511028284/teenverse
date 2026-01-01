@@ -121,56 +121,66 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
+// Replace the loadData function inside useEffect [cite: 28] with this:
 
-    const loadData = async () => {
-      if (jobs.length === 0) setIsLoading(true);
-      if (!isClient) {
-          api.getEnergy(user.id).then(({ energy }) => setEnergy(energy));
-      }
+const loadData = async () => {
+    if (jobs.length === 0) setIsLoading(true);
 
-      const { data: badgeData } = await supabase
-        .from('user_badges')
-        .select('badge_name, badges(icon)')
-        .eq('user_id', user.id);
-      
-      const formattedBadges = badgeData?.map(b => ({
-        name: b.badge_name,
-        icon: b.badges?.icon || 'Award'
-      })) || [];
+    try {
+        // 1. Create promises for all independent requests
+        const energyPromise = !isClient ? api.getEnergy(user.id) : Promise.resolve({ energy: 0 });
+        
+        const badgesPromise = supabase
+            .from('user_badges')
+            .select('badge_name, badges(icon)')
+            .eq('user_id', user.id);
 
-      const { services, jobs: jobsData, applications: appsData, notifications: notifsData, referralCount, error } = 
-        await api.fetchDashboardData(user);
+        // Assuming api.fetchDashboardData handles jobs/services/etc internally
+        // If possible, break that function apart too, but for now, parallelize what we can:
+        const dashboardPromise = api.fetchDashboardData(user);
 
-      if (isMounted && !error) {
-        setServices(services);
-        setJobs(jobsData);
-        setApplications(appsData);
-        setNotifications(notifsData);
+        // 2. Await all at once
+        const [energyRes, badgeRes, dashboardRes] = await Promise.all([
+            energyPromise,
+            badgesPromise,
+            dashboardPromise
+        ]);
+
+        // 3. Set State
+        if (!isClient) setEnergy(energyRes.energy);
+
+        const formattedBadges = badgeRes.data?.map(b => ({
+            name: b.badge_name,
+            icon: b.badges?.icon || 'Award'
+        })) || [];
         setBadges(formattedBadges);
-        setReferralStats({ count: referralCount, earnings: referralCount * 50 });
 
-        const total = appsData.reduce((acc, curr) => {
-          if (curr.status === APP_STATUS.PAID) {
-            const amount = Number(curr.bid_amount) || 0;
-            return isClient ? acc + amount : acc + (amount * 0.96);
-          }
-          return acc;
-        }, 0);
-        setTotalEarnings(total);
+        const { services, jobs, applications, notifications, referralCount, error } = dashboardRes;
 
-        if (notifsData.length > 0) {
-          const latest = notifsData[0];
-          if (lastNotificationId.current && latest.id !== lastNotificationId.current) {
-            showToast(latest.message, 'success');
-          }
-          lastNotificationId.current = latest.id;
+        if (!error) {
+            setServices(services);
+            setJobs(jobs);
+            setApplications(applications);
+            setNotifications(notifications);
+            setReferralStats({ count: referralCount, earnings: referralCount * 50 });
+            
+            // Recalculate earnings synchronously
+            const total = applications.reduce((acc, curr) => {
+                 if (curr.status === 'Paid') {
+                    const amount = Number(curr.bid_amount) || 0;
+                    return isClient ? acc + amount : acc + (amount * 0.96);
+                 }
+                 return acc;
+            }, 0);
+            setTotalEarnings(total);
         }
-      } else if (error) {
-        showToast("Failed to load dashboard data", "error");
-      }
-      setIsLoading(false);
-    };
 
+    } catch (err) {
+        showToast("Dashboard sync failed: " + err.message, "error");
+    } finally {
+        setIsLoading(false);
+    }
+};
     loadData();
     return () => { isMounted = false; };
   }, [user, isClient, showToast, jobs.length]);
