@@ -88,8 +88,20 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     };
   };
 
-  // --- 1. SUPABASE SESSION & URL HASH CHECK ---
+  // --- 1. SUPABASE SESSION & URL CHECK (🟢 MODIFIED FOR EDGE FUNCTION) ---
   useEffect(() => {
+    // 🟢 NEW: Check for "Safe Link" parameters from Edge Function
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get('token_hash');
+    const type = params.get('type');
+
+    if (tokenHash && type === 'recovery') {
+      // Don't verify yet! Just show the "Safe Mode" UI
+      setViewMode('reset_interstitial');
+      return; 
+    }
+
+    // 🟢 OLD: Standard hash check (Legacy/Default Flow)
     const hash = window.location.hash;
     if (hash && hash.includes('type=recovery')) {
       setViewMode('update_password');
@@ -101,7 +113,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
+          // If we are already in recovery mode, don't redirect
           if (hash && hash.includes('type=recovery')) return;
+          if (tokenHash && type === 'recovery') return;
 
           const user = session.user;
           const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.id).maybeSingle();
@@ -214,23 +228,55 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     setView(page);
   };
 
+  // 🟢 MODIFIED: Calls Edge Function instead of default Supabase method
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if(!formData.email) return alert("Please enter your email address first.");
+    
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: window.location.origin + '#type=recovery',
-        options: { captchaToken } 
+      // Call your Edge Function 'request-reset'
+      const { data, error } = await supabase.functions.invoke('request-reset', {
+        body: { email: formData.email }
       });
+
       if (error) throw error;
-      alert("Password reset link sent to your email!");
-      setViewMode('login');
+      
+      alert("A secure reset link has been sent to your email!");
+      setViewMode('login'); // Return to login view
     } catch (err) {
-      alert(err.message);
-      turnstileRef.current?.reset(); // Reset on error
+      console.error(err);
+      alert("Failed to send request: " + err.message);
+      turnstileRef.current?.reset();
       setCaptchaToken(null);
     } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🟢 NEW: Handles the manual button click from the safe landing page
+  const handleSafeLinkProceed = async () => {
+    setLoading(true);
+    const params = new URLSearchParams(window.location.search);
+    const token_hash = params.get('token_hash');
+    const type = params.get('type');
+
+    // THIS is where the token actually gets consumed
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash,
+      type,
+    });
+
+    if (error) {
+      alert("Link expired or invalid. Please try again.");
+      // Clear params and go back to forgot view
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setViewMode('forgot');
+      setLoading(false);
+    } else {
+      // Success! Session is active, remove query params to clean URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setViewMode('update_password');
       setLoading(false);
     }
   };
@@ -301,13 +347,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   const handleFinalSubmit = async () => {
-    // 🛡️ CAPTCHA CHECK
+   // 🛡️ CAPTCHA CHECK
     if (CLOUDFLARE_SITE_KEY && !captchaToken && viewMode === 'login') {
-        return alert("Please complete the security check.");
+       return alert("Please complete the security check.");
     }
     if (CLOUDFLARE_SITE_KEY && !captchaToken && viewMode === 'signup' && step === 4) {
-        return alert("Please complete the security check.");
-    }
+       return alert("Please complete the security check.");
+   }
 
     if (viewMode !== 'login' && !agreedToTerms) {
         return alert("You must agree to the Terms & Privacy Policy to continue.");
@@ -545,6 +591,27 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
              </div>
           ) : (
             <>
+              {/* 🟢 NEW: SAFE LINK INTERSTITIAL VIEW */}
+              {viewMode === 'reset_interstitial' && (
+                <div className="max-w-md mx-auto w-full text-center animate-in fade-in zoom-in duration-500">
+                  <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-500 border border-blue-500/30 shadow-[0_0_30px_rgba(59,130,246,0.2)]">
+                    <ShieldAlert size={40} />
+                  </div>
+                  <h2 className="text-3xl font-bold mb-4">Security Check</h2>
+                  <p className="text-gray-300 mb-8">
+                    To protect your account from automated email scanners, please click the button below to verify your identity.
+                  </p>
+                  
+                  <button 
+                    onClick={handleSafeLinkProceed} 
+                    disabled={loading}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-blue-900/50 mb-4 flex justify-center items-center gap-2"
+                  >
+                    {loading ? <Loader2 className="animate-spin"/> : 'Proceed to Reset Password'}
+                  </button>
+                </div>
+              )}
+
               {viewMode === 'update_password' && (
                 <div className="max-w-md mx-auto w-full animate-in fade-in zoom-in duration-500">
                   <button onClick={() => setViewMode('login')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 text-sm font-bold transition-colors"><ArrowLeft size={16}/> Cancel</button>
@@ -731,7 +798,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                 
                                 <div className="flex items-start gap-3 mt-6"><input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} /><label className="text-xs text-gray-400">I agree to Terms & Privacy.</label></div>
                                 
-                                {/* 🛡️ CLOUDFLARE TURNSTILE WIDGET (SIGNUP) */}
                                 {CLOUDFLARE_SITE_KEY && (
                                     <div className="mt-4 flex justify-center">
                                         <Turnstile 
@@ -755,7 +821,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                   </>
             )}
             </div>
-              )}
+             )}
             </>
           )}
         </div>
