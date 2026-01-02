@@ -2,9 +2,9 @@ import React from 'react';
 import { 
   Settings, Save, User, Shield, Briefcase, CreditCard, 
   Smartphone, Globe, Award, Hash, Building, Activity, Zap,
-  CheckCircle, AlertTriangle, Clock, FileText, ChevronRight, ShieldCheck
+  CheckCircle, AlertTriangle, Clock, FileText, ChevronRight, ShieldCheck, ShieldAlert, DollarSign
 } from 'lucide-react'; 
-import Button from '../ui/Button';
+import Button from '../ui/Button'; // Ensure this path is correct for your project structure
 
 // Reusable "Gen Z" Input Field
 const ModernInput = ({ label, icon: Icon, ...props }) => (
@@ -68,6 +68,9 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
 
   const statusUI = kycConfig[kycStatus] || kycConfig.not_started;
   const StatusIcon = statusUI.icon;
+  
+  // Check if user is a minor based on provided profile form data (assuming is_minor flag or age calculation logic exists)
+  const isMinor = profileForm.is_minor || (profileForm.age && parseInt(profileForm.age) < 18);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-fade-in pb-10">
@@ -136,6 +139,15 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
                 value={profileForm.age || ""} 
                 onChange={e => setProfileForm({...profileForm, age: e.target.value})} 
               />
+            )}
+            {isClient && (
+                 <ModernInput 
+                 label="Organization (Optional)" 
+                 icon={Building}
+                 value={profileForm.is_organisation || ""} 
+                 onChange={e => setProfileForm({...profileForm, is_organisation: e.target.value})} 
+                 placeholder="Company Name"
+               />
             )}
           </div>
         </div>
@@ -277,7 +289,46 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
                 </div>
               </div>
 
-              <div className="space-y-4">
+               {/* CONDITIONAL BANKING UI BASED ON AGE */}
+               {isMinor ? (
+                // --- MINOR VIEW (Guardian Details Required) ---
+                <div className="bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl">
+                  <div className="flex items-center gap-2 text-orange-400 mb-2 font-bold">
+                    <ShieldAlert size={18} /> Guardian Requirement
+                  </div>
+                  <p className="text-sm text-gray-400 mb-4 leading-relaxed">
+                    Since you are under 18, Indian law requires payments to be processed 
+                    through a Guardian's account.
+                  </p>
+                  
+                  <div className="space-y-4">
+                      <ModernInput 
+                        label="Guardian Name" 
+                        icon={User}
+                        value={profileForm.guardian_name || ""} 
+                        onChange={e => setProfileForm({...profileForm, guardian_name: e.target.value})} 
+                        placeholder="Parent/Guardian Name"
+                      />
+                       <ModernInput 
+                        label="Guardian PAN (Tax)" 
+                        icon={FileText}
+                        value={profileForm.guardian_pan || ""} 
+                        onChange={e => setProfileForm({...profileForm, guardian_pan: e.target.value})} 
+                        placeholder="ABCDE1234F"
+                      />
+                      <ModernInput 
+                        label="Guardian UPI ID" 
+                        icon={Smartphone}
+                        value={profileForm.guardian_upi || ""} 
+                        onChange={e => setProfileForm({...profileForm, guardian_upi: e.target.value})} 
+                        placeholder="guardian@upi"
+                      />
+                       {/* You can add Guardian Bank Name / Account No here if needed */}
+                  </div>
+                </div>
+              ) : (
+                // --- ADULT VIEW (Standard Banking) ---
+                <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-[10px] font-bold text-gray-500 uppercase">Bank Name</label>
@@ -320,6 +371,8 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
                     />
                   </div>
               </div>
+              )}
+
             </div>
           </div>
         )}
