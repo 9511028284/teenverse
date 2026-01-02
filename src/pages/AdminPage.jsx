@@ -445,7 +445,7 @@ const AdminDashboard = ({ onLogout }) => {
                                         order.status === 'Completed' ? 'bg-green-100 text-green-700' :
                                         'bg-blue-100 text-blue-700'}`}>
                                         {order.status}
-                                   </span>
+                                    </span>
                                 </td>
                                 <td className="p-4 text-right">
                                      <div className="flex justify-end gap-2">
