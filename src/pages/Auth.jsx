@@ -1,15 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  X, UploadCloud, ShieldAlert, Mail, ArrowRight, ArrowLeft, 
-  User, Briefcase, Check, ChevronRight, Loader2, Lock, 
-  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck, RefreshCw, Key
+  X, ShieldAlert, Mail, ArrowLeft, 
+  User, Briefcase, Check, Loader2, Lock, 
+  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck, RefreshCw, Key 
 } from 'lucide-react';
 import { supabase } from '../supabase'; 
 import { Turnstile } from '@marsidev/react-turnstile'; 
 
 // LEGAL: Version control for the consent text.
 const CONSENT_VERSION = "v1.0_TEENVERSE_PARENT_AGREEMENT_2025";
-const CLOUDFLARE_SITE_KEY = import.meta.env.VITE_CLOUDFLARE_SITE_KEY; 
+
+// 🛡️ SAFE ENV ACCESS (Fixes crash if not using Vite)
+const getEnv = (key) => {
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    return import.meta.env[key];
+  }
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env[key] || process.env[`REACT_APP_${key.replace('VITE_', '')}`];
+  }
+  return '';
+};
+
+const CLOUDFLARE_SITE_KEY = getEnv('VITE_CLOUDFLARE_SITE_KEY'); 
 
 // --- STYLES ---
 const styles = `
@@ -64,40 +76,19 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const [newPassword, setNewPassword] = useState('');
 
   const [formData, setFormData] = useState({
-    role: 'freelancer', 
-    email: '',
-    password: '',
-    name: '',
-    phone: '',
-    nationality: '',
-    dob: '',
-    gender: 'Male',
-    upi: '',
-    org: 'No',
-    parentEmail: '',
-    referralCode: ''
+    role: 'freelancer', email: '', password: '', name: '', phone: '', nationality: '', dob: '', gender: 'Male', upi: '', org: 'No', parentEmail: '', referralCode: ''
   });
   const [age, setAge] = useState(null);
   const [isMinor, setIsMinor] = useState(false);
 
-  // --- 🔒 DEVICE FINGERPRINTING ---
-  const getDeviceFingerprint = () => {
-    return {
-        userAgent: navigator.userAgent,
-        language: navigator.language,
-        screenSize: `${window.screen.width}x${window.screen.height}`,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        platform: navigator.platform
-    };
-  };
+  const getDeviceFingerprint = () => ({ userAgent: navigator.userAgent, language: navigator.language, screenSize: `${window.screen.width}x${window.screen.height}`, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, platform: navigator.platform });
 
-  // --- 1. SUPABASE SESSION CHECK ---
+  // --- 1. SUPABASE SESSION CHECK (FIXED LOOP) ---
   useEffect(() => {
     const checkSession = async () => {
       setLoading(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        
         if (session) {
           if (viewMode === 'update_password') return;
 
@@ -109,12 +100,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
              onLogin(`Welcome back!`);
           } else {
              setSocialUser(user);
-             setFormData(prev => ({
-               ...prev,
-               email: user.email,
-               name: user.user_metadata?.full_name || user.email.split('@')[0],
-               role: 'freelancer'
-             }));
+             setFormData(prev => ({ ...prev, email: user.email, name: user.user_metadata?.full_name || user.email.split('@')[0], role: 'freelancer' }));
              setViewMode('signup');
              setStep(1);
           }
@@ -126,7 +112,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       }
     };
     checkSession();
-  }, [onLogin, viewMode]);
+    // 🛑 REMOVED 'onLogin' from dependency array to prevent Infinite Loop
+  }, [viewMode]); 
 
   // --- AGE CALCULATION ---
   useEffect(() => {
@@ -134,10 +121,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       const birthDate = new Date(formData.dob);
       const today = new Date();
       let calculatedAge = today.getFullYear() - birthDate.getFullYear();
-      const m = today.getMonth() - birthDate.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-        calculatedAge--;
-      }
+      if (today.getMonth() < birthDate.getMonth() || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())) calculatedAge--;
       setAge(calculatedAge);
       setIsMinor(calculatedAge < 18);
     }
@@ -201,7 +185,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   // 📧 🆕 STEP 1: SEND RESET OTP
-  // Calls the backend to generate and email a 6-digit code
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if(!formData.email) return alert("Please enter your email address first.");
@@ -224,9 +207,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
-  // 🔐 🆕 STEP 2: VERIFY CODE
-  // Checks the code with the backend. If valid, moves to "Set New Password".
-  // Does NOT use supabase.auth.verifyOtp to avoid token mismatch errors.
+  // 🔐 🆕 STEP 2: VERIFY CODE (No Login Yet)
   const handleVerifyResetOTP = async () => {
     setLoading(true);
     try {
@@ -243,8 +224,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         alert("Code Verified! Please set your new password.");
         setShowResetVerify(false);
         setViewMode('update_password'); 
-        // ⚠️ Important: We keep resetOtp in state because we need it for Step 3
-
     } catch (err) {
         alert(err.message);
     } finally {
@@ -252,8 +231,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
-  // 🛠️ 🆕 STEP 3: UPDATE PASSWORD
-  // Calls the backend to verify the code AGAIN and perform the password update.
+  // 🛠️ 🆕 STEP 3: UPDATE PASSWORD (Via Backend)
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -262,7 +240,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
             body: { 
                 action: 'reset_password', 
                 email: formData.email.trim(),
-                otp: resetOtp.trim(), // Re-send OTP for security check
+                otp: resetOtp.trim(), // Security Re-check
                 new_password: newPassword
             }
         });
@@ -270,7 +248,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         if (error || !data || !data.success) throw new Error(data?.error || "Failed to update password");
 
         alert("Password updated successfully! Please log in.");
-        setResetOtp(''); // Now safe to clear
+        setResetOtp(''); // Clear OTP now
         setViewMode('login');
 
     } catch (err) {
@@ -289,7 +267,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const handleVerifyOTP = async (e) => { 
     e.preventDefault(); 
     if (!parentAgreed) return alert("Parent/Guardian must explicitly consent to the terms.");
-    
     setLoading(true);
     const { data, error } = await supabase.functions.invoke('verify-parent-otp', {
         body: { parentEmail: formData.parentEmail, otp: otp }
