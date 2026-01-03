@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabase'; // ✅ Using Supabase exclusively
+import { supabase } from './supabase'; 
 import Toast from './components/ui/Toast';
 import { Loader2 } from 'lucide-react';
 
@@ -50,7 +50,6 @@ export default function TeenVerse() {
   }, []);
 
   // Helper to process user data from DB
-// Helper to process user data from DB
   const handleSession = async (session) => {
     // 1. No Session? Go Home.
     if (!session) {
@@ -64,6 +63,20 @@ export default function TeenVerse() {
 
     const u = session.user;
 
+    // 🛑 FIX START: Check for Password Recovery Hash
+    // Supabase adds #access_token=...&type=recovery to the URL
+    // If this is present, we MUST stay on the 'auth' view so the reset form loads.
+    const isRecovery = window.location.hash && window.location.hash.includes('type=recovery');
+    
+    if (isRecovery) {
+        console.log("Recovery mode detected. Halting redirect to Dashboard.");
+        setUser(u);      // Keep user in state so we have permission to update password
+        setView('auth'); // Force the view to 'auth'
+        setLoading(false);
+        return;          // STOP EXECUTION HERE. Do not go to Dashboard.
+    }
+    // 🛑 FIX END
+
     try {
       // 2. CHECK ADMIN
       const { data: adminCheck } = await supabase.from('admins').select('*').eq('email', u.email).maybeSingle();
@@ -71,7 +84,7 @@ export default function TeenVerse() {
         setUser({ ...u, type: "admin" });
         setView('admin');
         setLoading(false);
-        return; 
+        return;
       }
 
       // 3. CHECK IF CLIENT PROFILE EXISTS
@@ -86,7 +99,7 @@ export default function TeenVerse() {
       // 4. CHECK IF FREELANCER PROFILE EXISTS
       let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
       if (f) { 
-          setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] }); 
+          setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] });
           setView('dashboard'); // ✅ Only go to dashboard if profile exists
           setLoading(false);
           return;
@@ -96,9 +109,9 @@ export default function TeenVerse() {
       // If we reach here, they have a Google Session, but NO database row.
       console.log("User logged in via Social, but profile missing. Redirecting to setup...");
       
-      // DO NOT set 'dashboard'. Force 'auth'.
+      // DO NOT set 'dashboard'. Force 'auth' to complete profile setup.
       setUser(null); 
-      setView('auth'); 
+      setView('auth');
       setLoading(false);
 
     } catch (err) {
@@ -128,17 +141,17 @@ export default function TeenVerse() {
   const toggleTheme = () => setDarkMode(!darkMode);
   
   const showToast = (message, type = 'success') => { 
-      setToast({ message, type }); 
+      setToast({ message, type });
       setTimeout(() => setToast(null), 4000); 
   };
 
   const handleFeedback = async (e) => { 
-      e.preventDefault(); 
+      e.preventDefault();
       const formData = new FormData(e.target); 
-      const { error } = await supabase.from('feedback').insert([{ name: formData.get('name'), email: formData.get('email'), message: formData.get('message') }]); 
+      const { error } = await supabase.from('feedback').insert([{ name: formData.get('name'), email: formData.get('email'), message: formData.get('message') }]);
       if (!error) {
         showToast('Feedback sent!'); 
-        e.target.reset(); 
+        e.target.reset();
       } else {
         showToast('Failed to send feedback', 'error');
       }
@@ -170,12 +183,12 @@ export default function TeenVerse() {
       
       {view === 'parent-approval' && <ParentApproval token={approvalToken} onApprovalComplete={() => setView('home')} />}
       
-      {/* AUTH PAGE: Integrated with the code generated previously */}
+      {/* AUTH PAGE */}
       {view === 'auth' && (
           <Auth 
             setView={setView} 
             onLogin={(msg) => { showToast(msg); }} 
-            onSignUpSuccess={() => setView('terms')} // Or 'dashboard' based on your flow
+            onSignUpSuccess={() => setView('terms')} 
           />
       )}
       
