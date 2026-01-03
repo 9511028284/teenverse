@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, UploadCloud, ShieldAlert, Mail, ArrowRight, ArrowLeft, 
   User, Briefcase, Check, ChevronRight, Loader2, Lock, 
-  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck, RefreshCw
+  Eye, EyeOff, Sparkles, Scale, Gift, MailCheck, RefreshCw, KeyRound
 } from 'lucide-react';
 import { supabase } from '../supabase'; 
 import { Turnstile } from '@marsidev/react-turnstile'; 
@@ -38,22 +38,26 @@ const GithubIcon = () => (<svg viewBox="0 0 24 24" className="w-5 h-5 fill-curre
 
 const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   // --- STATE ---
-  const [viewMode, setViewMode] = useState('login'); 
+  const [viewMode, setViewMode] = useState('login');
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-   
+  
   // Verification States
   const [showVerify, setShowVerify] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false); 
-   
   const [otp, setOtp] = useState('');
+  
+  // 🆕 OTP Reset States
+  const [showResetVerify, setShowResetVerify] = useState(false);
+  const [resetOtp, setResetOtp] = useState('');
+
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [parentAgreed, setParentAgreed] = useState(false);
    
   // 🛡️ SECURITY STATES
-  const [captchaToken, setCaptchaToken] = useState(null); 
-  const turnstileRef = useRef(); // 🆕 REF TO RESET CAPTCHA
+  const [captchaToken, setCaptchaToken] = useState(null);
+  const turnstileRef = useRef();
 
   // Social & Password Update
   const [socialUser, setSocialUser] = useState(null);
@@ -73,7 +77,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     parentEmail: '',
     referralCode: ''
   });
-
   const [age, setAge] = useState(null);
   const [isMinor, setIsMinor] = useState(false);
 
@@ -88,34 +91,17 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     };
   };
 
-  // --- 1. SUPABASE SESSION & URL CHECK (🟢 MODIFIED FOR EDGE FUNCTION) ---
+  // --- 1. SUPABASE SESSION CHECK ---
   useEffect(() => {
-    // 🟢 NEW: Check for "Safe Link" parameters from Edge Function
-    const params = new URLSearchParams(window.location.search);
-    const tokenHash = params.get('token_hash');
-    const type = params.get('type');
-
-    if (tokenHash && type === 'recovery') {
-      // Don't verify yet! Just show the "Safe Mode" UI
-      setViewMode('reset_interstitial');
-      return; 
-    }
-
-    // 🟢 OLD: Standard hash check (Legacy/Default Flow)
-    const hash = window.location.hash;
-    if (hash && hash.includes('type=recovery')) {
-      setViewMode('update_password');
-    }
-
+    // Note: URL hash check removed/minimized here as we are preferring OTP now.
     const checkSession = async () => {
       setLoading(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
-          // If we are already in recovery mode, don't redirect
-          if (hash && hash.includes('type=recovery')) return;
-          if (tokenHash && type === 'recovery') return;
+          // If we are already in update mode, don't auto-redirect
+          if (viewMode === 'update_password') return;
 
           const user = session.user;
           const { data: freelancerData } = await supabase.from('freelancers').select('id').eq('id', user.id).maybeSingle();
@@ -143,7 +129,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     };
     
     checkSession();
-  }, [onLogin]);
+  }, [onLogin, viewMode]);
 
   // --- AGE CALCULATION ---
   useEffect(() => {
@@ -159,7 +145,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       setIsMinor(calculatedAge < 18);
     }
   }, [formData.dob]);
-  
+
   const checkOtpRateLimit = () => {
     const lastSent = localStorage.getItem('last_otp_sent');
     if (lastSent) {
@@ -183,30 +169,25 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         else setStep(2);
         return;
     }
-    
     if (step === 2) {
         if (!formData.email || !formData.password) return alert("Please fill in credentials");
         setStep(prev => prev + 1);
         return;
     }
-
     if (step === 3) {
         if (!formData.name || !formData.phone) return alert("Please fill in personal details");
         const phoneRegex = /^[6-9]\d{9}$/;
         if (!phoneRegex.test(formData.phone)) {
             return alert("Invalid Phone Number. Please enter a valid 10-digit mobile number starting with 6-9.");
         }
-
         setLoading(true);
         try {
             const { data: fData } = await supabase.from('freelancers').select('phone').eq('phone', formData.phone).maybeSingle();
             const { data: cData } = await supabase.from('clients').select('phone').eq('phone', formData.phone).maybeSingle();
-
             if (fData || cData) {
                 setLoading(false);
                 return alert("This phone number is already registered.");
             }
-            
             setLoading(false);
             setStep(prev => prev + 1);
         } catch (error) {
@@ -222,31 +203,36 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     else setStep(prev => prev - 1);
   };
 
-  const handleLegalClick = (e, page) => {
-    e.preventDefault(); 
-    e.stopPropagation();
-    setView(page);
-  };
-
-  // 🟢 MODIFIED: Calls Edge Function instead of default Supabase method
+  // 📧 🆕 HANDLE OTP PASSWORD RESET REQUEST
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if(!formData.email) return alert("Please enter your email address first.");
     
+    // 🛡️ CAPTCHA CHECK
+    if (CLOUDFLARE_SITE_KEY && !captchaToken) {
+        return alert("Please complete the security check.");
+    }
+
     setLoading(true);
     try {
-      // Call your Edge Function 'request-reset'
-      const { data, error } = await supabase.functions.invoke('request-reset', {
-        body: { email: formData.email }
+      // We use signInWithOtp to send a code. 
+      // Important: 'shouldCreateUser: false' prevents signing up new users via this form.
+      const { error } = await supabase.auth.signInWithOtp({
+        email: formData.email,
+        options: { 
+            shouldCreateUser: false,
+            captchaToken: captchaToken 
+        }
       });
-
+      
       if (error) throw error;
       
-      alert("A secure reset link has been sent to your email!");
-      setViewMode('login'); // Return to login view
+      // If success, show the OTP Verification Input
+      setShowResetVerify(true);
+      alert("OTP Code sent to your email!");
+      
     } catch (err) {
-      console.error(err);
-      alert("Failed to send request: " + err.message);
+      alert(err.message);
       turnstileRef.current?.reset();
       setCaptchaToken(null);
     } finally {
@@ -254,31 +240,45 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
-  // 🟢 NEW: Handles the manual button click from the safe landing page
-  const handleSafeLinkProceed = async () => {
+  // 🔐 🆕 VERIFY RESET OTP
+  const handleVerifyResetOTP = async () => {
     setLoading(true);
-    const params = new URLSearchParams(window.location.search);
-    const token_hash = params.get('token_hash');
-    const type = params.get('type');
+    try {
+        // Verify the OTP. This logs the user in if successful.
+        const { data, error } = await supabase.auth.verifyOtp({
+            email: formData.email,
+            token: resetOtp,
+            type: 'email'
+        });
 
-    // THIS is where the token actually gets consumed
-    const { error } = await supabase.auth.verifyOtp({
-      token_hash,
-      type,
-    });
+        if (error) throw error;
 
-    if (error) {
-      alert("Link expired or invalid. Please try again.");
-      // Clear params and go back to forgot view
-      window.history.replaceState({}, document.title, window.location.pathname);
-      setViewMode('forgot');
-      setLoading(false);
-    } else {
-      // Success! Session is active, remove query params to clean URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-      setViewMode('update_password');
-      setLoading(false);
+        // User is now logged in! Move them to "Update Password" screen.
+        alert("Verified! Please set a new password.");
+        setResetOtp('');
+        setShowResetVerify(false);
+        setViewMode('update_password');
+
+    } catch (err) {
+        alert("Invalid Code: " + err.message);
+    } finally {
+        setLoading(false);
     }
+  };
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+       alert("Error updating password: " + error.message);
+    } else {
+       alert("Password updated successfully! Please log in.");
+       // Clear session so they have to login with new creds (optional but cleaner)
+       await supabase.auth.signOut();
+       setViewMode('login');
+    }
+    setLoading(false);
   };
   
   const handleVerifyOTP = async (e) => {
@@ -303,21 +303,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         alert(err.message);
         setLoading(false);
     }
-  };
-
-  const handleUpdatePassword = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    
-    if (error) {
-       alert("Error updating password: " + error.message);
-    } else {
-       alert("Password updated successfully! Please log in.");
-       setViewMode('login');
-       window.history.replaceState(null, '', window.location.pathname);
-    }
-    setLoading(false);
   };
 
   const handleSocialLogin = async (providerName) => {
@@ -347,13 +332,13 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   const handleFinalSubmit = async () => {
-   // 🛡️ CAPTCHA CHECK
+    // 🛡️ CAPTCHA CHECK
     if (CLOUDFLARE_SITE_KEY && !captchaToken && viewMode === 'login') {
-       return alert("Please complete the security check.");
+        return alert("Please complete the security check.");
     }
     if (CLOUDFLARE_SITE_KEY && !captchaToken && viewMode === 'signup' && step === 4) {
-       return alert("Please complete the security check.");
-   }
+        return alert("Please complete the security check.");
+    }
 
     if (viewMode !== 'login' && !agreedToTerms) {
         return alert("You must agree to the Terms & Privacy Policy to continue.");
@@ -387,7 +372,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
               body: { parentEmail: formData.parentEmail, childName: formData.name }
            });
            if (error) {
-                console.error(error); 
+                console.error(error);
                 throw new Error("Failed to send verification code. Please try again.");
            }
            
@@ -427,7 +412,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
             avatar_url: socialUser.user_metadata?.avatar_url,
             raw_app_meta_data: { device: deviceMeta } 
         });
-
         if (userError) console.error("User Creation Failed:", userError);
 
         const table = formData.role === 'client' ? 'clients' : 'freelancers';
@@ -477,7 +461,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         }
         
         onSignUpSuccess(); 
-        return; 
+        return;
     }
 
     // --- SCENARIO B: EMAIL USER ---
@@ -492,7 +476,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         is_minor: isMinor,
         device_fingerprint: deviceMeta 
     };
-
     const { data, error } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -501,11 +484,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
             captchaToken: captchaToken 
         } 
     });
-    
     if (error) throw error;
     if (!data.user) throw new Error("User creation failed.");
     uid = data.user.id;
-
     if (isMinor && uid) {
         const { error: logError } = await supabase.functions.invoke('log-parent-consent', {
             body: {
@@ -580,7 +561,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                  }} 
                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 mb-4"
                >
-                 I have Verified
+                  I have Verified
                </button>
                
                <button onClick={handleResendEmail} disabled={loading} className="text-xs text-indigo-400 hover:text-indigo-300 underline mb-6 block mx-auto flex items-center gap-1 justify-center">
@@ -591,27 +572,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
              </div>
           ) : (
             <>
-              {/* 🟢 NEW: SAFE LINK INTERSTITIAL VIEW */}
-              {viewMode === 'reset_interstitial' && (
-                <div className="max-w-md mx-auto w-full text-center animate-in fade-in zoom-in duration-500">
-                  <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-500 border border-blue-500/30 shadow-[0_0_30px_rgba(59,130,246,0.2)]">
-                    <ShieldAlert size={40} />
-                  </div>
-                  <h2 className="text-3xl font-bold mb-4">Security Check</h2>
-                  <p className="text-gray-300 mb-8">
-                    To protect your account from automated email scanners, please click the button below to verify your identity.
-                  </p>
-                  
-                  <button 
-                    onClick={handleSafeLinkProceed} 
-                    disabled={loading}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-blue-900/50 mb-4 flex justify-center items-center gap-2"
-                  >
-                    {loading ? <Loader2 className="animate-spin"/> : 'Proceed to Reset Password'}
-                  </button>
-                </div>
-              )}
-
               {viewMode === 'update_password' && (
                 <div className="max-w-md mx-auto w-full animate-in fade-in zoom-in duration-500">
                   <button onClick={() => setViewMode('login')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 text-sm font-bold transition-colors"><ArrowLeft size={16}/> Cancel</button>
@@ -630,25 +590,69 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                 </div>
               )}
 
+              {/* 🔄 FORGOT PASSWORD MODE (UPDATED FOR OTP) */}
               {viewMode === 'forgot' && (
                  <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-right-4 duration-300">
                    <button onClick={() => setViewMode('login')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 text-sm font-bold transition-colors"><ArrowLeft size={16}/> Back to Login</button>
-                   <h2 className="text-3xl font-bold mb-2">Reset Password</h2>
-                   <form onSubmit={handleForgotPassword} className="space-y-4">
-                     <div className="group"><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email Address</label><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Mail size={18} className="text-gray-500 mr-3"/><input type="email" placeholder="you@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required /></div></div>
-                     {CLOUDFLARE_SITE_KEY && (
-                         <div className="my-2 flex justify-center">
-                             <Turnstile 
-                                ref={turnstileRef} 
-                                siteKey={CLOUDFLARE_SITE_KEY} 
-                                onSuccess={setCaptchaToken} 
-                                onExpire={() => setCaptchaToken(null)}
-                                theme="dark" 
-                             />
-                         </div>
-                     )}
-                     <button type="submit" disabled={loading} className="w-full bg-white text-black font-bold py-4 rounded-xl transition-all flex justify-center items-center shadow-lg shadow-white/10">{loading ? <Loader2 className="animate-spin"/> : 'Send Reset Link'}</button>
-                   </form>
+                   
+                   {!showResetVerify ? (
+                       /* PHASE 1: ENTER EMAIL */
+                       <>
+                           <h2 className="text-3xl font-bold mb-2">Reset Password</h2>
+                           <p className="text-gray-400 mb-6">Enter your email to receive a One-Time Password (OTP).</p>
+                           <form onSubmit={handleForgotPassword} className="space-y-4">
+                             <div className="group">
+                                 <label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email Address</label>
+                                 <div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4">
+                                     <Mail size={18} className="text-gray-500 mr-3"/>
+                                     <input type="email" placeholder="you@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} required />
+                                 </div>
+                             </div>
+                             
+                             {/* CAPTCHA for sending OTP */}
+                             {CLOUDFLARE_SITE_KEY && (
+                                 <div className="my-2 flex justify-center">
+                                     <Turnstile 
+                                        ref={turnstileRef} 
+                                        siteKey={CLOUDFLARE_SITE_KEY} 
+                                        onSuccess={setCaptchaToken} 
+                                        onExpire={() => setCaptchaToken(null)}
+                                        theme="dark" 
+                                    />
+                                 </div>
+                             )}
+
+                             <button type="submit" disabled={loading} className="w-full bg-white text-black font-bold py-4 rounded-xl transition-all flex justify-center items-center shadow-lg shadow-white/10">
+                                 {loading ? <Loader2 className="animate-spin"/> : 'Send OTP Code'}
+                             </button>
+                           </form>
+                       </>
+                   ) : (
+                       /* PHASE 2: ENTER OTP */
+                       <div className="animate-in fade-in zoom-in duration-300">
+                           <h2 className="text-3xl font-bold mb-2">Enter OTP</h2>
+                           <p className="text-gray-400 mb-6">Enter the 6-digit code sent to <span className="text-white">{formData.email}</span></p>
+                           
+                           <div className="relative mb-6">
+                               <div className="absolute left-4 top-5 text-gray-500"><KeyRound size={24}/></div>
+                               <input 
+                                   className="w-full bg-black/40 border border-gray-700 rounded-xl py-5 pl-12 pr-4 text-center text-3xl tracking-[0.5em] font-mono text-white focus:border-indigo-500 focus:shadow-[0_0_20px_rgba(99,102,241,0.2)] outline-none transition-all" 
+                                   placeholder="000000" 
+                                   maxLength={6} 
+                                   value={resetOtp} 
+                                   onChange={(e) => setResetOtp(e.target.value)} 
+                               />
+                           </div>
+
+                           <button onClick={handleVerifyResetOTP} disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-900/50 flex justify-center items-center">
+                               {loading ? <Loader2 className="animate-spin"/> : 'Verify & Reset'}
+                           </button>
+                           
+                           <button onClick={() => setShowResetVerify(false)} className="mt-4 w-full text-center text-sm text-gray-500 hover:text-white">
+                               Wrong email? Go back
+                           </button>
+                       </div>
+                   )}
                  </div>
               )}
 
@@ -658,7 +662,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                    <p className="text-gray-400 mb-8">Enter your credentials.</p>
                    <div className="space-y-5">
                      <div className="group"><label className="text-xs font-bold text-gray-500 uppercase ml-1 mb-2 block">Email</label><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Mail size={18} className="text-gray-500 mr-3"/><input type="email" placeholder="name@example.com" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.email} onChange={(e) => updateField('email', e.target.value)} /></div></div>
-                     <div className="group"><div className="flex justify-between items-center mb-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Password</label><button onClick={() => setViewMode('forgot')} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button></div><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Lock size={18} className="text-gray-500 mr-3"/><input type={showPassword ? "text" : "password"} placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} /><button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></div>
+                     <div className="group"><div className="flex justify-between items-center mb-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Password</label><button onClick={() => { setViewMode('forgot'); setShowResetVerify(false); }} className="text-xs font-bold text-indigo-400 hover:text-indigo-300">Forgot?</button></div><div className="bg-black/30 border border-gray-700/50 rounded-xl flex items-center px-4"><Lock size={18} className="text-gray-500 mr-3"/><input type={showPassword ? "text" : "password"} placeholder="••••••••" className="bg-transparent border-none outline-none w-full py-4 text-white placeholder-gray-600" value={formData.password} onChange={(e) => updateField('password', e.target.value)} /><button onClick={() => setShowPassword(!showPassword)} className="text-gray-500 hover:text-white transition-colors">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></div>
                    </div>
                    
                    {CLOUDFLARE_SITE_KEY && (
@@ -682,7 +686,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
               {viewMode === 'signup' && (
                   <div className="max-w-md mx-auto w-full">
-                      {showVerify ? (
+                       {showVerify ? (
                        <div className="text-center animate-in zoom-in duration-300">
                            <div className="w-20 h-20 bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.2)]">
                              <ShieldAlert size={40} />
@@ -695,15 +699,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                            </div>
 
                            <div className="mb-8 text-left bg-orange-500/5 p-4 rounded-xl border border-orange-500/20">
-                              <label className="flex items-start gap-3 cursor-pointer">
+                               <label className="flex items-start gap-3 cursor-pointer">
                                   <input 
                                      type="checkbox" 
                                      className="mt-1 w-5 h-5 rounded border-gray-600 bg-black text-orange-600 focus:ring-orange-500"
                                      checked={parentAgreed}
                                      onChange={(e) => setParentAgreed(e.target.checked)}
-                                  />
+                                 />
                                   <span className="text-xs text-gray-300 leading-relaxed">
-                                       <span className="font-bold text-orange-400">LEGAL DECLARATION:</span> I am the parent/legal guardian of the above child. I consent to my child using TeenVerseHub for non-hazardous digital services and receiving payments. I have reviewed the platform Terms.
+                                        <span className="font-bold text-orange-400">LEGAL DECLARATION:</span> I am the parent/legal guardian of the above child. I consent to my child using TeenVerseHub for non-hazardous digital services and receiving payments. I have reviewed the platform Terms.
                                   </span>
                               </label>
                            </div>
@@ -712,7 +716,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                            <button onClick={() => setShowVerify(false)} className="mt-6 text-gray-500 text-sm hover:text-white transition-colors">Change Parent Email</button>
                        </div>
                     ) : (
-                     <>
+                      <>
                       <div className="flex justify-between items-center mb-8">
                            {step > 1 ? <button onClick={handleBack} className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"><ArrowLeft size={20}/></button> : <div></div>}
                            <StepIndicator />
@@ -726,7 +730,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                             <p className="text-gray-400 mb-8">Choose how you want to use Teenverse.</p>
                             <div className="grid gap-4">
                               {['freelancer', 'client'].map((r) => (
-                                 <button key={r} onClick={() => updateField('role', r)} className={`p-6 rounded-2xl border transition-all text-left relative overflow-hidden group ${formData.role === r ? 'border-indigo-500 bg-indigo-500/10 shadow-[0_0_20px_rgba(99,102,241,0.15)]' : 'border-gray-700 bg-white/5 hover:border-gray-600'}`}>
+                                  <button key={r} onClick={() => updateField('role', r)} className={`p-6 rounded-2xl border transition-all text-left relative overflow-hidden group ${formData.role === r ? 'border-indigo-500 bg-indigo-500/10 shadow-[0_0_20px_rgba(99,102,241,0.15)]' : 'border-gray-700 bg-white/5 hover:border-gray-600'}`}>
                                     <div className="flex justify-between items-start mb-2 relative z-10"><div className={`p-3 rounded-xl ${formData.role === r ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400'}`}>{r === 'freelancer' ? <User size={24}/> : <Briefcase size={24}/>}</div>{formData.role === r && <div className="bg-indigo-500 text-white p-1 rounded-full"><Check size={14}/></div>}</div>
                                     <h3 className="text-xl font-bold capitalize relative z-10">{r}</h3>
                                  </button>
@@ -786,7 +790,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                       </div>
                                       
                                       {isMinor && (
-                                         <div className="bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl animate-in slide-in-from-top-2">
+                                          <div className="bg-orange-500/10 border border-orange-500/30 p-4 rounded-xl animate-in slide-in-from-top-2">
                                             <div className="flex gap-2 items-center mb-2 text-orange-400"><ShieldAlert size={16}/><span className="text-xs font-bold uppercase">Guardian Email Required</span></div>
                                             <input type="email" placeholder="Parent's Email Address" value={formData.parentEmail} onChange={(e) => updateField('parentEmail', e.target.value)} className="w-full bg-black/50 border border-gray-700 rounded-lg p-3 text-white focus:border-orange-500 outline-none"/>
                                          </div>
@@ -800,14 +804,14 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                                 
                                 {CLOUDFLARE_SITE_KEY && (
                                     <div className="mt-4 flex justify-center">
-                                        <Turnstile 
+                                         <Turnstile 
                                             ref={turnstileRef} 
                                             siteKey={CLOUDFLARE_SITE_KEY} 
                                             onSuccess={setCaptchaToken} 
                                             onExpire={() => setCaptchaToken(null)}
                                             theme="dark" 
                                         />
-                                    </div>
+                                     </div>
                                 )}
                              </div>
                            </div>
@@ -821,7 +825,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                   </>
             )}
             </div>
-             )}
+              )}
             </>
           )}
         </div>
