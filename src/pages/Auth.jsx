@@ -32,10 +32,6 @@ const styles = `
   .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.5); border-radius: 10px; }
 `;
 
-// --- ICONS ---
-const GoogleIcon = () => (<svg viewBox="0 0 24 24" className="w-5 h-5"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>);
-const GithubIcon = () => (<svg viewBox="0 0 24 24" className="w-5 h-5 fill-current"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>);
-
 const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   // --- STATE ---
   const [viewMode, setViewMode] = useState('login');
@@ -93,14 +89,12 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
   // --- 1. SUPABASE SESSION CHECK ---
   useEffect(() => {
-    // Note: URL hash check removed/minimized here as we are preferring OTP now.
     const checkSession = async () => {
       setLoading(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
-          // If we are already in update mode, don't auto-redirect
           if (viewMode === 'update_password') return;
 
           const user = session.user;
@@ -127,11 +121,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         setLoading(false);
       }
     };
-    
     checkSession();
   }, [onLogin, viewMode]);
 
-  // --- AGE CALCULATION ---
   useEffect(() => {
     if (formData.dob) {
       const birthDate = new Date(formData.dob);
@@ -203,7 +195,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     else setStep(prev => prev - 1);
   };
 
-  // 📧 🆕 HANDLE OTP PASSWORD RESET REQUEST (UPDATED)
+  // 📧 🆕 HANDLE OTP PASSWORD RESET REQUEST
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if(!formData.email) return alert("Please enter your email address first.");
@@ -215,8 +207,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
     setLoading(true);
     try {
-      // ✅ CHANGED: Invoke 'request-reset' instead of 'password-reset'
-      const { data, error } = await supabase.functions.invoke('request-reset', {
+      // Call Deno function (Action: Send)
+      const { error } = await supabase.functions.invoke('request-reset', {
         body: { action: 'send', email: formData.email }
       });
       
@@ -235,29 +227,46 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     }
   };
 
-  // 🔐 🆕 VERIFY RESET OTP (UPDATED)
+  // 🔐 🆕 VERIFY RESET OTP (THE FIX)
   const handleVerifyResetOTP = async () => {
     setLoading(true);
     try {
-        // ✅ CHANGED: Invoke 'request-reset' to verify
+        // 1. Call Deno to verify the 6-digit code
         const { data, error } = await supabase.functions.invoke('request-reset', {
-            body: { action: 'verify', email: formData.email, otp: resetOtp }
+            body: { 
+              action: 'verify', 
+              email: formData.email.trim(), 
+              otp: resetOtp.trim() 
+            }
         });
 
         if (error || !data || !data.token) {
             throw new Error(data?.error || "Invalid or Expired Code");
         }
 
-        // ✅ Success! Use the returned token to log in via Supabase
-        const { error: loginError } = await supabase.auth.verifyOtp({
-          token: data.token,
-          type: 'recovery',
-          email: formData.email
-        });
+        // 2. Login using the token returned by Deno
+        // 🛑 FIX: Use 'token_hash' if the backend returned a hash (PKCE)
+        let loginError;
+        
+        if (data.type === 'hash') {
+            const res = await supabase.auth.verifyOtp({
+                token_hash: data.token,
+                type: 'email' 
+            });
+            loginError = res.error;
+        } else {
+            // Legacy token support
+            const res = await supabase.auth.verifyOtp({
+                token: data.token,
+                type: 'recovery',
+                email: formData.email.trim()
+            });
+            loginError = res.error;
+        }
 
         if (loginError) throw loginError;
 
-        // User is now logged in! Move them to "Update Password" screen.
+        // 3. Success
         alert("Verified! Please set a new password.");
         setResetOtp('');
         setShowResetVerify(false);
@@ -278,7 +287,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
        alert("Error updating password: " + error.message);
     } else {
        alert("Password updated successfully! Please log in.");
-       // Clear session so they have to login with new creds (optional but cleaner)
        await supabase.auth.signOut();
        setViewMode('login');
     }
@@ -390,7 +398,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       }
     } catch (err) {
       alert(err.message);
-      // 🆕 AUTO-RESET CAPTCHA ON ERROR
       if (turnstileRef.current) {
           turnstileRef.current.reset();
       }
@@ -594,7 +601,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                 </div>
               )}
 
-              {/* 🔄 FORGOT PASSWORD MODE (UPDATED FOR OTP) */}
+              {/* 🔄 FORGOT PASSWORD MODE (OTP) */}
               {viewMode === 'forgot' && (
                  <div className="max-w-md mx-auto w-full animate-in fade-in slide-in-from-right-4 duration-300">
                    <button onClick={() => setViewMode('login')} className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 text-sm font-bold transition-colors"><ArrowLeft size={16}/> Back to Login</button>
