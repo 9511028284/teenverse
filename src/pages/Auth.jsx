@@ -215,8 +215,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
     setLoading(true);
     try {
-      // ✅ Call custom Deno function (Action: Send)
-      // This sends the OTP via the Edge Function instead of using Supabase magic links
+      // ✅ CHANGED: Invoke 'request-reset' instead of 'password-reset'
       const { data, error } = await supabase.functions.invoke('request-reset', {
         body: { action: 'send', email: formData.email }
       });
@@ -240,8 +239,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const handleVerifyResetOTP = async () => {
     setLoading(true);
     try {
-        // ✅ Call custom Deno function (Action: Verify)
-        const { data, error } = await supabase.functions.invoke('password-reset', {
+        // ✅ CHANGED: Invoke 'request-reset' to verify
+        const { data, error } = await supabase.functions.invoke('request-reset', {
             body: { action: 'verify', email: formData.email, otp: resetOtp }
         });
 
