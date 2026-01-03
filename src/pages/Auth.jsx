@@ -203,7 +203,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     else setStep(prev => prev - 1);
   };
 
-  // 📧 🆕 HANDLE OTP PASSWORD RESET REQUEST
+  // 📧 🆕 HANDLE OTP PASSWORD RESET REQUEST (UPDATED)
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if(!formData.email) return alert("Please enter your email address first.");
@@ -215,43 +215,48 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
     setLoading(true);
     try {
-      // We use signInWithOtp to send a code. 
-      // Important: 'shouldCreateUser: false' prevents signing up new users via this form.
-      const { error } = await supabase.auth.signInWithOtp({
-        email: formData.email,
-        options: { 
-            shouldCreateUser: false,
-            captchaToken: captchaToken 
-        }
+      // ✅ Call custom Deno function (Action: Send)
+      // This sends the OTP via the Edge Function instead of using Supabase magic links
+      const { data, error } = await supabase.functions.invoke('password-reset', {
+        body: { action: 'send', email: formData.email }
       });
       
       if (error) throw error;
       
       // If success, show the OTP Verification Input
       setShowResetVerify(true);
-      alert("OTP Code sent to your email!");
+      alert("OTP sent! Check your email.");
       
     } catch (err) {
-      alert(err.message);
-      turnstileRef.current?.reset();
+      alert(err.message || "Failed to send OTP");
+      if (turnstileRef.current) turnstileRef.current.reset();
       setCaptchaToken(null);
     } finally {
       setLoading(false);
     }
   };
 
-  // 🔐 🆕 VERIFY RESET OTP
+  // 🔐 🆕 VERIFY RESET OTP (UPDATED)
   const handleVerifyResetOTP = async () => {
     setLoading(true);
     try {
-        // Verify the OTP. This logs the user in if successful.
-        const { data, error } = await supabase.auth.verifyOtp({
-            email: formData.email,
-            token: resetOtp,
-            type: 'email'
+        // ✅ Call custom Deno function (Action: Verify)
+        const { data, error } = await supabase.functions.invoke('password-reset', {
+            body: { action: 'verify', email: formData.email, otp: resetOtp }
         });
 
-        if (error) throw error;
+        if (error || !data || !data.token) {
+            throw new Error(data?.error || "Invalid or Expired Code");
+        }
+
+        // ✅ Success! Use the returned token to log in via Supabase
+        const { error: loginError } = await supabase.auth.verifyOtp({
+          token: data.token,
+          type: 'recovery',
+          email: formData.email
+        });
+
+        if (loginError) throw loginError;
 
         // User is now logged in! Move them to "Update Password" screen.
         alert("Verified! Please set a new password.");
@@ -260,7 +265,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         setViewMode('update_password');
 
     } catch (err) {
-        alert("Invalid Code: " + err.message);
+        alert("Verification Failed: " + err.message);
     } finally {
         setLoading(false);
     }
