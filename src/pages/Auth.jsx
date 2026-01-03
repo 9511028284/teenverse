@@ -217,7 +217,7 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
     try {
       // ✅ Call custom Deno function (Action: Send)
       // This sends the OTP via the Edge Function instead of using Supabase magic links
-      const { data, error } = await supabase.functions.invoke('password-reset', {
+      const { data, error } = await supabase.functions.invoke('request-reset', {
         body: { action: 'send', email: formData.email }
       });
       
