@@ -2,22 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Menu, LayoutDashboard, Briefcase, FileText, MessageSquare, BookOpen, Sparkles, Settings, 
   Award, Sun, Moon, Bell, Crown, Swords, ShieldCheck, ListChecks, Package, Share2, User,
-  Lock, Eye, RefreshCw // 🆕 Added RefreshCw icon
+  Lock, Eye, RefreshCw, UserCircle 
 } from 'lucide-react';
-
-import UserProfile from '../components/dashboard/UserProfile'; // Import the new component
-
-// --- LIBRARIES ---
-import { toPng, toBlob } from 'html-to-image'; 
-
-// --- SUPABASE & UTILS ---
+import { toPng, toBlob } from 'html-to-image';
 import { supabase } from '../supabase';
-import { QUIZZES, APP_STATUS } from '../utils/constants'; 
+import { QUIZZES, APP_STATUS } from '../utils/constants';
 
 // UI Components
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
-// Refactored Components
 import DashboardSidebar from '../components/dashboard/DashboardSidebar'; 
 import KycVerificationModal from '../components/modals/KycVerificationModal';
 import ActiveQuizModal from '../components/modals/ActiveQuizModal';
@@ -35,6 +28,7 @@ import ProfileCard from '../components/dashboard/ProfileCard';
 import Records from '../components/dashboard/Records';
 import SettingsComp from '../components/dashboard/SettingsComp';
 import OrderTimeline from '../components/dashboard/OrderTimeline';
+import UserProfile from '../components/dashboard/UserProfile'; // Imported UserProfile
 
 // Services
 import * as api from '../services/dashboard.api';
@@ -123,69 +117,84 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
-// Replace the loadData function inside useEffect [cite: 28] with this:
 
-const loadData = async () => {
-    if (jobs.length === 0) setIsLoading(true);
+    const loadData = async () => {
+        if (jobs.length === 0) setIsLoading(true);
 
-    try {
-        // 1. Create promises for all independent requests
-        const energyPromise = !isClient ? api.getEnergy(user.id) : Promise.resolve({ energy: 0 });
-        
-        const badgesPromise = supabase
-            .from('user_badges')
-            .select('badge_name, badges(icon)')
-            .eq('user_id', user.id);
-
-        // Assuming api.fetchDashboardData handles jobs/services/etc internally
-        // If possible, break that function apart too, but for now, parallelize what we can:
-        const dashboardPromise = api.fetchDashboardData(user);
-
-        // 2. Await all at once
-        const [energyRes, badgeRes, dashboardRes] = await Promise.all([
-            energyPromise,
-            badgesPromise,
-            dashboardPromise
-        ]);
-
-        // 3. Set State
-        if (!isClient) setEnergy(energyRes.energy);
-
-        const formattedBadges = badgeRes.data?.map(b => ({
-            name: b.badge_name,
-            icon: b.badges?.icon || 'Award'
-        })) || [];
-        setBadges(formattedBadges);
-
-        const { services, jobs, applications, notifications, referralCount, error } = dashboardRes;
-
-        if (!error) {
-            setServices(services);
-            setJobs(jobs);
-            setApplications(applications);
-            setNotifications(notifications);
-            setReferralStats({ count: referralCount, earnings: referralCount * 50 });
+        try {
+            // 1. Create promises for all independent requests
+            const energyPromise = !isClient ? api.getEnergy(user.id) : Promise.resolve({ energy: 0 });
             
-            // Recalculate earnings synchronously
-            const total = applications.reduce((acc, curr) => {
-                 if (curr.status === 'Paid') {
-                    const amount = Number(curr.bid_amount) || 0;
-                    return isClient ? acc + amount : acc + (amount * 0.96);
-                 }
-                 return acc;
-            }, 0);
-            setTotalEarnings(total);
-        }
+            const badgesPromise = supabase
+                .from('user_badges')
+                .select('badge_name, badges(icon)')
+                .eq('user_id', user.id);
 
-    } catch (err) {
-        showToast("Dashboard sync failed: " + err.message, "error");
-    } finally {
-        setIsLoading(false);
-    }
-};
+            // Fetch extended profile data (Bio, Socials, etc.)
+            const profilePromise = supabase
+                .from(isClient ? 'clients' : 'freelancers')
+                .select('bio, cover_image, social_links, tag_line, kyc_status, kyc_type')
+                .eq('id', user.id)
+                .single();
+
+            // Assuming api.fetchDashboardData handles jobs/services/etc internally
+            const dashboardPromise = api.fetchDashboardData(user);
+
+            // 2. Await all at once
+            const [energyRes, badgeRes, profileRes, dashboardRes] = await Promise.all([
+                energyPromise,
+                badgesPromise,
+                profilePromise,
+                dashboardPromise
+            ]);
+
+            if (!isMounted) return;
+
+            // 3. Set State
+            if (!isClient) setEnergy(energyRes.energy);
+
+            const formattedBadges = badgeRes.data?.map(b => ({
+                name: b.badge_name,
+                icon: b.badges?.icon || 'Award'
+            })) || [];
+            setBadges(formattedBadges);
+
+             // Update User State with extended profile data
+             if (profileRes.data) {
+                const updatedUser = { ...user, ...profileRes.data };
+                setUser(updatedUser);
+                setProfileForm(updatedUser); // Sync settings form
+             }
+
+            const { services, jobs, applications, notifications, referralCount, error } = dashboardRes;
+
+            if (!error) {
+                setServices(services);
+                setJobs(jobs);
+                setApplications(applications);
+                setNotifications(notifications);
+                setReferralStats({ count: referralCount, earnings: referralCount * 50 });
+                
+                // Recalculate earnings synchronously
+                const total = applications.reduce((acc, curr) => {
+                     if (curr.status === 'Paid') {
+                        const amount = Number(curr.bid_amount) || 0;
+                        return isClient ? acc + amount : acc + (amount * 0.96);
+                     }
+                     return acc;
+                }, 0);
+                setTotalEarnings(total);
+            }
+
+        } catch (err) {
+            showToast("Dashboard sync failed: " + err.message, "error");
+        } finally {
+            if (isMounted) setIsLoading(false);
+        }
+    };
     loadData();
     return () => { isMounted = false; };
-  }, [user, isClient, showToast, jobs.length]);
+  }, [user.id, isClient, showToast]); // Removed complex dependencies to prevent loops
 
   // --- ACTION HANDLERS ---
   const checkKycLock = (actionType) => {
@@ -261,6 +270,7 @@ const loadData = async () => {
         console.error(err);
     }
   };
+
   const handlePostJob = async (e) => {
     e.preventDefault();
     if (!checkKycLock('post_job')) return;
@@ -525,16 +535,30 @@ const loadData = async () => {
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     const tableName = isClient ? 'clients' : 'freelancers';
-    const cleanUpdates = { name: profileForm.name, phone: profileForm.phone, nationality: profileForm.nationality };
+    
+    // Updated cleanUpdates to include new fields like bio, social_links
+    const cleanUpdates = { 
+        name: profileForm.name, 
+        phone: profileForm.phone, 
+        nationality: profileForm.nationality,
+        bio: profileForm.bio,
+        social_links: profileForm.social_links 
+    };
+    
     if (!isClient) {
-        cleanUpdates.age = profileForm.age; cleanUpdates.qualification = profileForm.qualification;
-        cleanUpdates.specialty = profileForm.specialty; cleanUpdates.services = profileForm.services;
-        cleanUpdates.upi = profileForm.upi; cleanUpdates.bank_name = profileForm.bank_name;
-        cleanUpdates.account_number = profileForm.account_number; cleanUpdates.ifsc_code = profileForm.ifsc_code;
-    } else { cleanUpdates.is_organisation = profileForm.is_organisation; }
+        cleanUpdates.age = profileForm.age; 
+        cleanUpdates.qualification = profileForm.qualification;
+        cleanUpdates.specialty = profileForm.specialty;
+        cleanUpdates.services = profileForm.services;
+        cleanUpdates.upi = profileForm.upi; 
+        // Note: Sensitive bank details are now handled via KYC Modal, not here
+    } else { 
+        cleanUpdates.is_organisation = profileForm.is_organisation; 
+    }
+
     const { error } = await api.updateUserProfile(user.id, cleanUpdates, tableName);
     if (error) { showToast(error.message, 'error'); } 
-    else { showToast("Profile & Bank Details updated!", "success"); setUser({ ...user, ...cleanUpdates }); }
+    else { showToast("Profile updated!", "success"); setUser({ ...user, ...cleanUpdates }); }
   };
 
   const handleQuizSelection = async (categoryId, passed) => {
@@ -607,6 +631,7 @@ const loadData = async () => {
     const icons = {
       'overview': <LayoutDashboard size={20} className="text-indigo-600 dark:text-indigo-400"/>,
       'jobs': <Briefcase size={20} className="text-blue-500"/>,
+      'profile': <UserCircle size={20} className="text-pink-500"/>, // Profile Icon
       'posted-jobs': <ListChecks size={20} className="text-indigo-500"/>,
       'academy': <BookOpen size={20} className="text-emerald-500"/>,
       'battles': <Swords size={20} className="text-rose-500"/>,
@@ -667,7 +692,7 @@ const loadData = async () => {
                   </div>
                   <div className="relative">
                     <button onClick={() => setShowNotifications(!showNotifications)} className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-gray-50 text-gray-500 dark:text-gray-400 transition-colors">
-                       <Bell size={20}/>
+                      <Bell size={20}/>
                       {notifications.length > 0 && <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#0F172A]"></span>}
                     </button>
                     {showNotifications && (
@@ -715,6 +740,19 @@ const loadData = async () => {
                  )}
                  
                  {tab === 'messages' && <div className="bg-white dark:bg-[#1E293B] rounded-3xl border border-gray-200 dark:border-white/5 shadow-sm overflow-hidden h-[calc(100vh-180px)]"><ChatSystem user={user} activeChat={activeChat} setActiveChat={setActiveChat} parentMode={parentMode} /></div>}
+                 
+                 {/* --- PROFILE TAB RENDER --- */}
+                 {tab === 'profile' && !isClient && (
+                    <UserProfile 
+                        user={user} 
+                        badges={badges} 
+                        userLevel={userLevel} 
+                        unlockedSkills={unlockedSkills} 
+                        isClient={isClient} 
+                        onEditProfile={() => setTab('settings')}
+                    />
+                 )}
+
                  {tab === 'academy' && !isClient && <Academy unlockedSkills={unlockedSkills} setModal={setModal} quizzes={SAFE_QUIZZES} />}
                  {tab === 'portfolio' && !isClient && <Portfolio rawPortfolioText={rawPortfolioText} setRawPortfolioText={setRawPortfolioText} handleAiGenerate={handleAiGenerate} isAiLoading={isAiLoading} portfolioItems={portfolioItems} />}
                  
@@ -732,17 +770,8 @@ const loadData = async () => {
                    />
                  )}
 
-                 {tab === 'profile' && !isClient && (
-   <UserProfile 
-     user={user} 
-     badges={badges} 
-     userLevel={userLevel} 
-     unlockedSkills={unlockedSkills} 
-     isClient={isClient}
-   />
-)}
-
                  {tab === 'records' && <Records applications={applications} />}
+    
                  {tab === 'settings' && (
                   <SettingsComp 
                     profileForm={profileForm} 
@@ -794,13 +823,13 @@ const loadData = async () => {
 
       {modal === 'submit_work' && (
         <Modal title="Deliver Your Work" onClose={() => setModal(null)}>
-          <form onSubmit={handleSubmitWork} className="space-y-4">
+           <form onSubmit={handleSubmitWork} className="space-y-4">
              <div className="bg-indigo-50 p-4 rounded-xl text-indigo-800 text-sm mb-4"><strong>Instructions:</strong> Provide a link to your work (Drive/GitHub) OR upload files directly.</div>
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">External Link (Recommended)</label>
               <input name="work_link" type="url" placeholder="https://drive.google.com/..." className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white"/>
             </div>
-             <div>
+            <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Message</label>
               <textarea name="message" rows="3" className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white" placeholder="Describe what you did..."></textarea>
             </div>
