@@ -5,6 +5,8 @@ import {
   Lock, Eye, RefreshCw // 🆕 Added RefreshCw icon
 } from 'lucide-react';
 
+import UserProfile from '../components/dashboard/UserProfile'; // Import the new component
+
 // --- LIBRARIES ---
 import { toPng, toBlob } from 'html-to-image'; 
 
@@ -200,36 +202,65 @@ const loadData = async () => {
     return true;
   };
 
-  const handleKycSubmit = async (e) => {
+  const handleKycSubmit = async (e, { ageGroup, bankDetails }) => {
     e.preventDefault();
     if (!kycFile) return showToast("Please select an ID file.", "error");
-    showToast("Uploading secure documents...", "info");
+
+    showToast("Encrypting & Uploading data...", "info");
+    
     try {
-        const fileName = `${user.id}/${Date.now()}_kyc`; 
+        // 1. Upload ID Proof
+        const fileName = `${user.id}/${Date.now()}_kyc`;
         const { error: uploadError } = await supabase.storage
             .from('id_proofs')
             .upload(fileName, kycFile);
-        if (uploadError) throw uploadError;
-        const storedPath = fileName; 
 
+        if (uploadError) throw uploadError;
+
+        // 2. Generate Beneficiary ID (Mock generation)
+        const beneficiaryId = `BEN-${Date.now().toString().slice(-6)}-${Math.floor(Math.random()*1000)}`;
+
+        // 3. Save Banking Details to Private Table
+        const { error: bankError } = await supabase
+            .from('user_banking')
+            .insert({
+                user_id: user.id,
+                account_holder_name: bankDetails.account_holder_name,
+                account_number: bankDetails.account_number,
+                ifsc_code: bankDetails.ifsc_code,
+                bank_name: bankDetails.bank_name,
+                is_guardian_account: ageGroup === 'minor',
+                guardian_name: ageGroup === 'minor' ? bankDetails.guardian_name : null,
+                guardian_relationship: ageGroup === 'minor' ? bankDetails.guardian_relationship : null,
+                parent_consent_verified: bankDetails.consent || false,
+                beneficiary_id: beneficiaryId
+            });
+
+        if (bankError) throw bankError;
+
+        // 4. Update Main Profile KYC Status
         const table = isClient ? 'clients' : 'freelancers';
         const { error: dbError } = await supabase
             .from(table)
             .update({ 
                 kyc_status: 'pending',
-                id_proof_url: storedPath,
+                id_proof_url: fileName,
+                kyc_type: ageGroup,
                 kyc_submitted_at: new Date().toISOString()
             })
             .eq('id', user.id);
+
         if (dbError) throw dbError;
-        showToast("KYC Submitted! An admin will review it shortly.", "success");
-        setUser({ ...user, kyc_status: 'pending' }); 
-        setModal(null); 
+
+        showToast("Success! Verification & Banking details submitted.", "success");
+        setUser({ ...user, kyc_status: 'pending', kyc_type: ageGroup }); 
+        setModal(null);
+        
     } catch (err) {
-        showToast("Verification failed: " + err.message, "error");
+        showToast("Submission failed: " + err.message, "error");
+        console.error(err);
     }
   };
-
   const handlePostJob = async (e) => {
     e.preventDefault();
     if (!checkKycLock('post_job')) return;
@@ -700,6 +731,16 @@ const loadData = async () => {
                      showToast={showToast} 
                    />
                  )}
+
+                 {tab === 'profile' && !isClient && (
+   <UserProfile 
+     user={user} 
+     badges={badges} 
+     userLevel={userLevel} 
+     unlockedSkills={unlockedSkills} 
+     isClient={isClient}
+   />
+)}
 
                  {tab === 'records' && <Records applications={applications} />}
                  {tab === 'settings' && (
