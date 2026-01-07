@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabase'; // ✅ Using Supabase exclusively
+import { supabase } from './supabase'; 
 import Toast from './components/ui/Toast';
 import { Loader2 } from 'lucide-react';
 
@@ -33,7 +33,6 @@ export default function TeenVerse() {
 
   // 2. Main Authentication Listener (Supabase)
   useEffect(() => {
-    // A. Check active session immediately
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       handleSession(session);
@@ -41,7 +40,6 @@ export default function TeenVerse() {
 
     checkUser();
 
-    // B. Listen for auth changes (Login, Logout, Auto-refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       handleSession(session);
     });
@@ -49,10 +47,9 @@ export default function TeenVerse() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Helper to process user data from DB
-// Helper to process user data from DB
+  // --- 🔥 LOGIC RESTORED: Simple Existence Check ---
+  // This prevents the "Double Form" bug. If the row exists, let them in.
   const handleSession = async (session) => {
-    // 1. No Session? Go Home.
     if (!session) {
       if (view !== 'parent-approval' && view !== 'landing' && view !== 'legal' && view !== 'auth') {
          setUser(null);
@@ -71,34 +68,33 @@ export default function TeenVerse() {
         setUser({ ...u, type: "admin" });
         setView('admin');
         setLoading(false);
-        return; 
+        return;
       }
 
-      // 3. CHECK IF CLIENT PROFILE EXISTS
+      // 3. CHECK CLIENT PROFILE
       let { data: c } = await supabase.from('clients').select('*').eq('id', u.id).maybeSingle();
       if (c) { 
+          // ✅ Success: Row exists -> Go to Dashboard
           setUser({ ...c, type: 'client' }); 
-          setView('dashboard'); // ✅ Only go to dashboard if profile exists
+          setView('dashboard');
           setLoading(false);
           return;
       }
 
-      // 4. CHECK IF FREELANCER PROFILE EXISTS
+      // 4. CHECK FREELANCER PROFILE
       let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
       if (f) { 
-          setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] }); 
-          setView('dashboard'); // ✅ Only go to dashboard if profile exists
+          // ✅ Success: Row exists -> Go to Dashboard
+          setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] });
+          setView('dashboard');
           setLoading(false);
           return;
       }
       
-      // 5. 🛑 TRAP: LOGGED IN BUT NO PROFILE (Google/GitHub User)
-      // If we reach here, they have a Google Session, but NO database row.
-      console.log("User logged in via Social, but profile missing. Redirecting to setup...");
-      
-      // DO NOT set 'dashboard'. Force 'auth'.
+      // 5. NO PROFILE FOUND (Rare case, e.g. Trigger failed)
+      console.log("User logged in, but no profile row found.");
       setUser(null); 
-      setView('auth'); 
+      setView('auth');
       setLoading(false);
 
     } catch (err) {
@@ -128,17 +124,17 @@ export default function TeenVerse() {
   const toggleTheme = () => setDarkMode(!darkMode);
   
   const showToast = (message, type = 'success') => { 
-      setToast({ message, type }); 
+      setToast({ message, type });
       setTimeout(() => setToast(null), 4000); 
   };
 
   const handleFeedback = async (e) => { 
-      e.preventDefault(); 
+      e.preventDefault();
       const formData = new FormData(e.target); 
-      const { error } = await supabase.from('feedback').insert([{ name: formData.get('name'), email: formData.get('email'), message: formData.get('message') }]); 
+      const { error } = await supabase.from('feedback').insert([{ name: formData.get('name'), email: formData.get('email'), message: formData.get('message') }]);
       if (!error) {
         showToast('Feedback sent!'); 
-        e.target.reset(); 
+        e.target.reset();
       } else {
         showToast('Failed to send feedback', 'error');
       }
@@ -170,12 +166,11 @@ export default function TeenVerse() {
       
       {view === 'parent-approval' && <ParentApproval token={approvalToken} onApprovalComplete={() => setView('home')} />}
       
-      {/* AUTH PAGE: Integrated with the code generated previously */}
       {view === 'auth' && (
           <Auth 
             setView={setView} 
             onLogin={(msg) => { showToast(msg); }} 
-            onSignUpSuccess={() => setView('terms')} // Or 'dashboard' based on your flow
+            onSignUpSuccess={() => setView('terms')} 
           />
       )}
       
