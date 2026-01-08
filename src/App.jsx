@@ -11,8 +11,8 @@ import Legal from './pages/Legal';
 import TermsAgreement from './pages/TermsAgreement'; 
 import AdminDashboard from './pages/AdminPage';
 import ParentApproval from './pages/ParentApproval';
-import ParentLogin from './pages/ParentLogin'; // ✅ New Import
-import ParentDashboard from './pages/ParentDashboard'; // ✅ New Import
+import ParentLogin from './pages/ParentLogin'; 
+import ParentDashboard from './pages/ParentDashboard'; 
 
 export default function TeenVerse() {
   const [view, setView] = useState('home');
@@ -23,7 +23,6 @@ export default function TeenVerse() {
   const [approvalToken, setApprovalToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 1. Check URL for Parent Approval Token on load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
@@ -33,26 +32,20 @@ export default function TeenVerse() {
     }
   }, []);
 
-  // 2. Main Authentication Listener (Supabase)
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       handleSession(session);
     };
-
     checkUser();
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       handleSession(session);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- 🔥 SESSION HANDLING LOGIC ---
   const handleSession = async (session) => {
     if (!session) {
-      // If user logs out or session expires, reset to safe public view
       if (!['parent-approval', 'landing', 'legal', 'auth', 'parent-login'].includes(view)) {
          setUser(null);
          setView('home');
@@ -73,7 +66,7 @@ export default function TeenVerse() {
         return;
       }
 
-      // 2. CHECK CLIENT PROFILE
+      // 2. CHECK CLIENT
       let { data: c } = await supabase.from('clients').select('*').eq('id', u.id).maybeSingle();
       if (c) { 
           setUser({ ...c, type: 'client' }); 
@@ -82,7 +75,7 @@ export default function TeenVerse() {
           return;
       }
 
-      // 3. CHECK FREELANCER PROFILE
+      // 3. CHECK FREELANCER
       let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
       if (f) { 
           setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] });
@@ -91,23 +84,23 @@ export default function TeenVerse() {
           return;
       }
       
-      // 4. CHECK IF PARENT (By Email Match in Freelancers Table)
-      // Note: Parents don't have their own profile table row usually, they just match by email
+      // 4. CHECK IF PARENT (Using parent_consents table)
+      // We look for a row where parent_email matches the logged in user's email
       const { data: parentMatch } = await supabase
-        .from('freelancers')
-        .select('id')
+        .from('parent_consents')
+        .select('user_id') // We need the teen's ID
         .eq('parent_email', u.email)
         .maybeSingle();
 
       if (parentMatch) {
-          setUser({ ...u, type: 'parent' });
+          // Store the teen's ID in the user object for easier fetching later
+          setUser({ ...u, type: 'parent', teenId: parentMatch.user_id });
           setView('parent-dashboard');
           setLoading(false);
           return;
       }
 
-      // 5. NO PROFILE FOUND (User exists in Auth but not in DB Tables)
-      console.log("User logged in, but no profile row found.");
+      // 5. NO PROFILE FOUND
       setUser(null); 
       setView('auth');
       setLoading(false);
@@ -118,7 +111,7 @@ export default function TeenVerse() {
     }
   };
 
-  // 3. Dark Mode Logic
+  // Dark Mode & Helpers
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -137,30 +130,19 @@ export default function TeenVerse() {
   }, [darkMode]);
 
   const toggleTheme = () => setDarkMode(!darkMode);
-  
   const showToast = (message, type = 'success') => { 
       setToast({ message, type });
       setTimeout(() => setToast(null), 4000); 
   };
-
   const handleFeedback = async (e) => { 
       e.preventDefault();
       const formData = new FormData(e.target); 
       const { error } = await supabase.from('feedback').insert([{ name: formData.get('name'), email: formData.get('email'), message: formData.get('message') }]);
-      if (!error) {
-        showToast('Feedback sent!'); 
-        e.target.reset();
-      } else {
-        showToast('Failed to send feedback', 'error');
-      }
+      if (!error) { showToast('Feedback sent!'); e.target.reset(); } 
+      else { showToast('Failed to send feedback', 'error'); }
   };
+  const handleLegalNavigation = (page) => { setLegalPage(page); setView('legal'); };
 
-  const handleLegalNavigation = (page) => {
-    setLegalPage(page);
-    setView('legal');
-  };
-
-  // --- RENDER ---
   if (loading) {
       return (
         <div className="h-screen w-screen bg-[#050505] flex items-center justify-center text-indigo-500">
@@ -172,29 +154,15 @@ export default function TeenVerse() {
   return (
    <>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      
       {view === 'home' && <LandingPage setView={setView} onFeedback={handleFeedback} darkMode={darkMode} toggleTheme={toggleTheme} onLegalClick={handleLegalNavigation} />}
-      
       {view === 'legal' && <Legal page={legalPage} onBack={() => setView('home')} />}
-
       {view === 'terms' && <TermsAgreement onAgree={() => window.location.reload()} />}
-      
       {view === 'parent-approval' && <ParentApproval token={approvalToken} onApprovalComplete={() => setView('home')} />}
       
-      {/* Auth View (Login/Signup) */}
-      {view === 'auth' && (
-          <Auth 
-            setView={setView} 
-            onLogin={(msg) => { showToast(msg); }} 
-            onSignUpSuccess={() => setView('terms')} 
-          />
-      )}
+      {view === 'auth' && <Auth setView={setView} onLogin={(msg) => { showToast(msg); }} onSignUpSuccess={() => setView('terms')} />}
+      {view === 'parent-login' && <ParentLogin />}
 
-      {/* Parent Specific Views */}
-      {view === 'parent-login' && (
-          <ParentLogin />
-      )}
-
+      {/* Parent Dashboard */}
       {view === 'parent-dashboard' && user?.type === 'parent' && (
           <ParentDashboard 
             user={user} 
@@ -202,25 +170,8 @@ export default function TeenVerse() {
           />
       )}
       
-      {/* Admin Dashboard */}
-      {view === 'admin' && user?.type === 'admin' && (
-          <AdminDashboard 
-            user={user} 
-            onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out'); }} 
-          />
-      )}
-      
-      {/* Main Freelancer/Client Dashboard */}
-      {view === 'dashboard' && user && (user.type === 'client' || user.type === 'freelancer') && (
-          <Dashboard 
-            user={user} 
-            setUser={setUser} 
-            onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out successfully'); }} 
-            showToast={showToast} 
-            darkMode={darkMode} 
-            toggleTheme={toggleTheme} 
-          />
-      )}
+      {view === 'admin' && user?.type === 'admin' && <AdminDashboard user={user} onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out'); }} />}
+      {view === 'dashboard' && user && (user.type === 'client' || user.type === 'freelancer') && <Dashboard user={user} setUser={setUser} onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out successfully'); }} showToast={showToast} darkMode={darkMode} toggleTheme={toggleTheme} />}
    </>
   );
 }

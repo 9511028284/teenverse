@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, ShieldCheck, DollarSign, MessageSquare, LogOut, AlertTriangle, Eye 
+  LayoutDashboard, ShieldCheck, LogOut, AlertTriangle, Eye 
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import Button from '../components/ui/Button';
@@ -16,34 +16,48 @@ const ParentDashboard = ({ user, onLogout }) => {
     const fetchTeenData = async () => {
       setLoading(true);
       try {
-        // 1. Find the teen linked to this parent by EMAIL
-        // Since parents log in via Magic Link, their auth.email must match the teen's 'parent_email'
-        const { data: teenData, error } = await supabase
-          .from('freelancers')
-          .select('*')
-          .eq('parent_email', user.email) 
-          .maybeSingle();
+        let teenId = user.teenId;
 
-        if (teenData) {
-          setTeen(teenData);
+        // Fallback: If teenId wasn't passed in user object, fetch it from parent_consents
+        if (!teenId) {
+            const { data: consent } = await supabase
+                .from('parent_consents')
+                .select('user_id')
+                .eq('parent_email', user.email)
+                .maybeSingle();
+            
+            if (consent) teenId = consent.user_id;
+        }
 
-          // 2. Fetch Stats for that teen
-          const { data: apps } = await supabase
-            .from('applications')
+        if (teenId) {
+          // 1. Fetch Teen Profile using the found ID
+          const { data: teenData, error } = await supabase
+            .from('freelancers')
             .select('*')
-            .eq('freelancer_id', teenData.id);
+            .eq('id', teenId) 
+            .maybeSingle();
 
-          const earnings = apps?.reduce((acc, curr) => curr.status === 'Paid' ? acc + parseFloat(curr.bid_amount) : acc, 0) || 0;
-          const activeJobs = apps?.filter(a => a.status === 'Accepted').length || 0;
+          if (teenData) {
+            setTeen(teenData);
 
-          // 3. Fetch Safety Logs (Messages)
-          const { count } = await supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .or(`sender_id.eq.${teenData.id},receiver_id.eq.${teenData.id}`);
+            // 2. Fetch Stats
+            const { data: apps } = await supabase
+              .from('applications')
+              .select('*')
+              .eq('freelancer_id', teenId);
 
-          setStats({ earnings, activeJobs, messages: count || 0 });
-          setRecentActivity(apps || []);
+            const earnings = apps?.reduce((acc, curr) => curr.status === 'Paid' ? acc + parseFloat(curr.bid_amount) : acc, 0) || 0;
+            const activeJobs = apps?.filter(a => a.status === 'Accepted').length || 0;
+
+            // 3. Fetch Safety Logs
+            const { count } = await supabase
+              .from('messages')
+              .select('*', { count: 'exact', head: true })
+              .or(`sender_id.eq.${teenId},receiver_id.eq.${teenId}`);
+
+            setStats({ earnings, activeJobs, messages: count || 0 });
+            setRecentActivity(apps || []);
+          }
         }
       } catch (err) {
         console.error("Parent fetch error:", err);
@@ -90,10 +104,9 @@ const ParentDashboard = ({ user, onLogout }) => {
           <div className="p-6 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-800 flex items-start gap-3">
             <AlertTriangle className="shrink-0 mt-1" />
             <div>
-              <strong>No Teen Account Linked.</strong>
+              <strong>No Teen Account Found.</strong>
               <p className="text-sm mt-1">
-                We could not find a freelancer account linked to <strong>{user.email}</strong>. 
-                Please ensure your teen entered this exact email address in their "Parent Verification" settings.
+                We checked the 'Parent Consents' record for <strong>{user.email}</strong> but couldn't find a linked teen account.
               </p>
             </div>
           </div>
@@ -101,7 +114,6 @@ const ParentDashboard = ({ user, onLogout }) => {
 
         {teen && tab === 'overview' && (
           <div className="space-y-6 animate-fade-in-up">
-            {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
                   <p className="text-xs font-bold text-gray-500 uppercase mb-2">Total Earnings</p>
@@ -118,7 +130,6 @@ const ParentDashboard = ({ user, onLogout }) => {
                </div>
             </div>
 
-            {/* Recent Activity */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
               <div className="p-6 border-b border-gray-100 dark:border-gray-700 font-bold dark:text-white">Recent Contracts</div>
               <div className="overflow-x-auto">

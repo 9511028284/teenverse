@@ -204,7 +204,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
               <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center font-black text-white transform rotate-3 hover:rotate-12 transition-all border border-white/20">
                 T<span className="text-[#ccff00]">.</span>
               </div>
-              <span className="font-bold tracking-tighter text-xl text-white">TeenVerse</span>
+              <span className="font-bold tracking-tighter text-xl text-white">TeenVerseHub</span>
            </div>
 
            {/* Desktop Menu */}
