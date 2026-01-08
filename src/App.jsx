@@ -11,6 +11,8 @@ import Legal from './pages/Legal';
 import TermsAgreement from './pages/TermsAgreement'; 
 import AdminDashboard from './pages/AdminPage';
 import ParentApproval from './pages/ParentApproval';
+import ParentLogin from './pages/ParentLogin'; // ✅ New Import
+import ParentDashboard from './pages/ParentDashboard'; // ✅ New Import
 
 export default function TeenVerse() {
   const [view, setView] = useState('home');
@@ -47,11 +49,11 @@ export default function TeenVerse() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- 🔥 LOGIC RESTORED: Simple Existence Check ---
-  // This prevents the "Double Form" bug. If the row exists, let them in.
+  // --- 🔥 SESSION HANDLING LOGIC ---
   const handleSession = async (session) => {
     if (!session) {
-      if (view !== 'parent-approval' && view !== 'landing' && view !== 'legal' && view !== 'auth') {
+      // If user logs out or session expires, reset to safe public view
+      if (!['parent-approval', 'landing', 'legal', 'auth', 'parent-login'].includes(view)) {
          setUser(null);
          setView('home');
       }
@@ -62,7 +64,7 @@ export default function TeenVerse() {
     const u = session.user;
 
     try {
-      // 2. CHECK ADMIN
+      // 1. CHECK ADMIN
       const { data: adminCheck } = await supabase.from('admins').select('*').eq('email', u.email).maybeSingle();
       if (adminCheck) {
         setUser({ ...u, type: "admin" });
@@ -71,27 +73,40 @@ export default function TeenVerse() {
         return;
       }
 
-      // 3. CHECK CLIENT PROFILE
+      // 2. CHECK CLIENT PROFILE
       let { data: c } = await supabase.from('clients').select('*').eq('id', u.id).maybeSingle();
       if (c) { 
-          // ✅ Success: Row exists -> Go to Dashboard
           setUser({ ...c, type: 'client' }); 
           setView('dashboard');
           setLoading(false);
           return;
       }
 
-      // 4. CHECK FREELANCER PROFILE
+      // 3. CHECK FREELANCER PROFILE
       let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
       if (f) { 
-          // ✅ Success: Row exists -> Go to Dashboard
           setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] });
           setView('dashboard');
           setLoading(false);
           return;
       }
       
-      // 5. NO PROFILE FOUND (Rare case, e.g. Trigger failed)
+      // 4. CHECK IF PARENT (By Email Match in Freelancers Table)
+      // Note: Parents don't have their own profile table row usually, they just match by email
+      const { data: parentMatch } = await supabase
+        .from('freelancers')
+        .select('id')
+        .eq('parent_email', u.email)
+        .maybeSingle();
+
+      if (parentMatch) {
+          setUser({ ...u, type: 'parent' });
+          setView('parent-dashboard');
+          setLoading(false);
+          return;
+      }
+
+      // 5. NO PROFILE FOUND (User exists in Auth but not in DB Tables)
       console.log("User logged in, but no profile row found.");
       setUser(null); 
       setView('auth');
@@ -166,6 +181,7 @@ export default function TeenVerse() {
       
       {view === 'parent-approval' && <ParentApproval token={approvalToken} onApprovalComplete={() => setView('home')} />}
       
+      {/* Auth View (Login/Signup) */}
       {view === 'auth' && (
           <Auth 
             setView={setView} 
@@ -173,10 +189,38 @@ export default function TeenVerse() {
             onSignUpSuccess={() => setView('terms')} 
           />
       )}
+
+      {/* Parent Specific Views */}
+      {view === 'parent-login' && (
+          <ParentLogin />
+      )}
+
+      {view === 'parent-dashboard' && user?.type === 'parent' && (
+          <ParentDashboard 
+            user={user} 
+            onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out'); }} 
+          />
+      )}
       
-      {view === 'admin' && user?.type === 'admin' && <AdminDashboard user={user} onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out'); }} />}
+      {/* Admin Dashboard */}
+      {view === 'admin' && user?.type === 'admin' && (
+          <AdminDashboard 
+            user={user} 
+            onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out'); }} 
+          />
+      )}
       
-      {view === 'dashboard' && user && user.type !== 'admin' && <Dashboard user={user} setUser={setUser} onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out successfully'); }} showToast={showToast} darkMode={darkMode} toggleTheme={toggleTheme} />}
+      {/* Main Freelancer/Client Dashboard */}
+      {view === 'dashboard' && user && (user.type === 'client' || user.type === 'freelancer') && (
+          <Dashboard 
+            user={user} 
+            setUser={setUser} 
+            onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out successfully'); }} 
+            showToast={showToast} 
+            darkMode={darkMode} 
+            toggleTheme={toggleTheme} 
+          />
+      )}
    </>
   );
 }

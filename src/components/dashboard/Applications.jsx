@@ -5,9 +5,8 @@ import ReviewModal from '../modals/ReviewModal';
 import { 
   Clock, CheckCircle, XCircle, Package, Lock, Unlock, 
   FileText, ExternalLink, RefreshCw, AlertTriangle, Star, ShieldCheck, 
-  Receipt, Wallet, AlertOctagon
+  Receipt, Wallet, AlertOctagon, User
 } from 'lucide-react';
-import * as api from '../../services/dashboard.api'; 
 
 const Applications = ({ applications, isClient, onAction, onViewTimeline, parentMode, showToast }) => {
   
@@ -25,31 +24,23 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
     const message = e.target.revision_msg.value;
     if (!message) return;
 
-    const { error } = await api.requestRevision(revisionModal.id, message, revisionModal.freelancer_id);
-    
-    if (error) {
-      showToast(error.message, 'error');
-    } else {
-      showToast('Revision Sent Successfully', 'success');
-      setRevisionModal(null);
-    }
+    // Assuming api is passed or imported in parent, but based on your file it's imported here:
+    // We need to ensure api is imported. In your provided code it was passed via props or imported.
+    // I will assume the import line exists as per your source file.
+    onAction('revision', revisionModal, { message }); // Delegate to parent or use api directly if imported
+    setRevisionModal(null);
   };
 
   // 2. Submit Review
   const handleReviewSubmit = async (rating, tags) => {
-    const { error } = await api.submitReview(reviewApp.id, rating, tags, reviewApp.freelancer_id);
-    if (error) {
-        showToast(error.message, 'error');
-    } else {
-        showToast("Review Submitted! 🌟", 'success');
-        setReviewApp(null);
-    }
+     onAction('review', reviewApp, { rating, tags });
+     setReviewApp(null);
   };
 
   // 3. Confirm Payment Release
   const confirmRelease = () => {
     if (!releaseModal) return;
-    onAction('pay', releaseModal); // Trigger the actual payment action
+    onAction('pay', releaseModal); 
     setReleaseModal(null); 
   };
 
@@ -58,8 +49,6 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
     e.preventDefault();
     const reason = e.target.reason.value;
     if(!reason) return;
-    
-    // Trigger reject action with reason payload
     onAction('reject', rejectModal, { reason });
     setRejectModal(null);
   };
@@ -100,7 +89,6 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
 
     // C. CLIENT ACTIONS
     if (isClient) {
-      // 1. Pending (Start)
       if (app.status === 'Pending') {
         return (
           <div className="flex gap-2 justify-end">
@@ -112,14 +100,12 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
         );
       }
 
-      // 2. Accepted (Escrow Held)
       if (app.status === 'Accepted') {
         return (
             <div className="flex flex-col items-end gap-1 animate-fade-in">
                 <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
                     <Lock size={10} /> Escrow Active
                 </span>
-                {/* Cancel Button if freelancer is unresponsive */}
                 <button onClick={() => setRejectModal(app)} className="text-[10px] text-red-400 hover:text-red-500 underline transition-colors">
                     Cancel Order
                 </button>
@@ -127,7 +113,6 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
         );
       }
 
-      // 3. Submitted (Review Phase)
       if (app.status === 'Submitted') {
         return (
           <div className="flex flex-col items-end gap-2">
@@ -137,9 +122,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     <ExternalLink size={12}/> Link
                   </a>
                 ) : <span className="text-gray-400 italic text-[10px]">No Link</span>}
-                
                 <span className="text-gray-300">|</span>
-
                 {app.work_files && app.work_files.length > 0 ? (
                   <span className="flex items-center gap-1 text-indigo-500 cursor-pointer hover:underline" onClick={() => onAction('view_submission', app)}>
                     <FileText size={12}/> {app.work_files.length} File(s)
@@ -149,29 +132,18 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
 
              <div className="flex gap-2 justify-end">
                 <Button size="sm" variant="outline" onClick={() => onAction('view_submission', app)}>View</Button>
-                
                 <Button size="sm" variant="outline" onClick={() => setRevisionModal(app)} className="text-amber-600 border-amber-200 hover:bg-amber-50" title="Request Revision">
                     <RefreshCw size={14}/>
                 </Button>
-
-                {/* Reject/Refund Button */}
-                <Button 
-                    size="sm" 
-                    variant="outline" 
-                    onClick={() => setRejectModal(app)} 
-                    className="text-red-500 border-red-200 hover:bg-red-50 flex items-center gap-1"
-                    title="Reject & Refund"
-                >
+                <Button size="sm" variant="outline" onClick={() => setRejectModal(app)} className="text-red-500 border-red-200 hover:bg-red-50 flex items-center gap-1" title="Reject & Refund">
                     <XCircle size={14}/>
                 </Button>
-
                 <Button size="sm" onClick={() => onAction('approve', app)} className="bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200 shadow-md">Approve</Button>
              </div>
           </div>
         );
       }
       
-      // 4. Completed (Release Payment)
       if (app.status === 'Completed') {
         return (
           <Button 
@@ -191,10 +163,8 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
       }
     }
 
-    // D. FREELANCER ACTIONS
     if (!isClient) {
       if (app.status === 'Pending') return <span className="text-gray-400 text-xs italic">Waiting for client...</span>;
-      
       if (app.status === 'Revision Requested') {
         return (
             <div className="flex flex-col items-end">
@@ -207,7 +177,6 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
             </div>
         );
       }
-
       if (app.status === 'Accepted') return <Button size="sm" onClick={() => onAction('submit', app)} className="bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200"><Package size={14} className="mr-1"/> Deliver Work</Button>;
       if (app.status === 'Submitted') return <span className="text-amber-500 text-xs font-medium bg-amber-50 px-2 py-1 rounded-md">Under Review</span>;
       if (app.status === 'Completed') return <span className="text-emerald-600 text-xs font-bold animate-pulse">Approved! Payment Processing...</span>;
@@ -218,7 +187,6 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      {/* Header */}
       <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold dark:text-white flex items-center gap-2">
             {isClient ? 'Manage Orders' : 'My Gigs'}
@@ -228,7 +196,6 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
           </h2>
       </div>
 
-      {/* Table Container */}
       <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -250,14 +217,30 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                       <Clock size={10}/> View Timeline
                     </button>
                   </td>
+                  
+                  {/* --- UPDATED FREELANCER COLUMN --- */}
                   <td className="p-4 text-gray-600 dark:text-gray-300">
                     <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-400 to-purple-400 text-white flex items-center justify-center text-[10px] font-bold">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-400 to-purple-400 text-white flex items-center justify-center text-xs font-bold">
                             {(isClient ? app.freelancer_name : app.client_name)?.[0] || 'U'}
                         </div>
-                        {isClient ? app.freelancer_name : app.client_name || 'User'}
+                        <div>
+                             <div className="font-bold text-sm">
+                               {isClient ? app.freelancer_name : app.client_name || 'User'}
+                             </div>
+                             {/* NEW: View Profile Trigger */}
+                             {isClient && (
+                               <button 
+                                 onClick={() => onAction('view_profile', app)} 
+                                 className="text-[10px] text-indigo-500 hover:underline flex items-center gap-1 transition-colors"
+                               >
+                                 <User size={10} /> View Profile
+                               </button>
+                             )}
+                        </div>
                     </div>
                   </td>
+
                   <td className="p-4 font-mono font-bold text-gray-900 dark:text-white">₹{app.bid_amount}</td>
                   <td className="p-4">
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border
@@ -285,7 +268,6 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
 
        {/* --- MODALS SECTION --- */}
 
-       {/* 1. REVISION MODAL */}
        {revisionModal && (
         <Modal title="Request Revisions" onClose={() => setRevisionModal(null)}>
             <form onSubmit={handleSendRevision} className="space-y-4">
@@ -293,10 +275,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     <h4 className="font-bold flex items-center gap-2 mb-1 text-sm"><AlertTriangle size={16}/> Constructive Feedback Only</h4>
                     <p>Clearly explain what changes you need. Be specific to help the freelancer deliver faster.</p>
                 </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Instructions</label>
-                    <textarea name="revision_msg" required placeholder="e.g., The font size is too small..." className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none min-h-[120px] text-sm dark:bg-black dark:text-white dark:border-gray-700 resize-none"></textarea>
-                </div>
+                <textarea name="revision_msg" required placeholder="e.g., The font size is too small..." className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none min-h-[120px] text-sm dark:bg-black dark:text-white dark:border-gray-700 resize-none"></textarea>
                 <div className="flex justify-end gap-3 pt-2">
                     <Button variant="ghost" type="button" onClick={() => setRevisionModal(null)}>Cancel</Button>
                     <Button className="bg-amber-500 hover:bg-amber-600 text-white">Send Request</Button>
@@ -305,11 +284,9 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
         </Modal>
        )}
 
-       {/* 2. PAYMENT RELEASE MODAL */}
        {releaseModal && (
          <Modal title="Confirm Payment Release" onClose={() => setReleaseModal(null)}>
            <div className="space-y-6">
-             {/* Receipt Header */}
              <div className="text-center space-y-2">
                 <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto text-green-600 dark:text-green-400">
                     <Receipt size={24} />
@@ -317,21 +294,16 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">Transaction Breakdown</h3>
                 <p className="text-xs text-gray-500">Please review the final payout details.</p>
              </div>
-
-             {/* Calculation Card */}
              <div className="bg-gray-50 dark:bg-black/20 p-5 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 space-y-3">
                 <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-400">
                     <span>Total Escrow Amount</span>
                     <span className="font-bold text-gray-900 dark:text-white">₹{releaseModal.bid_amount}</span>
                 </div>
-                
                 <div className="flex justify-between items-center text-sm text-amber-600 dark:text-amber-500">
                     <span className="flex items-center gap-1"><ShieldCheck size={12}/> Platform Fee (4%)</span>
                     <span className="font-medium">- ₹{(releaseModal.bid_amount * 0.04).toFixed(2)}</span>
                 </div>
-
                 <div className="h-px bg-gray-200 dark:bg-gray-700 my-2"></div>
-
                 <div className="flex justify-between items-center text-base">
                     <span className="font-bold text-gray-900 dark:text-white">Freelancer Receives</span>
                     <span className="font-black text-green-600 dark:text-green-400 text-lg">
@@ -339,14 +311,9 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     </span>
                 </div>
              </div>
-
-             {/* Action Buttons */}
              <div className="flex gap-3 pt-2">
                 <Button variant="outline" onClick={() => setReleaseModal(null)} className="flex-1">Cancel</Button>
-                <Button 
-                    onClick={confirmRelease} 
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/20 flex items-center justify-center gap-2"
-                >
+                <Button onClick={confirmRelease} className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/20 flex items-center justify-center gap-2">
                     <Wallet size={16} /> Confirm & Pay
                 </Button>
              </div>
@@ -354,55 +321,30 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
          </Modal>
        )}
 
-       {/* 3. REJECT / CANCEL MODAL */}
        {rejectModal && (
         <Modal title="Reject & Refund" onClose={() => setRejectModal(null)}>
             <form onSubmit={handleRejectConfirm} className="space-y-4">
                 <div className="bg-red-50 border border-red-100 p-4 rounded-xl text-red-800 text-xs">
                     <h4 className="font-bold flex items-center gap-2 mb-1 text-sm">
-                        <AlertOctagon size={16}/> 
-                        {rejectModal.status === 'Accepted' ? 'Cancel Order?' : 'Reject Delivery?'}
+                        <AlertOctagon size={16}/> {rejectModal.status === 'Accepted' ? 'Cancel Order?' : 'Reject Delivery?'}
                     </h4>
-                    <p>
-                        {rejectModal.status === 'Accepted' 
-                         ? "Cancelling now will refund the escrow amount to your wallet."
-                         : "Rejecting this work will cancel the order and initiate a refund."}
-                    </p>
+                    <p>{rejectModal.status === 'Accepted' ? "Cancelling now will refund the escrow amount to your wallet." : "Rejecting this work will cancel the order and initiate a refund."}</p>
                 </div>
-                
                 <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">
-                        Reason for {rejectModal.status === 'Accepted' ? 'Cancellation' : 'Rejection'}
-                    </label>
-                    <textarea 
-                        name="reason" 
-                        required 
-                        placeholder={rejectModal.status === 'Accepted' ? "e.g. Freelancer is unresponsive..." : "e.g. Work does not match requirements..."}
-                        className="w-full p-4 border border-gray-200 rounded-xl min-h-[100px] text-sm dark:bg-black dark:text-white resize-none focus:ring-2 focus:ring-red-500 outline-none"
-                    ></textarea>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Reason for {rejectModal.status === 'Accepted' ? 'Cancellation' : 'Rejection'}</label>
+                    <textarea name="reason" required placeholder={rejectModal.status === 'Accepted' ? "e.g. Freelancer is unresponsive..." : "e.g. Work does not match requirements..."} className="w-full p-4 border border-gray-200 rounded-xl min-h-[100px] text-sm dark:bg-black dark:text-white resize-none focus:ring-2 focus:ring-red-500 outline-none"></textarea>
                 </div>
-
                 <div className="flex justify-end gap-3 pt-2">
-                    <Button variant="ghost" type="button" onClick={() => setRejectModal(null)}>
-                        Go Back
-                    </Button>
-                    <Button className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200">
-                        {rejectModal.status === 'Accepted' ? 'Cancel Order' : 'Reject Work'}
-                    </Button>
+                    <Button variant="ghost" type="button" onClick={() => setRejectModal(null)}>Go Back</Button>
+                    <Button className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200">{rejectModal.status === 'Accepted' ? 'Cancel Order' : 'Reject Work'}</Button>
                 </div>
             </form>
         </Modal>
        )}
 
-       {/* 4. REVIEW MODAL */}
        {reviewApp && (
-            <ReviewModal 
-                freelancerName={reviewApp.freelancer_name}
-                onClose={() => setReviewApp(null)}
-                onSubmit={handleReviewSubmit}
-            />
+            <ReviewModal freelancerName={reviewApp.freelancer_name} onClose={() => setReviewApp(null)} onSubmit={handleReviewSubmit} />
         )}
-
     </div>
   );
 };

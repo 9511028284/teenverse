@@ -4,7 +4,7 @@ import {
   Loader2, DollarSign, Cpu, User, Briefcase, ShieldCheck, Lock, 
   Menu, X, Sun, Moon, Instagram, Twitter, Linkedin, Send, Code, Mail, Clock, AlertTriangle
 } from 'lucide-react';
-import { motion, useScroll, useTransform, useSpring, useMotionValue, useMotionTemplate, AnimatePresence } from 'framer-motion';
+import { motion, useScroll, useTransform, useSpring, useMotionValue, AnimatePresence } from 'framer-motion';
 import { supabase } from '../supabase'; 
 
 // --- 1. UTILITY: 3D TILT CARD COMPONENT ---
@@ -118,9 +118,65 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
     }
   };
 
+  // ✅ FIXED NAV HANDLER: Prevents white screen by only switching to valid views
   const handleNav = (target) => {
-    setView(target);
-    window.scrollTo(0,0);
+    if (!setView) {
+        console.error("setView prop missing");
+        return;
+    }
+
+    // Map friendly names to actual View IDs used in App.js
+    // 'auth' is usually the login/signup page
+    const viewMap = {
+        'join cult': 'auth',
+        'auth': 'auth',
+        'login': 'auth',
+        'start earning': 'auth',
+        'post job': 'auth',
+        'post job free': 'auth',
+        'home': 'landing', // assuming 'landing' or just refreshing page
+    };
+
+    const cleanTarget = target.toLowerCase();
+
+    // 1. If it's a known View, switch to it
+    if (viewMap[cleanTarget]) {
+        setView(viewMap[cleanTarget]);
+        window.scrollTo(0,0);
+        setIsMobileMenuOpen(false);
+        return;
+    }
+
+    // 2. If it's a section on the page (Explore, Ecosystem), scroll to it
+    if (['explore', 'ecosystem', 'mentors', 'community'].includes(cleanTarget)) {
+        const section = document.getElementById(cleanTarget);
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth' });
+            setIsMobileMenuOpen(false);
+        } else {
+            // Fallback if section missing
+            alert("Coming Soon! 🚀");
+        }
+        return;
+    }
+
+    // 3. Fallback for unknown links
+    alert(`Coming Soon: ${target}`);
+    setIsMobileMenuOpen(false);
+  };
+
+  // ✅ FIXED FOOTER LINK HANDLER
+  const handleFooterLink = (link) => {
+      const lower = link.toLowerCase();
+      
+      // If it's a legal link and the handler exists, use it
+      if (['terms', 'privacy', 'refunds'].includes(lower) && onLegalClick) {
+          onLegalClick(lower);
+          return;
+      }
+
+      // Otherwise route through main nav handler
+      handleNav(link);
   };
 
   return (
@@ -137,12 +193,12 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
       {/* Progress Bar */}
       <motion.div style={{ scaleX }} className="fixed top-0 left-0 right-0 h-1.5 bg-[#ccff00] origin-left z-[100]" />
 
-      {/* --- NAVBAR (Glassmorphic) --- */}
+      {/* --- NAVBAR --- */}
       <motion.nav 
         initial={{ y: -100 }} animate={{ y: 0 }} transition={{ type: "spring", stiffness: 100 }}
         className="fixed w-full z-50 top-0 py-4 px-6"
       >
-        <div className="max-w-7xl mx-auto bg-black/50 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-3 flex justify-between items-center shadow-2xl">
+        <div className="max-w-7xl mx-auto bg-black/50 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-3 flex justify-between items-center shadow-2xl relative z-50">
            <div className="flex items-center gap-3 cursor-pointer hover-target" onClick={() => handleNav('home')}>
               <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center font-black text-white transform rotate-3 hover:rotate-12 transition-all border border-white/20">
                 T<span className="text-[#ccff00]">.</span>
@@ -150,9 +206,10 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
               <span className="font-bold tracking-tighter text-xl text-white">TeenVerse</span>
            </div>
 
+           {/* Desktop Menu */}
            <div className="hidden md:flex items-center gap-8 text-sm font-bold uppercase tracking-wider text-gray-300">
               {['Explore', 'Mentors', 'Community'].map((item) => (
-                <button key={item} onClick={() => handleNav(item.toLowerCase())} className="hover:text-[#ccff00] transition-colors hover-target">{item}</button>
+                <button key={item} onClick={() => handleNav(item)} className="hover:text-[#ccff00] transition-colors hover-target">{item}</button>
               ))}
               <div className="w-px h-4 bg-white/20"></div>
               <button onClick={toggleTheme} className="hover:text-yellow-400 transition-colors hover-target">{darkMode ? <Sun size={18}/> : <Moon size={18}/>}</button>
@@ -161,11 +218,58 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
               </button>
            </div>
            
-           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="md:hidden text-white"><Menu/></button>
+           {/* Mobile Toggle */}
+           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="md:hidden text-white p-2 hover:bg-white/10 rounded-lg transition-colors">
+             {isMobileMenuOpen ? <X /> : <Menu/>}
+           </button>
         </div>
+
+        {/* --- ✅ FIXED MOBILE MENU --- */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="absolute top-[calc(100%+10px)] left-0 w-full px-4 md:hidden z-40"
+            >
+              <div className="bg-[#0a0a0a] border border-white/15 rounded-2xl p-6 flex flex-col gap-6 shadow-2xl backdrop-blur-2xl">
+                 <div className="flex flex-col gap-4">
+                   {['Explore', 'Mentors', 'Community'].map((item) => (
+                     <button 
+                       key={item} 
+                       onClick={() => handleNav(item)} 
+                       className="text-left text-lg font-bold text-gray-300 hover:text-[#ccff00] transition-colors flex items-center justify-between group py-2"
+                     >
+                       {item}
+                       <ArrowRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity text-[#ccff00]" />
+                     </button>
+                   ))}
+                 </div>
+
+                 <div className="h-px bg-white/10 w-full"></div>
+
+                 <div className="flex items-center justify-between text-gray-400 font-mono text-sm">
+                    <span>Switch Theme</span>
+                    <button onClick={toggleTheme} className="p-3 bg-white/5 rounded-full hover:bg-white/10 text-white">
+                      {darkMode ? <Sun size={18}/> : <Moon size={18}/>}
+                    </button>
+                 </div>
+
+                 <button 
+                   onClick={() => handleNav('auth')} 
+                   className="w-full bg-[#ccff00] text-black py-4 rounded-xl font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg"
+                 >
+                   Join Cult <Rocket size={18} />
+                 </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.nav>
 
-      {/* --- HERO SECTION (Scroll Parallax) --- */}
+      {/* --- HERO SECTION --- */}
       <section className="relative min-h-screen flex flex-col items-center justify-center text-center px-4 overflow-hidden pt-20">
          {/* Animated Blobs */}
          <motion.div 
@@ -242,7 +346,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
       </div>
 
       {/* --- BENTO GRID (3D Tilt Ecosystem) --- */}
-      <section className="py-32 px-6 max-w-7xl mx-auto">
+      <section id="explore" className="py-32 px-6 max-w-7xl mx-auto">
          <h2 className="text-center text-4xl md:text-6xl font-black uppercase mb-20">
             The <span className="text-[#ccff00]">Ecosystem</span>
          </h2>
@@ -463,7 +567,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
          </div>
       </section>
 
-      {/* --- FOOTER (Reveal Effect) --- */}
+      {/* --- FOOTER --- */}
       <footer className="bg-black text-white pt-20 pb-10 border-t border-white/10 relative z-10">
          <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
             <div className="space-y-6">
@@ -471,14 +575,14 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
                <p className="text-gray-500 text-sm leading-relaxed">Built by teens, for teens. We are building the safest, most powerful economy for the next generation. From India 🇮🇳 to the world.</p>
                <div className="flex gap-4">
                   {[Twitter, Instagram, Linkedin].map((Icon, i) => (
-                     <a key={i} href="#" className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-[#ccff00] hover:text-black transition-all hover-target"><Icon size={18}/></a>
+                     <a key={i} href="#!" className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-[#ccff00] hover:text-black transition-all hover-target"><Icon size={18}/></a>
                   ))}
                </div>
             </div>
             
             {[
                { title: "Platform", links: ['Explore Gigs', 'Post Job', 'Login'] },
-               { title: "Legal", links: ['Terms', 'Privacy', 'Refunds'], action: onLegalClick },
+               { title: "Legal", links: ['Terms', 'Privacy', 'Refunds'] },
                { title: "Support", links: ['Safety Center', 'Report Abuse', 'Contact'] }
             ].map((col, i) => (
                <div key={i}>
@@ -486,7 +590,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
                   <ul className="space-y-4 text-sm font-medium text-gray-400">
                      {col.links.map(link => (
                         <li key={link}>
-                           <button onClick={() => col.action ? col.action(link.toLowerCase()) : handleNav(link.toLowerCase())} className="hover:text-white transition-colors hover:translate-x-1 duration-200 inline-block">
+                           <button onClick={() => handleFooterLink(link)} className="hover:text-white transition-colors hover:translate-x-1 duration-200 inline-block">
                               {link}
                            </button>
                         </li>

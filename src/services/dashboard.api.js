@@ -66,18 +66,14 @@ export const fetchDashboardData = async (user) => {
     if (nError) throw nError;
 
     // 4. Fetch Referrals
-    const { count, error: rError } = await supabase
-      .from('referrals')
-      .select('*', { count: 'exact', head: true })
-      .eq('referrer_id', user.id);
-    if (rError) throw rError;
+   
 
     return { 
       services, 
       jobs, 
       applications, 
       notifications: notifications || [], 
-      referralCount: count || 0 
+      
     };
 
   } catch (error) {
@@ -175,10 +171,6 @@ export const checkActionPermission = async (action, appId, userId) => {
 // ==========================================
 
 // Initialize Cashfree Order
-// src/services/dashboard.api.js
-
-// ... existing imports
-
 export const createEscrowSession = async (applicationId, amount, freelancerId, clientPhone) => {
   try {
     // 1. Generate a valid phone number (Real one if available, or a random valid dummy)
@@ -215,8 +207,6 @@ export const createEscrowSession = async (applicationId, amount, freelancerId, c
   }
 };
 
-// ... keep other functions
-
 // Verify Payment & Start Escrow
 export const verifyAndStartEscrow = async (orderId, applicationId) => {
   try {
@@ -245,6 +235,19 @@ export const verifyAndStartEscrow = async (orderId, applicationId) => {
   } catch (err) {
     return { error: err };
   }
+};
+
+// Check Status Recovery
+export const checkPaymentStatus = async (orderId) => {
+    try {
+        const { data, error } = await supabase.functions.invoke('payment-gateway', {
+            body: { action: 'VERIFY_PAYMENT', orderId }
+        });
+        if (error) throw error;
+        return { success: true, status: data.status };
+    } catch (err) {
+        return { success: false, error: err };
+    }
 };
 
 // Manual Payment Process (Legacy/Simple Mode)
@@ -506,4 +509,33 @@ export const checkAndGrantFirstGigBadge = async (userId) => {
     return true; 
   }
   return false;
+};
+
+// ==========================================
+// 8. PROFILE PREVIEW (For Dashboard)
+// ==========================================
+
+export const getPublicProfile = async (userId) => {
+  // REMOVED 'avatar_url' from the select string below to fix the error
+  const { data: user, error } = await supabase
+    .from('freelancers') 
+    .select('id, name, bio, nationality, tag_line, unlocked_skills, created_at, social_links') // <--- Updated line
+    .eq('id', userId)
+    .single();
+  
+  if (error) return { error };
+
+  // ... rest of the function remains the same
+  const { data: badges } = await supabase
+    .from('user_badges')
+    .select('badge_name, earned_at')
+    .eq('user_id', userId);
+
+  const { data: portfolio } = await supabase
+    .from('portfolio_items')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  return { user, badges: badges || [], portfolio: portfolio || [] };
 };

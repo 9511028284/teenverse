@@ -143,14 +143,18 @@ const AdminDashboard = ({ onLogout }) => {
   };
 
   const fetchLogs = async () => {
-    const { data } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
-    setAuditLogs(data || []);
-  };
+    const [adminLogs, userLogs] = await Promise.all([
+        supabase.from('admin_audit_logs').select('id, created_at, admin_id, action_type, metadata').limit(50),
+        supabase.from('audit_logs').select('id, created_at, actor_id, action, details').limit(50)
+    ]);
 
+    const combined = [
+        ...(adminLogs.data || []).map(l => ({ ...l, type: 'ADMIN', action: l.action_type, details: l.metadata, user_id: l.admin_id })),
+        ...(userLogs.data || []).map(l => ({ ...l, type: 'USER', user_id: l.actor_id }))
+    ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    setAuditLogs(combined);
+};
   // --- SECURE FILE VIEWING ---
   const handleViewId = async (pathOrUrl) => {
     if (!pathOrUrl) return;

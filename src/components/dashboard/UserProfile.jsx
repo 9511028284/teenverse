@@ -32,7 +32,7 @@ const SkillTag = ({ skill }) => (
 
 // --- MAIN COMPONENT ---
 
-const UserProfile = ({ user, badges, userLevel, unlockedSkills, isClient, onEditProfile }) => {
+const UserProfile = ({ user, badges, userLevel, unlockedSkills, isClient, onEditProfile, readOnly = false }) => {
   
   const socials = user?.social_links || { github: '', instagram: '', linkedin: '', website: '' };
   
@@ -109,15 +109,17 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, isClient, onEdit
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-3">
-             <button onClick={onEditProfile} className="px-6 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/10 backdrop-blur text-white font-bold transition-all flex items-center gap-2">
-               <Edit3 size={18}/> Edit
-             </button>
-             <button className="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-lg shadow-indigo-500/25 transition-all flex items-center gap-2">
-               <Share2 size={18}/> Share
-             </button>
-          </div>
+          {/* Actions - Conditionally Rendered based on readOnly prop */}
+          {!readOnly && (
+            <div className="flex gap-3">
+               <button onClick={onEditProfile} className="px-6 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/10 backdrop-blur text-white font-bold transition-all flex items-center gap-2">
+                 <Edit3 size={18}/> Edit
+               </button>
+               <button className="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-lg shadow-indigo-500/25 transition-all flex items-center gap-2">
+                 <Share2 size={18}/> Share
+               </button>
+            </div>
+          )}
         </div>
       </motion.div>
 
@@ -148,7 +150,7 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, isClient, onEdit
           {/* Skills Matrix */}
           <div className="bg-[#09090b] border border-white/10 rounded-[2.5rem] p-8">
              <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-               <Terminal className="text-emerald-400" size={20}/> Tech Stack
+                <Terminal className="text-emerald-400" size={20}/> Tech Stack
              </h3>
              <div className="flex flex-wrap gap-2">
                 {unlockedSkills && unlockedSkills.length > 0 ? (
