@@ -132,6 +132,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
         'auth': 'auth',
         'login': 'auth',
         'start earning': 'auth',
+        'parent portal': 'parent-login',
         'post job': 'auth',
         'post job free': 'auth',
         'home': 'landing', // assuming 'landing' or just refreshing page
@@ -583,7 +584,12 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
             {[
                { title: "Platform", links: ['Explore Gigs', 'Post Job', 'Login'] },
                { title: "Legal", links: ['Terms', 'Privacy', 'Refunds'] },
-               { title: "Support", links: ['Safety Center', 'Report Abuse', 'Contact'] }
+               { title: "Support", links: ['Safety Center', 'Report Abuse', 'Contact'] },
+               { 
+  title: "Platform", 
+  // Add 'Parent Portal' to this list 👇
+  links: ['Explore Gigs', 'Post Job', 'Login', 'Parent Portal'] 
+}
             ].map((col, i) => (
                <div key={i}>
                   <h4 className="font-bold uppercase tracking-widest text-xs text-gray-600 mb-6">{col.title}</h4>
