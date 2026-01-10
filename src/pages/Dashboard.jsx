@@ -1,18 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Menu, LayoutDashboard, Briefcase, FileText, BookOpen, Sparkles, Settings, 
-  Award, Sun, Moon, Bell, Crown, Swords, ShieldCheck, ListChecks, Package, Share2, User,
-  Lock, Eye, RefreshCw 
+  Award, Sun, Moon, Bell, Crown, Swords, ShieldCheck, ListChecks, Package, User,
+  Lock, Eye 
 } from 'lucide-react';
-
 import UserProfile from '../components/dashboard/UserProfile'; 
 
 // --- LIBRARIES ---
-import { toPng, toBlob } from 'html-to-image'; 
+import { toPng, toBlob } from 'html-to-image';
 
-// --- SUPABASE & UTILS ---
+// --- SUPABASE & FIREBASE ---
 import { supabase } from '../supabase';
-import { QUIZZES, APP_STATUS } from '../utils/constants'; 
+import { db } from '../firebase'; 
+import { 
+  collection, query, where, orderBy, onSnapshot, doc, getDoc 
+  // ❌ REMOVED: updateDoc (Frontend should never write to Firestore directly)
+} from 'firebase/firestore';
+
+import { QUIZZES, APP_STATUS } from '../utils/constants';
 
 // UI Components
 import Button from '../components/ui/Button';
@@ -22,12 +27,8 @@ import Modal from '../components/ui/Modal';
 import DashboardSidebar from '../components/dashboard/DashboardSidebar'; 
 import KycVerificationModal from '../components/modals/KycVerificationModal';
 import ActiveQuizModal from '../components/modals/ActiveQuizModal';
-
-// Features
-// ❌ REMOVED: import ChatSystem from '../components/features/ChatSystem'; 
 import Overview from '../components/dashboard/Overview';
 import Jobs from '../components/dashboard/Jobs';
-import MyServices from '../components/dashboard/MyServices';
 import ClientPostedJobs from '../components/dashboard/ClientPostedJobs';
 import Applications from '../components/dashboard/Applications';
 import Academy from '../components/dashboard/Academy';
@@ -48,13 +49,13 @@ import PaymentModal from '../components/modals/PaymentModal';
 
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
   const isClient = user?.type === 'client';
-
+  
   // --- UI & TAB STATES ---
   const [tab, setTab] = useState('overview');
   const [menuOpen, setMenuOpen] = useState(false);
   const [zenMode, setZenMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
+  
   // --- DATA STATES ---
   const [jobs, setJobs] = useState([]);
   const [services, setServices] = useState([]);
@@ -68,29 +69,25 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [modal, setModal] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null); 
   const [selectedApp, setSelectedApp] = useState(null);
-  
-  // ❌ REMOVED: Chat State (activeChat)
-  
-  const [energy, setEnergy] = useState(20); 
+  const [energy, setEnergy] = useState(20);
 
   // --- PROFILE VIEW STATE (CLIENT VIEWING FREELANCER) ---
   const [viewProfileId, setViewProfileId] = useState(null);
   const [publicProfileData, setPublicProfileData] = useState(null);
-
+  
   // --- EDIT PROFILE STATE (FREELANCER EDITING SELF) ---
   const [editProfileModal, setEditProfileModal] = useState(false);
-
+  
   // --- KYC STATE ---
   const [kycFile, setKycFile] = useState(null);
-
+  
   // --- QUIZ & ACADEMY STATES ---
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
-
+  
   // --- HYBRID DELIVERY STATES ---
   const [timelineApp, setTimelineApp] = useState(null);
   const [viewWorkApp, setViewWorkApp] = useState(null);
-  const lastNotificationId = useRef(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [profileForm, setProfileForm] = useState(user ? { ...user } : {});
   const [paymentModal, setPaymentModal] = useState(null);
@@ -106,10 +103,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     
   const SAFE_QUIZZES = QUIZZES || {};
   const profileCardRef = useRef(null);
-
+  
   // --- CASHFREE REF ---
   const cashfree = useRef(null);
-
+  
   // --- DERIVED VALUES ---
   const currentXP = unlockedSkills.length * 500 + (badges.length * 200);
   const nextLevelXP = (Math.floor(currentXP / 2000) + 1) * 2000;
@@ -129,16 +126,18 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   }, []);
 
-  // --- DATA FETCHING ---
+  // --- HYBRID DATA FETCHING (FIREBASE READ + SUPABASE WRITE) ---
   useEffect(() => {
     if (!user) return;
-    let isMounted = true;
+    
+    let unsubJobs = () => {};
+    let unsubServices = () => {};
+    let unsubNotifs = () => {};
 
-    const loadData = async () => {
-        if (jobs.length === 0) setIsLoading(true);
-
+    const loadHybridData = async () => {
+        setIsLoading(true);
         try {
-            // 1. Create promises for all independent requests
+            // 1. SUPABASE (Private/Secure Data)
             const energyPromise = !isClient ? api.getEnergy(user.id) : Promise.resolve({ energy: 0 });
             
             const badgesPromise = supabase
@@ -146,18 +145,17 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                 .select('badge_name, badges(icon)')
                 .eq('user_id', user.id);
 
-            const dashboardPromise = api.fetchDashboardData(user);
+            const appsPromise = supabase
+                .from('applications')
+                .select('*')
+                .or(`freelancer_id.eq.${user.id},client_id.eq.${user.id}`);
 
-            // 2. Await all at once
-            const [energyRes, badgeRes, dashboardRes] = await Promise.all([
+            const [energyRes, badgeRes, appsRes] = await Promise.all([
                 energyPromise,
                 badgesPromise,
-                dashboardPromise
+                appsPromise
             ]);
 
-            if (!isMounted) return;
-
-            // 3. Set State
             if (!isClient) setEnergy(energyRes.energy);
 
             const formattedBadges = badgeRes.data?.map(b => ({
@@ -166,38 +164,60 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
             })) || [];
             setBadges(formattedBadges);
 
-            const { services, jobs, applications, notifications, referralCount, error } = dashboardRes;
+            const myApps = appsRes.data || [];
+            setApplications(myApps);
 
-            if (!error) {
-                setServices(services);
-                setJobs(jobs);
-                setApplications(applications);
-                setNotifications(notifications);
-                setReferralStats({ count: referralCount, earnings: referralCount * 50 });
-                
-                // Recalculate earnings synchronously
-                const total = applications.reduce((acc, curr) => {
-                     if (curr.status === 'Paid') {
-                        const amount = Number(curr.bid_amount) || 0;
-                        return isClient ? acc + amount : acc + (amount * 0.96);
-                     }
-                     return acc;
-                }, 0);
-                setTotalEarnings(total);
-            }
+            const total = myApps.reduce((acc, curr) => {
+                 if (curr.status === 'Paid') {
+                    const amount = Number(curr.bid_amount) || 0;
+                    return isClient ? acc + amount : acc + (amount * 0.96);
+                 }
+                 return acc;
+            }, 0);
+            setTotalEarnings(total);
+
+            // 2. FIRESTORE (Public/Read Data - REALTIME)
+            
+            // A. Jobs Feed
+            const jobsQuery = query(collection(db, "jobs"), where("is_archived", "==", false), orderBy("created_at", "desc"));
+            unsubJobs = onSnapshot(jobsQuery, (snapshot) => {
+                const firebaseJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setJobs(firebaseJobs);
+            });
+
+            // B. Services Feed
+            const servicesQuery = query(collection(db, "services"), orderBy("created_at", "desc"));
+            unsubServices = onSnapshot(servicesQuery, (snapshot) => {
+                const firebaseServices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setServices(firebaseServices);
+            });
+
+            // C. Notifications
+            const notifQuery = query(collection(db, "users", user.id, "notifications"), orderBy("created_at", "desc"));
+            unsubNotifs = onSnapshot(notifQuery, (snapshot) => {
+                const firebaseNotifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setNotifications(firebaseNotifs);
+            });
 
         } catch (err) {
-            showToast("Dashboard sync failed: " + err.message, "error");
+            console.error(err);
+            showToast("Sync Error: " + err.message, "error");
         } finally {
-            if (isMounted) setIsLoading(false);
+            setIsLoading(false);
         }
     };
 
-    loadData();
-    return () => { isMounted = false; };
-  }, [user, isClient, showToast, jobs.length]);
+    loadHybridData();
+
+    return () => { 
+        unsubJobs();
+        unsubServices();
+        unsubNotifs();
+    };
+  }, [user, isClient, showToast]);
 
   // --- ACTION HANDLERS ---
+  
   const checkKycLock = (actionType) => {
     if (user.kyc_status === 'approved') return true;
     if (user.kyc_status === 'pending') {
@@ -220,6 +240,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     const title = formData.get('title');
     if (budget < 100) { showToast("Minimum budget is ₹100", "error"); return; }
     if (title.length < 5) { showToast("Job title is too short", "error"); return; }
+    
+    // Writes go to Supabase (Secure) - Requires Backend Trigger to sync to Firestore
     const jobData = { 
         client_id: user.id, client_name: user.name, title: title, budget: budget, 
         job_type: 'Fixed', duration: formData.get('duration'), tags: formData.get('tags'), 
@@ -227,25 +249,22 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     };
     const { error } = await api.createJob(jobData);
     if (error) { showToast(error.message, 'error'); } 
-    else { showToast('Job Posted!'); setModal(null); setJobs([jobData, ...jobs]); }
+    else { showToast('Job Posted! Syncing to Feed...'); setModal(null); }
   };
 
   const handleKycSubmit = async ({ ageGroup, bankDetails }) => {
     if (!kycFile) return showToast("Please select an ID file.", "error");
-
     if (kycFile.size > 5 * 1024 * 1024) {
       showToast("File is too large. Max size is 5MB.", "error");
       return;
     }
 
     showToast("Encrypting & Uploading data...", "info");
-    
     try {
         const fileName = `${user.id}/${Date.now()}_kyc`;
         const { error: uploadError } = await supabase.storage
             .from('id_proofs')
             .upload(fileName, kycFile);
-        
         if (uploadError) throw uploadError;
 
         const beneficiaryId = `BEN-${Date.now().toString().slice(-6)}-${Math.floor(Math.random()*1000)}`;
@@ -264,7 +283,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                 parent_consent_verified: bankDetails.consent || false,
                 beneficiary_id: beneficiaryId
             });
-            
         if (bankError) throw bankError;
 
         const table = isClient ? 'clients' : 'freelancers';
@@ -277,13 +295,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                 kyc_submitted_at: new Date().toISOString()
             })
             .eq('id', user.id);
-            
         if (dbError) throw dbError;
 
         showToast("Success! Verification & Banking details submitted.", "success");
         setUser({ ...user, kyc_status: 'pending', kyc_type: ageGroup }); 
         setModal(null);
-        
     } catch (err) {
         showToast("Submission failed: " + err.message, "error");
         console.error(err);
@@ -294,7 +310,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     if(!window.confirm("Are you sure you want to delete this job?")) return;
     const { error } = await api.deleteJob(id);
     if (error) { showToast(error.message, 'error'); } 
-    else { showToast('Job Deleted'); setJobs(jobs.filter(j => j.id !== id)); }
+    else { showToast('Job Deleted. Updating feed...'); }
   };
 
   const handleCreateService = async (e) => {
@@ -307,20 +323,21 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     };
     const { error } = await api.createService(serviceData);
     if (error) { showToast(error.message, 'error'); } 
-    else { showToast('Gig Created Successfully!'); setModal(null); setServices([serviceData, ...services]); }
+    else { showToast('Gig Created Successfully!'); setModal(null); }
   };
 
   const handleDeleteService = async (id) => {
     if(!window.confirm("Delete this gig?")) return;
     const { error } = await api.deleteService(id);
     if (error) { showToast(error.message, 'error'); } 
-    else { showToast('Service Deleted'); setServices(services.filter(s => s.id !== id)); }
+    else { showToast('Service Deleted'); }
   };
 
   const handleApplyJob = async (e, energyCost) => {
     e.preventDefault();
     if (parentMode) { showToast("Parent Mode Active", "error"); return; }
     if (!checkKycLock('apply_paid')) return;
+    
     if (!isClient && selectedJob) {
       const jobCategory = selectedJob.category || 'dev';
       if (!unlockedSkills.includes(jobCategory)) {
@@ -435,22 +452,18 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         payload: { work_link: workLink, message: message, files: uploadedUrls }
       }
     });
-
     if (error) {
       showToast("Submission failed: " + error.message, "error");
     } else {
       showToast("Work Submitted Successfully!", "success");
       setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, status: APP_STATUS.SUBMITTED, submitted_at: timestamp } : a));
-      setSelectedApp(null); 
+      setSelectedApp(null);
     }
   };
 
   const handleClearNotifications = async () => {
-    try {
-      const { error } = await api.clearUserNotifications(user.id);
-      if (error) { showToast(error.message, 'error'); } 
-      else { setNotifications([]); showToast("Notifications cleared", "success"); }
-    } catch (err) { showToast("Failed to clear notifications: " + err.message, "error"); }
+    setNotifications([]); 
+    showToast("Notifications cleared (UI Only)", "info");
   };
 
   const handleApproveWork = async (app) => {
@@ -485,28 +498,38 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
-  // --- 1. VIEW PROFILE (For Clients) ---
+  // --- 1. VIEW PROFILE (FIRESTORE READ) ---
   const handleViewProfile = async (freelancerId) => {
     showToast("Fetching Profile...", "info");
-    const { user, badges, portfolio, error } = await api.getPublicProfile(freelancerId);
-    
-    if (error) {
+    try {
+        const docRef = doc(db, "freelancers_public", freelancerId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            setPublicProfileData({ 
+                user: data.profile, 
+                badges: data.badges || [], 
+                portfolio: data.portfolio || [] 
+            });
+            setViewProfileId(freelancerId);
+        } else {
+            showToast("Profile not found or private.", "warning");
+        }
+    } catch (err) {
         showToast("Could not load profile", "error");
-    } else {
-        setPublicProfileData({ user, badges, portfolio });
-        setViewProfileId(freelancerId);
     }
   };
 
-  // --- 2. UPDATE SETTINGS (Sensitive Info) ---
+  // --- 2. UPDATE SETTINGS ---
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     const tableName = isClient ? 'clients' : 'freelancers';
-    // Only sensitive fields here. Bio/Socials are handled by handleSavePublicProfile
     const cleanUpdates = { name: profileForm.name, phone: profileForm.phone, nationality: profileForm.nationality };
     if (!isClient) {
         cleanUpdates.age = profileForm.age; cleanUpdates.qualification = profileForm.qualification;
-        cleanUpdates.specialty = profileForm.specialty; cleanUpdates.services = profileForm.services;
+        cleanUpdates.specialty = profileForm.specialty;
+        cleanUpdates.services = profileForm.services;
         cleanUpdates.upi = profileForm.upi; cleanUpdates.bank_name = profileForm.bank_name;
         cleanUpdates.account_number = profileForm.account_number; cleanUpdates.ifsc_code = profileForm.ifsc_code;
     } else { cleanUpdates.is_organisation = profileForm.is_organisation; }
@@ -516,7 +539,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     else { showToast("Credentials updated successfully!", "success"); setUser({ ...user, ...cleanUpdates }); }
   };
 
-  // --- 3. UPDATE PUBLIC PROFILE (Bio, Socials) ---
+  // --- 3. UPDATE PUBLIC PROFILE (FIXED) ---
   const handleSavePublicProfile = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -524,7 +547,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     const updates = {
         bio: formData.get('bio'),
         tag_line: formData.get('tag_line'),
-        // Stores as JSON, no avatar upload to save storage
         social_links: {
             github: formData.get('github'),
             instagram: formData.get('instagram'),
@@ -532,18 +554,23 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
             website: formData.get('website')
         }
     };
-
     const tableName = isClient ? 'clients' : 'freelancers';
     
-    // Update API call
+    // 1. Write to Supabase (Secure Source)
     const { error } = await api.updateUserProfile(user.id, updates, tableName);
-
+    
     if (error) {
         showToast(error.message, 'error');
     } else {
-        showToast("Public profile updated!", "success");
-        setUser({ ...user, ...updates }); // Update local state
-        setEditProfileModal(false);      // Close modal
+        // 2. Update Local State (Instant UI feedback)
+        setUser({ ...user, ...updates });
+        setEditProfileModal(false);
+        
+        // 3. User Feedback
+        showToast("Profile saved! Syncing to public directory...", "success");
+        
+        // ❌ NOTE: We do NOT write to Firestore here anymore. 
+        // The Supabase Edge Function will handle the sync securely.
     }
   };
 
@@ -574,15 +601,14 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     if (backendAction) {
         showToast(`Processing ${action}...`, "info");
         const bodyData = { action: backendAction, appId: app.id, userId: user.id };
-        if (payload) Object.assign(bodyData, payload); 
-
+        if (payload) Object.assign(bodyData, payload);
         const { error } = await supabase.functions.invoke('order-manager', {
             body: bodyData
         });
         if (error) {
              const errorBody = error.context?.json ? await error.context.json() : {};
              if (errorBody.isSecurityBlock) {
-                 setParentMode(true); 
+                 setParentMode(true);
                  showToast("⛔ Security Block: Ask your parent to approve.", "error");
              } else {
                  showToast(error.message || "Action Failed", "error");
@@ -719,7 +745,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                <div className="flex items-center gap-4">
                   <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl"><Menu/></button>
                    <div className="flex items-center gap-3">
-                    <div className="hidden sm:flex w-10 h-10 rounded-xl bg-gray-50 dark:bg-white/5 items-center justify-center border border-gray-100 dark:border-white/5">{getTabIcon()}</div>
+                     <div className="hidden sm:flex w-10 h-10 rounded-xl bg-gray-50 dark:bg-white/5 items-center justify-center border border-gray-100 dark:border-white/5">{getTabIcon()}</div>
                       <div>
                          <h2 className="text-lg font-bold text-gray-900 dark:text-white capitalize leading-none">{tab.replace('-', ' ')}</h2>
                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Welcome back, {user.name?.split(' ')[0]}</p>
@@ -733,11 +759,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                   </div>
                   <div className="relative">
                     <button onClick={() => setShowNotifications(!showNotifications)} className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-gray-50 text-gray-500 dark:text-gray-400 transition-colors">
-                       <Bell size={20}/>
+                      <Bell size={20}/>
                       {notifications.length > 0 && <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#0F172A]"></span>}
                     </button>
                     {showNotifications && (
-                       <div className="absolute right-0 top-12 w-80 bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden animate-fade-in z-50">
+                      <div className="absolute right-0 top-12 w-80 bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden animate-fade-in z-50">
                           <div className="p-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-white/5">
                              <span className="font-bold text-sm dark:text-white">Notifications</span>
                              <button onClick={handleClearNotifications} className="text-xs font-medium text-indigo-500 hover:text-indigo-600">Clear All</button>
@@ -749,7 +775,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                                   {n.message}
                                </div>
                             ))}
-                           </div>
+                          </div>
                       </div>
                     )}
                   </div>
@@ -762,12 +788,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
             <div className="max-w-7xl mx-auto">
                <div className="animate-fade-in-up">
                  {tab === 'overview' && (
-                     <Overview user={user} isClient={isClient} totalEarnings={totalEarnings} jobsCount={isClient ? jobs.length : applications.length} badgesCount={badges.length} setTab={setTab} referralCount={referralStats.count} referralEarnings={referralStats.earnings} />
+                    <Overview user={user} isClient={isClient} totalEarnings={totalEarnings} jobsCount={isClient ? jobs.length : applications.length} badgesCount={badges.length} setTab={setTab} referralCount={referralStats.count} referralEarnings={referralStats.earnings} />
                  )}
                  {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} setTab={setTab} setSelectedJob={setSelectedJob} parentMode={parentMode} />}
                  {tab === 'posted-jobs' && isClient && <ClientPostedJobs jobs={jobs} setModal={setModal} handleDeleteJob={handleDeleteJob} />}
                  
-                 {/* ❌ REPLACED: MyServices with Maintenance/Disabled UI */}
                  {tab === 'my-services' && !isClient && (
                     <div className="flex flex-col items-center justify-center h-[50vh] text-center p-8 opacity-70">
                       <div className="w-24 h-24 bg-gray-200 dark:bg-white/5 rounded-full flex items-center justify-center mb-4">
@@ -788,8 +813,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                         showToast={showToast}
                     />
                  )}
-                 
-                 {/* ❌ REMOVED: Messages Tab Content */}
                  
                  {tab === 'academy' && !isClient && <Academy unlockedSkills={unlockedSkills} setModal={setModal} quizzes={SAFE_QUIZZES} />}
                  {tab === 'portfolio' && !isClient && <Portfolio rawPortfolioText={rawPortfolioText} setRawPortfolioText={setRawPortfolioText} handleAiGenerate={handleAiGenerate} isAiLoading={isAiLoading} portfolioItems={portfolioItems} />}
@@ -815,7 +838,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                      userLevel={userLevel} 
                      unlockedSkills={unlockedSkills} 
                      isClient={isClient}
-                     // ✅ Open the new Modal instead of switching tabs
                      onEditProfile={() => setEditProfileModal(true)} 
                    />
                  )}
@@ -882,7 +904,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">External Link (Recommended)</label>
               <input name="work_link" type="url" placeholder="https://drive.google.com/..." className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white"/>
             </div>
-             <div>
+            <div>
               <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Message</label>
               <textarea name="message" rows="3" className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white" placeholder="Describe what you did..."></textarea>
             </div>
@@ -911,7 +933,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                       <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600"><Package size={20}/></div>
                       <div className="flex-1"><p className="font-bold text-indigo-700 text-sm">External Project Link</p><p className="text-xs text-indigo-400 truncate">{viewWorkApp.work_link}</p></div>
                       <Eye size={16} className="text-gray-400 group-hover:text-indigo-600"/>
-                   </a>
+                  </a>
                 )}
                 {viewWorkApp.work_files && viewWorkApp.work_files.map((url, i) => (
                   <a key={i} href={url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
@@ -920,7 +942,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                       <Eye size={16} className="text-gray-400"/>
                   </a>
                 ))}
-             </div>
+              </div>
 
               <div className="pt-4 border-t border-gray-100 flex gap-3">
                 <Button variant="outline" className="flex-1" onClick={() => setViewWorkApp(null)}>Close</Button>
@@ -1015,6 +1037,18 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       {/* 9. EDIT PUBLIC PROFILE MODAL (Freelancer Editing Self) */}
       {editProfileModal && (
         <Modal title="Edit Public Profile" onClose={() => setEditProfileModal(false)}>
+            
+            {/* Simple Read-Only Avatar Display */}
+            <div className="flex flex-col items-center gap-4 mb-6 pb-6 border-b border-gray-100 dark:border-gray-800">
+                <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-indigo-100 dark:border-white/10">
+                    <img 
+                        src={user.avatar_url || "https://via.placeholder.com/150"} 
+                        alt="Profile" 
+                        className="w-full h-full object-cover"
+                    />
+                </div>
+            </div>
+
             <form onSubmit={handleSavePublicProfile} className="space-y-4">
                 
                 {/* Tagline */}
