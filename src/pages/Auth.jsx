@@ -324,8 +324,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   };
 
   const handleFinalSubmit = async () => {
-    //if (CLOUDFLARE_SITE_KEY && !captchaToken && viewMode === 'login') return showToast("Please complete the security check.");
-    //if (CLOUDFLARE_SITE_KEY && !captchaToken && viewMode === 'signup' && step === 4) return showToast("Please complete the security check.");
+    if (CLOUDFLARE_SITE_KEY && !captchaToken && viewMode === 'login') return showToast("Please complete the security check.");
+    if (CLOUDFLARE_SITE_KEY && !captchaToken && viewMode === 'signup' && step === 4) return showToast("Please complete the security check.");
     if (viewMode !== 'login' && !agreedToTerms) return showToast("Agree to Terms & Privacy to continue.");
 
     setLoading(true);
