@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, MapPin, ArrowUpRight, Sparkles, Filter, Briefcase } from 'lucide-react';
+import { Search, MapPin, ArrowUpRight, Sparkles, Filter, Briefcase, ChevronDown, ChevronUp } from 'lucide-react';
 import Button from '../ui/Button';
 
 // --- LUXURY COMPONENTS ---
@@ -12,6 +12,9 @@ const GradientText = ({ children, from = "from-indigo-400", to = "to-cyan-400" }
 const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, setModal, setActiveChat, setSelectedJob }) => {
   
   const JobCard = ({ data, type }) => {
+    // State to handle Read More / Read Less toggle
+    const [isExpanded, setIsExpanded] = useState(false);
+
     // Determine Gradient based on type or ID
     const gradients = [
         "from-[#FF0080] to-[#7928CA]", // Pink/Purple
@@ -19,6 +22,10 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
         "from-[#0093E9] to-[#80D0C7]", // Cyan/Teal
     ];
     const gradient = gradients[data.id % gradients.length];
+
+    // Helper to check length
+    const description = data.description || "No encrypted description provided for this mission.";
+    const isLongText = description.length > 100;
 
     return (
       <div className="group relative bg-[#09090b] rounded-[30px] border border-white/5 hover:border-white/10 transition-all duration-500 hover:-translate-y-2 overflow-hidden flex flex-col h-full shadow-2xl">
@@ -49,9 +56,28 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
               </p>
            </div>
 
-           <p className="text-sm text-gray-400 line-clamp-3 mb-6 leading-relaxed font-light">
-               {data.description || "No encrypted description provided for this mission."}
-           </p>
+           {/* --- UPDATED DESCRIPTION LOGIC --- */}
+           <div className="mb-6 relative">
+               <p className={`text-sm text-gray-400 leading-relaxed font-light transition-all duration-300 ${isExpanded ? '' : 'line-clamp-3'}`}>
+                   {description}
+               </p>
+               
+               {isLongText && (
+                   <button 
+                       onClick={(e) => {
+                           e.stopPropagation();
+                           setIsExpanded(!isExpanded);
+                       }}
+                       className="mt-2 text-[10px] font-bold uppercase tracking-widest text-indigo-400 hover:text-white flex items-center gap-1 transition-colors"
+                   >
+                       {isExpanded ? (
+                           <>Collapse Data <ChevronUp size={10} /></>
+                       ) : (
+                           <>Decrypt Full <ChevronDown size={10} /></>
+                       )}
+                   </button>
+               )}
+           </div>
 
            {/* Tags */}
            <div className="flex flex-wrap gap-2 mb-6 mt-auto">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Button from '../ui/Button'; 
-import Modal from '../ui/Modal';   
+import Modal from '../ui/Modal';    
 import ReviewModal from '../modals/ReviewModal'; 
 import { 
   Clock, CheckCircle, XCircle, Package, Lock, Unlock, 
@@ -24,10 +24,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
     const message = e.target.revision_msg.value;
     if (!message) return;
 
-    // Assuming api is passed or imported in parent, but based on your file it's imported here:
-    // We need to ensure api is imported. In your provided code it was passed via props or imported.
-    // I will assume the import line exists as per your source file.
-    onAction('revision', revisionModal, { message }); // Delegate to parent or use api directly if imported
+    onAction('revision', revisionModal, { message }); 
     setRevisionModal(null);
   };
 
@@ -218,25 +215,24 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     </button>
                   </td>
                   
-                  {/* --- UPDATED FREELANCER COLUMN --- */}
+                  {/* --- FREELANCER COLUMN --- */}
                   <td className="p-4 text-gray-600 dark:text-gray-300">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-400 to-purple-400 text-white flex items-center justify-center text-xs font-bold">
                             {(isClient ? app.freelancer_name : app.client_name)?.[0] || 'U'}
                         </div>
                         <div>
-                             <div className="font-bold text-sm">
-                               {isClient ? app.freelancer_name : app.client_name || 'User'}
-                             </div>
-                             {/* NEW: View Profile Trigger */}
-                             {isClient && (
-                               <button 
-                                 onClick={() => onAction('view_profile', app)} 
-                                 className="text-[10px] text-indigo-500 hover:underline flex items-center gap-1 transition-colors"
-                               >
-                                 <User size={10} /> View Profile
-                               </button>
-                             )}
+                            <div className="font-bold text-sm">
+                              {isClient ? app.freelancer_name : app.client_name || 'User'}
+                            </div>
+                            {isClient && (
+                              <button 
+                                onClick={() => onAction('view_profile', app)} 
+                                className="text-[10px] text-indigo-500 hover:underline flex items-center gap-1 transition-colors"
+                              >
+                                <User size={10} /> View Profile
+                              </button>
+                            )}
                         </div>
                     </div>
                   </td>
@@ -268,6 +264,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
 
        {/* --- MODALS SECTION --- */}
 
+       {/* 1. Revision Modal - Responsive Buttons */}
        {revisionModal && (
         <Modal title="Request Revisions" onClose={() => setRevisionModal(null)}>
             <form onSubmit={handleSendRevision} className="space-y-4">
@@ -276,14 +273,16 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     <p>Clearly explain what changes you need. Be specific to help the freelancer deliver faster.</p>
                 </div>
                 <textarea name="revision_msg" required placeholder="e.g., The font size is too small..." className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none min-h-[120px] text-sm dark:bg-black dark:text-white dark:border-gray-700 resize-none"></textarea>
-                <div className="flex justify-end gap-3 pt-2">
-                    <Button variant="ghost" type="button" onClick={() => setRevisionModal(null)}>Cancel</Button>
-                    <Button className="bg-amber-500 hover:bg-amber-600 text-white">Send Request</Button>
+                
+                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
+                    <Button variant="ghost" type="button" onClick={() => setRevisionModal(null)} className="w-full sm:w-auto">Cancel</Button>
+                    <Button className="bg-amber-500 hover:bg-amber-600 text-white w-full sm:w-auto">Send Request</Button>
                 </div>
             </form>
         </Modal>
        )}
 
+       {/* 2. Release Modal - Responsive & 5% Fee */}
        {releaseModal && (
          <Modal title="Confirm Payment Release" onClose={() => setReleaseModal(null)}>
            <div className="space-y-6">
@@ -299,21 +298,26 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     <span>Total Escrow Amount</span>
                     <span className="font-bold text-gray-900 dark:text-white">₹{releaseModal.bid_amount}</span>
                 </div>
+                
+                {/* 5% FEE CHANGE START */}
                 <div className="flex justify-between items-center text-sm text-amber-600 dark:text-amber-500">
-                    <span className="flex items-center gap-1"><ShieldCheck size={12}/> Platform Fee (4%)</span>
-                    <span className="font-medium">- ₹{(releaseModal.bid_amount * 0.04).toFixed(2)}</span>
+                    <span className="flex items-center gap-1"><ShieldCheck size={12}/> Platform Fee (5%)</span>
+                    <span className="font-medium">- ₹{(releaseModal.bid_amount * 0.05).toFixed(2)}</span>
                 </div>
                 <div className="h-px bg-gray-200 dark:bg-gray-700 my-2"></div>
                 <div className="flex justify-between items-center text-base">
                     <span className="font-bold text-gray-900 dark:text-white">Freelancer Receives</span>
                     <span className="font-black text-green-600 dark:text-green-400 text-lg">
-                        ₹{(releaseModal.bid_amount * 0.96).toFixed(2)}
+                        ₹{(releaseModal.bid_amount * 0.95).toFixed(2)}
                     </span>
                 </div>
+                {/* 5% FEE CHANGE END */}
+
              </div>
-             <div className="flex gap-3 pt-2">
-                <Button variant="outline" onClick={() => setReleaseModal(null)} className="flex-1">Cancel</Button>
-                <Button onClick={confirmRelease} className="flex-1 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/20 flex items-center justify-center gap-2">
+
+             <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <Button variant="outline" onClick={() => setReleaseModal(null)} className="w-full sm:flex-1">Cancel</Button>
+                <Button onClick={confirmRelease} className="w-full sm:flex-1 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/20 flex items-center justify-center gap-2">
                     <Wallet size={16} /> Confirm & Pay
                 </Button>
              </div>
@@ -321,6 +325,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
          </Modal>
        )}
 
+       {/* 3. Reject Modal - Responsive Buttons */}
        {rejectModal && (
         <Modal title="Reject & Refund" onClose={() => setRejectModal(null)}>
             <form onSubmit={handleRejectConfirm} className="space-y-4">
@@ -334,9 +339,10 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Reason for {rejectModal.status === 'Accepted' ? 'Cancellation' : 'Rejection'}</label>
                     <textarea name="reason" required placeholder={rejectModal.status === 'Accepted' ? "e.g. Freelancer is unresponsive..." : "e.g. Work does not match requirements..."} className="w-full p-4 border border-gray-200 rounded-xl min-h-[100px] text-sm dark:bg-black dark:text-white resize-none focus:ring-2 focus:ring-red-500 outline-none"></textarea>
                 </div>
-                <div className="flex justify-end gap-3 pt-2">
-                    <Button variant="ghost" type="button" onClick={() => setRejectModal(null)}>Go Back</Button>
-                    <Button className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200">{rejectModal.status === 'Accepted' ? 'Cancel Order' : 'Reject Work'}</Button>
+                
+                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
+                    <Button variant="ghost" type="button" onClick={() => setRejectModal(null)} className="w-full sm:w-auto">Go Back</Button>
+                    <Button className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200 w-full sm:w-auto">{rejectModal.status === 'Accepted' ? 'Cancel Order' : 'Reject Work'}</Button>
                 </div>
             </form>
         </Modal>

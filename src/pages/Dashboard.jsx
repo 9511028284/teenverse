@@ -9,6 +9,7 @@ import UserProfile from '../components/dashboard/UserProfile';
 // --- LIBRARIES ---
 import { toPng, toBlob } from 'html-to-image';
 import { jsPDF } from "jspdf";
+import { motion, AnimatePresence } from 'framer-motion'; // ADDED FOR ANIMATION
 
 // --- SUPABASE & UTILS ---
 import { supabase } from '../supabase';
@@ -44,6 +45,19 @@ import PostJobModal from '../components/modals/PostJobModal';
 import CreateServiceModal from '../components/modals/CreateServiceModal';
 import ApplyJobModal from '../components/modals/ApplyJobModal';
 import PaymentModal from '../components/modals/PaymentModal';
+
+// --- ANIMATION VARIANTS ---
+const pageVariants = {
+  initial: { opacity: 0, y: 10, scale: 0.98 },
+  in: { opacity: 1, y: 0, scale: 1 },
+  out: { opacity: 0, y: -10, scale: 0.98 }
+};
+
+const pageTransition = {
+  type: "tween",
+  ease: "anticipate",
+  duration: 0.4
+};
 
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
   const isClient = user?.type === 'client';
@@ -97,11 +111,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [parentMode, setParentMode] = useState(false);
   const [unlockedSkills, setUnlockedSkills] = useState(user?.unlockedSkills || []);
   const [badges, setBadges] = useState([]);
-    
+   
   const [portfolioItems, setPortfolioItems] = useState([]);
   const [rawPortfolioText, setRawPortfolioText] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
-    
+   
   const SAFE_QUIZZES = QUIZZES || {};
   const profileCardRef = useRef(null);
   
@@ -189,11 +203,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                 setReferralStats({ count: referralCount, earnings: referralCount * 50 });
                 
                 const total = applications.reduce((acc, curr) => {
-                     if (curr.status === 'Paid') {
-                        const amount = Number(curr.bid_amount) || 0;
-                        return isClient ? acc + amount : acc + (amount * 0.95); 
-                     }
-                     return acc;
+                      if (curr.status === 'Paid') {
+                         const amount = Number(curr.bid_amount) || 0;
+                         return isClient ? acc + amount : acc + (amount * 0.95); 
+                      }
+                      return acc;
                 }, 0);
                 setTotalEarnings(total);
             }
@@ -427,19 +441,19 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   };
 
   const handleVerifyPaymentStatus = async (appId, orderId) => {
-     showToast("Checking Gateway Status...", "info");
-     const { success, status, error } = await api.checkPaymentStatus(orderId);
-     
-     if (success && status === 'PAID') {
-         await api.verifyAndStartEscrow(orderId, appId);
-         await logAction('ESCROW_VERIFIED_MANUAL', { order_id: orderId, app_id: appId });
-         showToast("Payment Found! Order Started.", "success");
-         setApplications(prev => prev.map(a => 
+      showToast("Checking Gateway Status...", "info");
+      const { success, status, error } = await api.checkPaymentStatus(orderId);
+      
+      if (success && status === 'PAID') {
+          await api.verifyAndStartEscrow(orderId, appId);
+          await logAction('ESCROW_VERIFIED_MANUAL', { order_id: orderId, app_id: appId });
+          showToast("Payment Found! Order Started.", "success");
+          setApplications(prev => prev.map(a => 
             a.id === appId ? { ...a, status: 'Accepted', started_at: new Date().toISOString() } : a
-         ));
-     } else {
-         showToast("Payment still pending or failed at gateway.", "warning");
-     }
+          ));
+      } else {
+          showToast("Payment still pending or failed at gateway.", "warning");
+      }
   };
 
   const handleSubmitWork = async (e) => {
@@ -510,19 +524,28 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   };
 
   // ✅ HELPER: Client-Side Invoice Generation
-  const generateAndStoreInvoice = async (app, amount, customTitle = null) => {
+  // ✅ HELPER: Role-Based Invoice Generation (Client = Full, Freelancer = -5%)
+  const generateAndStoreInvoice = async (app, baseAmount, customTitle = null) => {
     try {
       const doc = new jsPDF();
-      const invoiceId = `INV-${Date.now().toString().slice(-8)}`; 
+      const invoiceId = `INV-${Date.now().toString().slice(-8)}`;
       
+      // 1. Determine Amounts based on Role
+      // Client pays full amount. Freelancer gets 95%.
+      const isFreelancer = user.type !== 'client'; // Freelancer or Admin
+      const fee = isFreelancer ? (baseAmount * 0.05) : 0;
+      const finalAmount = baseAmount - fee;
+      
+      // -- HEADER --
       doc.setFontSize(22);
       doc.setFont("helvetica", "bold");
       doc.text("TeenVerseHub Invoice", 20, 20);
       
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      doc.text("Freelance Marketplace", 20, 26);
+      doc.text(isFreelancer ? "Payout Statement" : "Payment Receipt", 20, 26); // Different Title
       
+      // -- METADATA --
       doc.setFontSize(10);
       doc.text(`Invoice ID: ${invoiceId}`, 20, 45);
       doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 50);
@@ -530,36 +553,61 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       const titleToUse = customTitle || selectedJob?.title || 'Freelance Service';
       doc.text(`Job Title: ${titleToUse}`, 20, 55);
 
+      // -- DIVIDER --
       doc.setDrawColor(200, 200, 200);
       doc.line(20, 65, 190, 65);
 
+      // -- BILLING DETAILS --
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
       doc.text("Billed To:", 20, 80);
       doc.setFont("helvetica", "normal");
-      doc.text(user.name || "Client", 20, 86);
+      doc.text(isFreelancer ? "TeenVerseHub Payouts" : (user.name || "Client"), 20, 86);
 
       doc.setFont("helvetica", "bold");
-      doc.text("Freelancer:", 120, 80); 
+      doc.text(isFreelancer ? "Payee (You):" : "Freelancer:", 120, 80);
       doc.setFont("helvetica", "normal");
-      doc.text(app.freelancer_name || "Freelancer", 120, 86);
+      doc.text(user.name || "User", 120, 86);
       
-      doc.setFillColor(245, 245, 245);
-      doc.rect(115, 100, 80, 20, 'F');
+      // -- PAYMENT BREAKDOWN --
+      doc.setFillColor(248, 248, 248);
+      doc.rect(115, 100, 80, isFreelancer ? 30 : 20, 'F'); // Taller box for freelancers
 
-      doc.setFontSize(12);
+      doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
-      doc.text(`Amount Paid:`, 120, 113);
-      doc.setFont("helvetica", "bold");
-      doc.text(`INR ${amount}`, 190, 113, { align: 'right' });
+
+      if (isFreelancer) {
+          // Show breakdown for Freelancer
+          doc.text(`Gross Amount:`, 120, 110);
+          doc.text(`₹${baseAmount}`, 190, 110, { align: 'right' });
+          
+          doc.setTextColor(200, 0, 0); // Red for deduction
+          doc.text(`Platform Fee (5%):`, 120, 116);
+          doc.text(`- ₹${fee.toFixed(2)}`, 190, 116, { align: 'right' });
+          
+          doc.setTextColor(0, 0, 0);
+          doc.setFont("helvetica", "bold");
+          doc.text(`Net Earnings:`, 120, 126);
+          doc.setFontSize(12);
+          doc.text(`₹${finalAmount.toFixed(2)}`, 190, 126, { align: 'right' });
+      } else {
+          // Simple view for Client
+          doc.setFontSize(12);
+          doc.text(`Total Paid:`, 120, 113);
+          doc.setFont("helvetica", "bold");
+          doc.text(`₹${finalAmount}`, 190, 113, { align: 'right' });
+      }
       
+      // -- FOOTER --
       doc.setFontSize(9);
       doc.setFont("helvetica", "italic");
       doc.setTextColor(150, 150, 150);
-      doc.text("This is a system generated receipt.", 20, 140);
+      doc.text("System generated document. Not valid for tax input credit.", 20, 145);
       
+      // -- UPLOAD --
       const pdfBlob = doc.output('blob');
-      const filePath = `${user.id}/${app.id}_invoice.pdf`;
+      // Store in User-Specific folder so Client gets one file, Freelancer gets another
+      const filePath = `${user.id}/${app.id}_invoice.pdf`; 
 
       const { error: uploadError } = await supabase.storage
         .from('invoices')
@@ -567,14 +615,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
       if (uploadError) throw uploadError;
 
-      const { error: dbError } = await supabase
-        .from('applications')
-        .update({ invoice_path: filePath })
-        .eq('id', app.id);
-
-      if (dbError) throw dbError;
-
+      // Note: We don't update the DB 'invoice_path' here because it might overwrite 
+      // the other user's path. We just return the path for immediate download.
       return filePath;
+
     } catch (err) {
       console.error("Invoice Error:", err);
       showToast("Invoice generation failed.", "error");
@@ -873,12 +917,16 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
   if (isLoading) {
     return (
-        <div className="flex h-screen items-center justify-center bg-[#F8FAFC] dark:bg-[#020617]">
+        <motion.div 
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex h-screen items-center justify-center bg-[#F8FAFC] dark:bg-[#020617]"
+        >
           <div className="flex flex-col items-center gap-4">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
               <p className="text-gray-500 text-sm animate-pulse">Loading TeenVerse...</p>
           </div>
-        </div>
+        </motion.div>
     );
   }
 
@@ -947,316 +995,326 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
          {/* Scrollable Content Area */}
          <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-8 custom-scrollbar">
             <div className="max-w-7xl mx-auto">
-               <div className="animate-fade-in-up">
-                 {tab === 'overview' && (
-                   <Overview user={user} isClient={isClient} totalEarnings={totalEarnings} jobsCount={isClient ? jobs.length : applications.length} badgesCount={badges.length} setTab={setTab} referralCount={referralStats.count} referralEarnings={referralStats.earnings} />
-                 )}
-                 {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} setTab={setTab} setSelectedJob={setSelectedJob} parentMode={parentMode} />}
-                 {tab === 'posted-jobs' && isClient && <ClientPostedJobs jobs={jobs} setModal={setModal} handleDeleteJob={handleDeleteJob} />}
-                 
-                 {tab === 'my-services' && !isClient && (
-                    <div className="flex flex-col items-center justify-center h-[50vh] text-center p-8 opacity-70">
-                      <div className="w-24 h-24 bg-gray-200 dark:bg-white/5 rounded-full flex items-center justify-center mb-4">
-                         <Briefcase size={40} className="text-gray-400" />
+               <AnimatePresence mode='wait'>
+                 <motion.div
+                    key={tab}
+                    variants={pageVariants}
+                    initial="initial"
+                    animate="in"
+                    exit="out"
+                    transition={pageTransition}
+                 >
+                   {tab === 'overview' && (
+                     <Overview user={user} isClient={isClient} totalEarnings={totalEarnings} jobsCount={isClient ? jobs.length : applications.length} badgesCount={badges.length} setTab={setTab} referralCount={referralStats.count} referralEarnings={referralStats.earnings} />
+                   )}
+                   {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} setTab={setTab} setSelectedJob={setSelectedJob} parentMode={parentMode} />}
+                   {tab === 'posted-jobs' && isClient && <ClientPostedJobs jobs={jobs} setModal={setModal} handleDeleteJob={handleDeleteJob} />}
+                   
+                   {tab === 'my-services' && !isClient && (
+                      <div className="flex flex-col items-center justify-center h-[50vh] text-center p-8 opacity-70">
+                        <div className="w-24 h-24 bg-gray-200 dark:bg-white/5 rounded-full flex items-center justify-center mb-4">
+                           <Briefcase size={40} className="text-gray-400" />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white">Gigs Temporarily Unavailable</h3>
+                        <p className="text-gray-500 max-w-md mt-2">We are currently upgrading the Gigs system. Please check back soon!</p>
                       </div>
-                      <h3 className="text-xl font-bold text-gray-900 dark:text-white">Gigs Temporarily Unavailable</h3>
-                      <p className="text-gray-500 max-w-md mt-2">We are currently upgrading the Gigs system. Please check back soon!</p>
-                    </div>
-                 )}
-                 
-                 {tab === 'applications' && (
-                    <Applications 
+                   )}
+                   
+                   {tab === 'applications' && (
+                     <Applications 
                         applications={applications} 
                         isClient={isClient} 
                         parentMode={parentMode}
                         onAction={handleAppAction} 
                         onViewTimeline={(app) => setTimelineApp(app)}
                         showToast={showToast}
+                     />
+                   )}
+                  
+                   {tab === 'academy' && !isClient && <Academy unlockedSkills={unlockedSkills} setModal={setModal} quizzes={SAFE_QUIZZES} />}
+                   {tab === 'portfolio' && !isClient && <Portfolio rawPortfolioText={rawPortfolioText} setRawPortfolioText={setRawPortfolioText} handleAiGenerate={handleAiGenerate} isAiLoading={isAiLoading} portfolioItems={portfolioItems} />}
+                   
+                   {tab === 'profile-card' && !isClient && (
+                     <ProfileCard 
+                      ref={profileCardRef} 
+                      user={user} 
+                      unlockedSkills={unlockedSkills} 
+                      badges={badges} 
+                      userLevel={userLevel} 
+                      applications={applications} 
+                      handleDownloadCard={handleDownloadCard} 
+                      handleShareToInstagram={handleShareToInstagram}
+                      showToast={showToast} 
                     />
-                 )}
-                
-                 {tab === 'academy' && !isClient && <Academy unlockedSkills={unlockedSkills} setModal={setModal} quizzes={SAFE_QUIZZES} />}
-                 {tab === 'portfolio' && !isClient && <Portfolio rawPortfolioText={rawPortfolioText} setRawPortfolioText={setRawPortfolioText} handleAiGenerate={handleAiGenerate} isAiLoading={isAiLoading} portfolioItems={portfolioItems} />}
-                 
-                 {tab === 'profile-card' && !isClient && (
-                    <ProfileCard 
-                     ref={profileCardRef} 
-                     user={user} 
-                     unlockedSkills={unlockedSkills} 
-                     badges={badges} 
-                     userLevel={userLevel} 
-                     applications={applications} 
-                     handleDownloadCard={handleDownloadCard} 
-                     handleShareToInstagram={handleShareToInstagram}
-                     showToast={showToast} 
-                   />
-                 )}
+                   )}
 
-                 {tab === 'profile' && !isClient && (
-                   <UserProfile 
-                     user={user} 
-                     badges={badges} 
-                     userLevel={userLevel} 
-                     unlockedSkills={unlockedSkills} 
-                     isClient={isClient}
-                     onEditProfile={() => setEditProfileModal(true)} 
-                   />
-                 )}
+                   {tab === 'profile' && !isClient && (
+                    <UserProfile 
+                      user={user} 
+                      badges={badges} 
+                      userLevel={userLevel} 
+                      unlockedSkills={unlockedSkills} 
+                      isClient={isClient}
+                      onEditProfile={() => setEditProfileModal(true)} 
+                    />
+                   )}
 
-                 {tab === 'records' && (
-                   <Records 
-                     applications={applications} 
-                     onDownloadInvoice={handleInvoiceDownload} 
-                   />
-                 )}
-                 
-                 {tab === 'settings' && (
-                  <SettingsComp 
-                    profileForm={profileForm} 
-                    setProfileForm={setProfileForm} 
-                    isClient={isClient} 
-                    handleUpdateProfile={handleUpdateProfile} 
-                    parentMode={parentMode} 
-                    setParentMode={(val) => {
-                        setParentMode(val);
-                        logAction('PARENT_MODE_TOGGLE', { enabled: val });
-                    }}
-                    onOpenKyc={() => setModal('kyc_verification')} 
-                  />
-                 )}
+                   {tab === 'records' && (
+                    <Records 
+                      applications={applications} 
+                      onDownloadInvoice={handleInvoiceDownload} 
+                    />
+                   )}
+                   
+                   {tab === 'settings' && (
+                    <SettingsComp 
+                      profileForm={profileForm} 
+                      setProfileForm={setProfileForm} 
+                      isClient={isClient} 
+                      handleUpdateProfile={handleUpdateProfile} 
+                      parentMode={parentMode} 
+                      setParentMode={(val) => {
+                          setParentMode(val);
+                          logAction('PARENT_MODE_TOGGLE', { enabled: val });
+                      }}
+                      onOpenKyc={() => setModal('kyc_verification')} 
+                    />
+                   )}
 
-                 <footer className="text-center py-6 text-[10px] text-gray-400 dark:text-gray-600 space-y-1 mt-auto">
-                   <p>
-                      TeenVerseHub acts as an <strong>intermediary platform</strong> (IT Act, 2000). 
-                      Disputes are resolved via administrative mediation, not binding arbitration.
-                   </p>
-                   <p>
-                      Funds are held in neutral escrow and are never forfeited, only refunded or released.
-                   </p>
-                 </footer>
-
-               </div>
+                   <footer className="text-center py-6 text-[10px] text-gray-400 dark:text-gray-600 space-y-1 mt-auto">
+                     <p>
+                       TeenVerseHub acts as an <strong>intermediary platform</strong> (IT Act, 2000). 
+                       Disputes are resolved via administrative mediation, not binding arbitration.
+                     </p>
+                     <p>
+                       Funds are held in neutral escrow and are never forfeited, only refunded or released.
+                     </p>
+                   </footer>
+                 </motion.div>
+               </AnimatePresence>
             </div>
          </div>
       </main>
 
       {/* --- MODALS --- */}
-      {modal === 'kyc_verification' && (
-        <KycVerificationModal 
-          user={user} 
-          kycFile={kycFile} 
-          setKycFile={setKycFile} 
-          handleKycSubmit={handleKycSubmit} 
-          onClose={() => setModal(null)} 
-        />
-      )}
+      <AnimatePresence>
+        {modal === 'kyc_verification' && (
+          <KycVerificationModal 
+            user={user} 
+            kycFile={kycFile} 
+            setKycFile={setKycFile} 
+            handleKycSubmit={handleKycSubmit} 
+            onClose={() => setModal(null)} 
+          />
+        )}
 
-      {modal === 'post-job' && <PostJobModal onClose={() => setModal(null)} onSubmit={handlePostJob} />}
-      {modal === 'create-service' && <CreateServiceModal onClose={() => setModal(null)} onSubmit={handleCreateService} />}
-      {modal === 'apply-job' && (
-        <ApplyJobModal 
-          onClose={() => setModal(null)} 
-          onSubmit={handleApplyJob} 
-          job={selectedJob} 
-          user={user}
-          currentEnergy={energy}
-        />
-      )}
+        {modal === 'post-job' && <PostJobModal onClose={() => setModal(null)} onSubmit={handlePostJob} />}
+        {modal === 'create-service' && <CreateServiceModal onClose={() => setModal(null)} onSubmit={handleCreateService} />}
+        {modal === 'apply-job' && (
+          <ApplyJobModal 
+            onClose={() => setModal(null)} 
+            onSubmit={handleApplyJob} 
+            job={selectedJob} 
+            user={user}
+            currentEnergy={energy}
+          />
+        )}
 
-      {timelineApp && (
-        <Modal title={`Project Timeline: ${timelineApp.jobs?.title}`} onClose={() => setTimelineApp(null)}>
-          <OrderTimeline application={timelineApp} />
-          <div className="mt-4 text-center">
-              <span className="text-xs bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-gray-500">Order ID: #{timelineApp.id}</span>
-          </div>
-        </Modal>
-      )}
-
-      {modal === 'submit_work' && (
-        <Modal title="Deliver Your Work" onClose={() => setModal(null)}>
-           <form onSubmit={handleSubmitWork} className="space-y-4">
-             <div className="bg-indigo-50 p-4 rounded-xl text-indigo-800 text-sm mb-4"><strong>Instructions:</strong> Provide a link to your work (Drive/GitHub) OR upload files directly.</div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">External Link (Recommended)</label>
-              <input name="work_link" type="url" placeholder="https://drive.google.com/..." className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white"/>
+        {timelineApp && (
+          <Modal title={`Project Timeline: ${timelineApp.jobs?.title}`} onClose={() => setTimelineApp(null)}>
+            <OrderTimeline application={timelineApp} />
+            <div className="mt-4 text-center">
+                <span className="text-xs bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-gray-500">Order ID: #{timelineApp.id}</span>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Message</label>
-              <textarea name="message" rows="3" className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white" placeholder="Describe what you did..."></textarea>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Or Upload Files (Max 5MB)</label>
-              <input type="file" name="files" multiple className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
-            </div>
-            <Button className="w-full py-3 shadow-lg shadow-indigo-500/20">Submit Delivery</Button>
-          </form>
-        </Modal>
-      )}
+          </Modal>
+        )}
 
-      {viewWorkApp && (
-        <Modal title="Review Delivery" onClose={() => setViewWorkApp(null)}>
-          <div className="space-y-6">
-              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
-                <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Freelancer Note</h4>
-                <p className="text-gray-800 dark:text-gray-200 text-sm italic">"{viewWorkApp.work_message || 'No message provided'}"</p>
+        {modal === 'submit_work' && (
+          <Modal title="Deliver Your Work" onClose={() => setModal(null)}>
+             <form onSubmit={handleSubmitWork} className="space-y-4">
+               <div className="bg-indigo-50 p-4 rounded-xl text-indigo-800 text-sm mb-4"><strong>Instructions:</strong> Provide a link to your work (Drive/GitHub) OR upload files directly.</div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">External Link (Recommended)</label>
+                <input name="work_link" type="url" placeholder="https://drive.google.com/..." className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white"/>
               </div>
-
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold text-gray-400 uppercase">Deliverables</h4>
-                {viewWorkApp.work_link && (
-                  <a href={viewWorkApp.work_link} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 border border-indigo-100 rounded-xl hover:bg-indigo-50 transition-colors group">
-                      <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600"><Package size={20}/></div>
-                      <div className="flex-1"><p className="font-bold text-indigo-700 text-sm">External Project Link</p><p className="text-xs text-indigo-400 truncate">{viewWorkApp.work_link}</p></div>
-                      <Eye size={16} className="text-gray-400 group-hover:text-indigo-600"/>
-                  </a>
-                )}
-                {viewWorkApp.work_files && viewWorkApp.work_files.map((url, i) => (
-                  <a key={i} href={url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-600"><FileText size={20}/></div>
-                      <div className="flex-1"><p className="font-bold text-gray-700 text-sm">Attached File {i+1}</p></div>
-                      <Eye size={16} className="text-gray-400"/>
-                  </a>
-                ))}
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Message</label>
+                <textarea name="message" rows="3" className="w-full p-3 border rounded-xl dark:bg-black dark:border-gray-700 dark:text-white" placeholder="Describe what you did..."></textarea>
               </div>
-
-              <div className="pt-4 border-t border-gray-100 flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={() => setViewWorkApp(null)}>Close</Button>
-                <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleApproveWork(viewWorkApp)}>Approve Work</Button>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Or Upload Files (Max 5MB)</label>
+                <input type="file" name="files" multiple className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
               </div>
-          </div>
-        </Modal>
-      )}
-
-      {modal === 'quiz-locked' && (
-         <Modal title="Skill Locked" onClose={() => setModal(null)}>
-            <div className="text-center py-8">
-               <div className="w-20 h-20 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400"><Lock size={40}/></div>
-               <h3 className="text-xl font-bold dark:text-white mb-2">Access Denied</h3>
-               <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-xs mx-auto">You need to prove your skills in the Academy before applying to this category.</p>
-               <Button onClick={() => {setModal(null); setTab('academy');}} className="w-full py-3">Go to Academy</Button>
-            </div>
-         </Modal>
-      )}
-
-      {modal?.type === 'quiz' && (
-         <ActiveQuizModal 
-           modalData={modal}
-           currentQuestionIndex={currentQuestionIndex}
-           score={score}
-           setScore={setScore}
-           setCurrentQuestionIndex={setCurrentQuestionIndex}
-           handleQuizSelection={handleQuizSelection}
-           onClose={() => setModal(null)}
-           showToast={showToast}
-         />
-      )}
-
-      {viewProfileId && publicProfileData && (
-        <Modal 
-            title={`Profile: ${publicProfileData.user.name}`} 
-            onClose={() => { setViewProfileId(null); setPublicProfileData(null); }}
-        >
-            <div className="max-h-[80vh] overflow-y-auto custom-scrollbar p-2">
-            
-            <UserProfile 
-                user={publicProfileData.user}
-                badges={publicProfileData.badges}
-                unlockedSkills={publicProfileData.user.unlocked_skills || []}
-                userLevel={Math.floor((publicProfileData.user.unlocked_skills?.length || 0) / 2) + 1}
-                isClient={true} 
-                readOnly={true} 
-                onEditProfile={() => {}} 
-            />
-            
-             {publicProfileData.portfolio?.length > 0 && (
-                <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-800">
-                    <h3 className="text-xl font-bold mb-6 dark:text-white flex items-center gap-2">
-                        <Sparkles size={20} className="text-purple-500"/> Portfolio Highlights
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {publicProfileData.portfolio.map(item => (
-                        <div key={item.id} className="p-5 bg-white dark:bg-[#09090b] border border-gray-200 dark:border-white/10 rounded-2xl shadow-sm">
-                             <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-2">{item.title}</h4>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-4 leading-relaxed">{item.content}</p>
-                        </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-            </div>
-            
-            <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-                 <Button variant="outline" onClick={() => { setViewProfileId(null); setPublicProfileData(null); }}>Close</Button>
-                <Button 
-                    onClick={() => {
-                        const app = applications.find(a => a.freelancer_id === viewProfileId && a.status === 'Pending');
-                        if(app) {
-                            setViewProfileId(null);
-                            handleAppAction('accept', app);
-                        } else {
-                            showToast("Return to applications to hire.", "info");
-                            setViewProfileId(null);
-                        }
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20"
-                >
-                    Hire This Freelancer
-                </Button>
-            </div>
-        </Modal>
-      )}
-
-      {editProfileModal && (
-        <Modal title="Edit Public Profile" onClose={() => setEditProfileModal(false)}>
-            <form onSubmit={handleSavePublicProfile} className="space-y-4">
-                
-                {/* Tagline */}
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tagline (One Liner)</label>
-                    <input 
-                        name="tag_line" 
-                        defaultValue={user.tag_line} 
-                        maxLength={50}
-                        placeholder="e.g. React Developer & UI Designer"
-                        className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-black dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                </div>
-
-                {/* Bio */}
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bio</label>
-                    <textarea 
-                        name="bio" 
-                        defaultValue={user.bio} 
-                        rows="4"
-                        maxLength={300}
-                        placeholder="Tell clients about your experience..."
-                        className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-black dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                    ></textarea>
-                </div>
-
-                {/* Social Links Section */}
-                <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-3">Social Links</label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <input name="github" defaultValue={user.social_links?.github} placeholder="GitHub URL" className="p-2 text-sm border rounded-lg dark:bg-black dark:border-gray-700 dark:text-white" />
-                        <input name="linkedin" defaultValue={user.social_links?.linkedin} placeholder="LinkedIn URL" className="p-2 text-sm border rounded-lg dark:bg-black dark:border-gray-700 dark:text-white" />
-                        <input name="instagram" defaultValue={user.social_links?.instagram} placeholder="Instagram URL" className="p-2 text-sm border rounded-lg dark:bg-black dark:border-gray-700 dark:text-white" />
-                        <input name="website" defaultValue={user.social_links?.website} placeholder="Portfolio Website" className="p-2 text-sm border rounded-lg dark:bg-black dark:border-gray-700 dark:text-white" />
-                    </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex justify-end gap-3 pt-4">
-                    <Button variant="ghost" type="button" onClick={() => setEditProfileModal(false)}>Cancel</Button>
-                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg">Save Changes</Button>
-                </div>
+              <Button className="w-full py-3 shadow-lg shadow-indigo-500/20">Submit Delivery</Button>
             </form>
-        </Modal>
-      )}
+          </Modal>
+        )}
 
-      {paymentModal && <PaymentModal onClose={() =>
-       setPaymentModal(null)} onConfirm={processPayment} paymentData={paymentModal} />}
+        {viewWorkApp && (
+          <Modal title="Review Delivery" onClose={() => setViewWorkApp(null)}>
+            <div className="space-y-6">
+                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Freelancer Note</h4>
+                  <p className="text-gray-800 dark:text-gray-200 text-sm italic">"{viewWorkApp.work_message || 'No message provided'}"</p>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase">Deliverables</h4>
+                  {viewWorkApp.work_link && (
+                    <a href={viewWorkApp.work_link} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 border border-indigo-100 rounded-xl hover:bg-indigo-50 transition-colors group">
+                        <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600"><Package size={20}/></div>
+                        <div className="flex-1"><p className="font-bold text-indigo-700 text-sm">External Project Link</p><p className="text-xs text-indigo-400 truncate">{viewWorkApp.work_link}</p></div>
+                        <Eye size={16} className="text-gray-400 group-hover:text-indigo-600"/>
+                    </a>
+                  )}
+                  {viewWorkApp.work_files && viewWorkApp.work_files.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-600"><FileText size={20}/></div>
+                        <div className="flex-1"><p className="font-bold text-gray-700 text-sm">Attached File {i+1}</p></div>
+                        <Eye size={16} className="text-gray-400"/>
+                    </a>
+                  ))}
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => setViewWorkApp(null)}>Close</Button>
+                  <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleApproveWork(viewWorkApp)}>Approve Work</Button>
+                </div>
+            </div>
+          </Modal>
+        )}
+
+        {modal === 'quiz-locked' && (
+           <Modal title="Skill Locked" onClose={() => setModal(null)}>
+              <div className="text-center py-8">
+                 <div className="w-20 h-20 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400"><Lock size={40}/></div>
+                 <h3 className="text-xl font-bold dark:text-white mb-2">Access Denied</h3>
+                 <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-xs mx-auto">You need to prove your skills in the Academy before applying to this category.</p>
+                 <Button onClick={() => {setModal(null); setTab('academy');}} className="w-full py-3">Go to Academy</Button>
+              </div>
+           </Modal>
+        )}
+
+        {modal?.type === 'quiz' && (
+           <ActiveQuizModal 
+             modalData={modal}
+             currentQuestionIndex={currentQuestionIndex}
+             score={score}
+             setScore={setScore}
+             setCurrentQuestionIndex={setCurrentQuestionIndex}
+             handleQuizSelection={handleQuizSelection}
+             onClose={() => setModal(null)}
+             showToast={showToast}
+           />
+        )}
+
+        {viewProfileId && publicProfileData && (
+          <Modal 
+              title={`Profile: ${publicProfileData.user.name}`} 
+              onClose={() => { setViewProfileId(null); setPublicProfileData(null); }}
+          >
+              <div className="max-h-[80vh] overflow-y-auto custom-scrollbar p-2">
+              
+              <UserProfile 
+                  user={publicProfileData.user}
+                  badges={publicProfileData.badges}
+                  unlockedSkills={publicProfileData.user.unlocked_skills || []}
+                  userLevel={Math.floor((publicProfileData.user.unlocked_skills?.length || 0) / 2) + 1}
+                  isClient={true} 
+                  readOnly={true} 
+                  onEditProfile={() => {}} 
+              />
+              
+               {publicProfileData.portfolio?.length > 0 && (
+                  <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-800">
+                      <h3 className="text-xl font-bold mb-6 dark:text-white flex items-center gap-2">
+                          <Sparkles size={20} className="text-purple-500"/> Portfolio Highlights
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {publicProfileData.portfolio.map(item => (
+                          <div key={item.id} className="p-5 bg-white dark:bg-[#09090b] border border-gray-200 dark:border-white/10 rounded-2xl shadow-sm">
+                               <h4 className="font-bold text-indigo-600 dark:text-indigo-400 mb-2">{item.title}</h4>
+                              <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-4 leading-relaxed">{item.content}</p>
+                          </div>
+                          ))}
+                      </div>
+                  </div>
+               )}
+              </div>
+              
+              <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                   <Button variant="outline" onClick={() => { setViewProfileId(null); setPublicProfileData(null); }}>Close</Button>
+                  <Button 
+                      onClick={() => {
+                          const app = applications.find(a => a.freelancer_id === viewProfileId && a.status === 'Pending');
+                          if(app) {
+                              setViewProfileId(null);
+                              handleAppAction('accept', app);
+                          } else {
+                              showToast("Return to applications to hire.", "info");
+                              setViewProfileId(null);
+                          }
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20"
+                  >
+                      Hire This Freelancer
+                  </Button>
+              </div>
+          </Modal>
+        )}
+
+        {editProfileModal && (
+          <Modal title="Edit Public Profile" onClose={() => setEditProfileModal(false)}>
+              <form onSubmit={handleSavePublicProfile} className="space-y-4">
+                  
+                  {/* Tagline */}
+                  <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tagline (One Liner)</label>
+                      <input 
+                          name="tag_line" 
+                          defaultValue={user.tag_line} 
+                          maxLength={50}
+                          placeholder="e.g. React Developer & UI Designer"
+                          className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-black dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                  </div>
+
+                  {/* Bio */}
+                  <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bio</label>
+                      <textarea 
+                          name="bio" 
+                          defaultValue={user.bio} 
+                          rows="4"
+                          maxLength={300}
+                          placeholder="Tell clients about your experience..."
+                          className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-black dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                      ></textarea>
+                  </div>
+
+                  {/* Social Links Section */}
+                  <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-3">Social Links</label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <input name="github" defaultValue={user.social_links?.github} placeholder="GitHub URL" className="p-2 text-sm border rounded-lg dark:bg-black dark:border-gray-700 dark:text-white" />
+                          <input name="linkedin" defaultValue={user.social_links?.linkedin} placeholder="LinkedIn URL" className="p-2 text-sm border rounded-lg dark:bg-black dark:border-gray-700 dark:text-white" />
+                          <input name="instagram" defaultValue={user.social_links?.instagram} placeholder="Instagram URL" className="p-2 text-sm border rounded-lg dark:bg-black dark:border-gray-700 dark:text-white" />
+                          <input name="website" defaultValue={user.social_links?.website} placeholder="Portfolio Website" className="p-2 text-sm border rounded-lg dark:bg-black dark:border-gray-700 dark:text-white" />
+                      </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex justify-end gap-3 pt-4">
+                      <Button variant="ghost" type="button" onClick={() => setEditProfileModal(false)}>Cancel</Button>
+                      <Button className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg">Save Changes</Button>
+                  </div>
+              </form>
+          </Modal>
+        )}
+
+        {paymentModal && <PaymentModal onClose={() =>
+          setPaymentModal(null)} onConfirm={processPayment} paymentData={paymentModal} />}
+      </AnimatePresence>
 
     </div>
   );
