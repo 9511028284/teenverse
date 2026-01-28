@@ -2,14 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Menu, LayoutDashboard, Briefcase, FileText, BookOpen, Sparkles, Settings, 
   Award, Sun, Moon, Bell, Crown, Swords, ShieldCheck, ListChecks, Package, Share2, User,
-  Lock, Eye, RefreshCw 
+  Lock, Eye, RefreshCw, Zap, X // Added Zap and X
 } from 'lucide-react';
 import UserProfile from '../components/dashboard/UserProfile'; 
 
 // --- LIBRARIES ---
 import { toPng, toBlob } from 'html-to-image';
 import { jsPDF } from "jspdf";
-import { motion, AnimatePresence } from 'framer-motion'; // ADDED FOR ANIMATION
+import { motion, AnimatePresence } from 'framer-motion'; 
 
 // --- SUPABASE & UTILS ---
 import { supabase } from '../supabase';
@@ -23,6 +23,7 @@ import Modal from '../components/ui/Modal';
 import DashboardSidebar from '../components/dashboard/DashboardSidebar'; 
 import KycVerificationModal from '../components/modals/KycVerificationModal';
 import ActiveQuizModal from '../components/modals/ActiveQuizModal';
+import DailyRewardModal from '../components/modals/DailyRewardModal'; // <--- NEW IMPORT
 
 // Features
 import Overview from '../components/dashboard/Overview';
@@ -36,6 +37,7 @@ import ProfileCard from '../components/dashboard/ProfileCard';
 import Records from '../components/dashboard/Records';
 import SettingsComp from '../components/dashboard/SettingsComp';
 import OrderTimeline from '../components/dashboard/OrderTimeline';
+import ResumeBuilder from '../components/dashboard/ResumeBuilder';
 
 // Services
 import * as api from '../services/dashboard.api';
@@ -82,7 +84,9 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [selectedJob, setSelectedJob] = useState(null); 
   const [selectedApp, setSelectedApp] = useState(null);
   
+  // --- ENERGY & REWARD STATES ---
   const [energy, setEnergy] = useState(20);
+  const [showRewardModal, setShowRewardModal] = useState(false); // <--- NEW STATE
 
   // --- PROFILE VIEW STATE (CLIENT VIEWING FREELANCER) ---
   const [viewProfileId, setViewProfileId] = useState(null);
@@ -152,6 +156,37 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
+  // --- DAILY REWARD LOGIC ---
+  const handleDailyRewardCheck = () => {
+    if (isClient) return;
+    const today = new Date().toISOString().split('T')[0];
+    const lastCheckIn = user.last_check_in || null; 
+
+    // If dates don't match, trigger modal
+    if (lastCheckIn !== today) {
+      setTimeout(() => setShowRewardModal(true), 1500); // Small delay for effect
+    }
+  };
+
+  const claimReward = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    const rewardAmount = 10;
+
+    // Optimistic Update
+    setEnergy(prev => prev + rewardAmount);
+    setShowRewardModal(false);
+    showToast(`⚡ +${rewardAmount} Energy Claimed!`, "success");
+
+    // Update Local User to prevent re-trigger on refresh
+    setUser({ ...user, last_check_in: today });
+
+    // API Sync
+    const { success } = await api.claimDailyReward(user.id, today);
+    if(success) {
+        await logAction('DAILY_REWARD_CLAIMED', { date: today, amount: rewardAmount });
+    }
+  };
+
   // --- CASHFREE INITIALIZATION ---
   useEffect(() => {
     if (window.Cashfree) {
@@ -186,7 +221,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
             if (!isMounted) return;
 
             // 3. Set State
-            if (!isClient) setEnergy(energyRes.energy);
+            if (!isClient) {
+                setEnergy(energyRes.energy);
+                handleDailyRewardCheck(); // <--- Check for reward after loading energy
+            }
 
             const formattedBadges = badgeRes.data?.map(b => ({
                 name: b.badge_name,
@@ -204,8 +242,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                 
                 const total = applications.reduce((acc, curr) => {
                       if (curr.status === 'Paid') {
-                         const amount = Number(curr.bid_amount) || 0;
-                         return isClient ? acc + amount : acc + (amount * 0.95); 
+                          const amount = Number(curr.bid_amount) || 0;
+                          return isClient ? acc + amount : acc + (amount * 0.95); 
                       }
                       return acc;
                 }, 0);
@@ -355,6 +393,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     if (parentMode) { showToast("Parent Mode Active", "error"); return; }
     if (!checkKycLock('apply_paid')) return;
     
+    // --- ENERGY CHECK ---
+    if (energy < energyCost) {
+        showToast("Not enough energy! ⚡ Wait for daily reward or pass a quiz.", "error");
+        return;
+    }
+
     if (!isClient && selectedJob) {
       const jobCategory = selectedJob.category || 'dev';
       if (!unlockedSkills.includes(jobCategory)) {
@@ -943,6 +987,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         user={user} isClient={isClient} badges={badges} userLevel={userLevel} progressPercent={progressPercent}
         menuOpen={menuOpen} setMenuOpen={setMenuOpen} zenMode={zenMode} setZenMode={setZenMode}
         tab={tab} setTab={setTab} onLogout={onLogout}
+        energy={energy} // Passed Energy to Sidebar
       />
 
       {/* --- MAIN CONTENT --- */}
@@ -954,13 +999,22 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                <div className="flex items-center gap-4">
                   <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl"><Menu/></button>
                    <div className="flex items-center gap-3">
-                      <div className="hidden sm:flex w-10 h-10 rounded-xl bg-gray-50 dark:bg-white/5 items-center justify-center border border-gray-100 dark:border-white/5">{getTabIcon()}</div>
-                      <div>
-                          <h2 className="text-lg font-bold text-gray-900 dark:text-white capitalize leading-none">{tab.replace('-', ' ')}</h2>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Welcome back, {user.name?.split(' ')[0]}</p>
-                      </div>
+                     <div className="hidden sm:flex w-10 h-10 rounded-xl bg-gray-50 dark:bg-white/5 items-center justify-center border border-gray-100 dark:border-white/5">{getTabIcon()}</div>
+                     <div>
+                         <h2 className="text-lg font-bold text-gray-900 dark:text-white capitalize leading-none">{tab.replace('-', ' ')}</h2>
+                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 hidden sm:block">Welcome back, {user.name?.split(' ')[0]}</p>
+                     </div>
                    </div>
                </div>
+
+               {/* Energy Display in Header for Quick View */}
+               {!isClient && (
+                  <div className="hidden md:flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-500/30 mr-2">
+                    <div className="p-1 bg-indigo-500 rounded-full text-white"><Zap size={12} fill="currentColor"/></div>
+                    <span className="text-sm font-bold text-indigo-700 dark:text-indigo-300">{energy} Energy</span>
+                  </div>
+               )}
+
                <div className="flex items-center gap-3">
                   <div className="hidden md:flex items-center gap-1 bg-gray-100 dark:bg-black/30 p-1 rounded-full">
                       <button onClick={() => !darkMode && toggleTheme()} className={`p-2 rounded-full transition-all ${!darkMode ? 'bg-white shadow-sm text-amber-500' : 'text-gray-400'}`}><Sun size={18}/></button>
@@ -997,15 +1051,21 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
             <div className="max-w-7xl mx-auto">
                <AnimatePresence mode='wait'>
                  <motion.div
-                    key={tab}
-                    variants={pageVariants}
-                    initial="initial"
-                    animate="in"
-                    exit="out"
-                    transition={pageTransition}
+                   key={tab}
+                   variants={pageVariants}
+                   initial="initial"
+                   animate="in"
+                   exit="out"
+                   transition={pageTransition}
                  >
                    {tab === 'overview' && (
-                     <Overview user={user} isClient={isClient} totalEarnings={totalEarnings} jobsCount={isClient ? jobs.length : applications.length} badgesCount={badges.length} setTab={setTab} referralCount={referralStats.count} referralEarnings={referralStats.earnings} />
+                     <Overview 
+                        user={user} isClient={isClient} totalEarnings={totalEarnings} 
+                        jobsCount={isClient ? jobs.length : applications.length} 
+                        badgesCount={badges.length} setTab={setTab} 
+                        referralCount={referralStats.count} referralEarnings={referralStats.earnings} 
+                        energy={energy}
+                     />
                    )}
                    {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} setTab={setTab} setSelectedJob={setSelectedJob} parentMode={parentMode} />}
                    {tab === 'posted-jobs' && isClient && <ClientPostedJobs jobs={jobs} setModal={setModal} handleDeleteJob={handleDeleteJob} />}
@@ -1019,6 +1079,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                         <p className="text-gray-500 max-w-md mt-2">We are currently upgrading the Gigs system. Please check back soon!</p>
                       </div>
                    )}
+
+                   {tab === 'resume' && !isClient && (
+   <ResumeBuilder user={user} showToast={showToast} />
+)}
                    
                    {tab === 'applications' && (
                      <Applications 
@@ -1098,6 +1162,15 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
       {/* --- MODALS --- */}
       <AnimatePresence>
+        {/* DAILY REWARD MODAL */}
+        {showRewardModal && (
+            <DailyRewardModal 
+                isOpen={showRewardModal}
+                onClaim={claimReward}
+                onClose={() => setShowRewardModal(false)}
+            />
+        )}
+
         {modal === 'kyc_verification' && (
           <KycVerificationModal 
             user={user} 

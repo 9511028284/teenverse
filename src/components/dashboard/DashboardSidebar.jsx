@@ -1,29 +1,33 @@
-
-                  import React from 'react';
+import React from 'react';
 import { 
   Rocket, X, User, ShieldCheck, Maximize2, Minimize2, LogOut, ChevronRight,
   LayoutDashboard, Briefcase, ListChecks, Package, FileText, MessageSquare,
-  BookOpen, Sparkles, Share2, UserCircle, Settings
+  BookOpen, Sparkles, Share2, UserCircle, Settings, Zap 
 } from 'lucide-react';
-import BadgeItem from './BadgeItem'; // Ensure path is correct
+import BadgeItem from './BadgeItem'; // Ensure this path is correct
 
 const DashboardSidebar = ({ 
   user, isClient, badges, userLevel, progressPercent, 
-  menuOpen, setMenuOpen, zenMode, setZenMode, tab, setTab, onLogout 
+  menuOpen, setMenuOpen, zenMode, setZenMode, tab, setTab, onLogout, energy 
 }) => {
   
-  const SidebarItem = ({ id, icon: Icon, label, color }) => (
+  const SidebarItem = ({ id, icon: Icon, label, color, badge }) => (
     <button 
       onClick={() => {setTab(id); setMenuOpen(false);}} 
       className={`group relative w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-medium transition-all duration-300 ${tab === id ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/30 ring-1 ring-white/20' : 'text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-white/5 hover:text-indigo-600 dark:hover:text-white'}`}
     >
       <Icon size={18} className={`transition-transform duration-300 group-hover:scale-110 ${tab === id ? 'text-white' : color || ''}`} />
       {!zenMode && (
-        <> <span className="flex-1 text-left">{label}</span> {tab === id && <ChevronRight size={14} className="opacity-80 animate-pulse"/>} </>
+        <> 
+          <span className="flex-1 text-left">{label}</span> 
+          {badge && (
+             <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badge}</span>
+          )}
+          {tab === id && <ChevronRight size={14} className="opacity-80 animate-pulse"/>} 
+        </>
       )}
     </button>
   );
-
 
   return (
     <aside className={`fixed md:static inset-y-0 left-0 z-50 transform ${menuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-all duration-300 ease-in-out flex flex-col h-screen ${zenMode ? 'md:w-24' : 'md:w-80'}`}>
@@ -54,6 +58,24 @@ const DashboardSidebar = ({
                </div>
             </div>
             
+            {/* ENERGY BAR (New Feature) */}
+            {!isClient && (
+              <div className="flex items-center gap-2 mb-3 bg-white dark:bg-white/5 p-2 rounded-lg border border-gray-100 dark:border-white/5">
+                 <div className="bg-amber-100 dark:bg-amber-900/30 p-1.5 rounded-md text-amber-500">
+                    <Zap size={14} fill="currentColor"/>
+                 </div>
+                 <div className="flex-1">
+                    <div className="flex justify-between text-[10px] font-bold uppercase mb-1 text-gray-500">
+                       <span>Energy</span>
+                       <span>{energy}/20</span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
+                       <div className="bg-amber-500 h-full rounded-full transition-all duration-500" style={{ width: `${(energy / 20) * 100}%` }}></div>
+                    </div>
+                 </div>
+              </div>
+            )}
+            
             <div className="flex flex-wrap gap-1.5 mb-3">
                {badges.length > 0 ? (
                  badges.slice(0, 3).map((b, i) => (
@@ -82,28 +104,32 @@ const DashboardSidebar = ({
                    {t === 'jobs' && <Briefcase size={20}/>}
                    {t === 'messages' && <MessageSquare size={20}/>}
                    {t === 'academy' && <BookOpen size={20}/>}
-                     {t === 'profile' && <UserCircle size={20}/>}
+                   {t === 'profile' && <UserCircle size={20}/>}
                  </button>
                ))}
              </div>
            ) : (
              <>
                <SidebarItem id="overview" icon={LayoutDashboard} label="Dashboard" />
+               
                <div className="mt-6 mb-2 px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Workspace</div>
                <SidebarItem id="jobs" icon={Briefcase} label={isClient ? 'Browse Services' : 'Find Jobs'} />
                {isClient && <SidebarItem id="posted-jobs" icon={ListChecks} label="My Listings" />}
                {!isClient && <SidebarItem id="my-services" icon={Package} label="My Gigs" />}
                <SidebarItem id="applications" icon={FileText} label="Orders & Jobs" />
                <SidebarItem id="messages" icon={MessageSquare} label="Messages" />
+               
                {!isClient && (
                 <>
                   <div className="mt-6 mb-2 px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Growth</div>
                   <SidebarItem id="profile" icon={UserCircle} label="My Profile" color="text-pink-500" />
+                  <SidebarItem id="resume" icon={FileText} label="Resume Builder" color="text-pink-500" badge="New" /> {/* ADDED RESUME HERE */}
                   <SidebarItem id="academy" icon={BookOpen} label="Academy" />
-                  <SidebarItem id="portfolio" icon={Sparkles} label="AI Portfolio" color="text-violet-500" />
+                  
                   <SidebarItem id="profile-card" icon={Share2} label="Share Profile" />
                 </>
                )}
+               
                <div className="mt-6 mb-2 px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">System</div>
                <SidebarItem id="records" icon={ShieldCheck} label="My Records" />
                <SidebarItem id="settings" icon={Settings} label="Settings" />

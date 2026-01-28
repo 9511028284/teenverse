@@ -2,7 +2,45 @@ import React from 'react';
 import { Sparkles } from 'lucide-react';
 import Button from '../ui/Button';
 
-const Portfolio = ({ rawPortfolioText, setRawPortfolioText, handleAiGenerate, isAiLoading, portfolioItems }) => {
+const Portfolio = ({ rawPortfolioText, setRawPortfolioText, portfolioItems, setPortfolioItems, showToast }) => { // Added props we need
+  const [isAiLoading, setIsAiLoading] = useState(false);
+
+  const handleAiGenerate = async () => {
+    if (!rawPortfolioText || rawPortfolioText.length < 5) {
+        showToast("Please enter some details first!", "error");
+        return;
+    }
+    
+    setIsAiLoading(true);
+
+    try {
+      // 1. Call your Supabase Edge Function
+      const { data, error } = await supabase.functions.invoke('generate-portfolio', {
+        body: { roughText: rawPortfolioText }
+      });
+
+      if (error) throw error;
+
+      // 2. Add the result to the list
+      const newItem = { 
+        id: Date.now(), 
+        title: data.title,    // "E-Commerce Platform for Local Bakery"
+        content: data.content // "Designed and developed a fully responsive..."
+      };
+
+      // Add to state (in a real app, you would also save this to the DB here)
+      setPortfolioItems([newItem, ...portfolioItems]);
+      setRawPortfolioText(""); 
+      showToast("✨ AI generated your case study!", "success");
+
+    } catch (err) {
+      console.error("AI Error:", err);
+      showToast("Failed to generate. Try again.", "error");
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   return (
     <div className="animate-fade-in space-y-6">
       <div className="bg-gradient-to-br from-purple-600 to-indigo-600 rounded-3xl p-8 text-white shadow-lg">

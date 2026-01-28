@@ -557,3 +557,20 @@ export const submitReview = async (appId, rating, tags = []) => {
     return { error: err };
   }
 };
+
+export const claimDailyReward = async (userId, date) => {
+  try {
+    // Uses the RPC function we discussed to handle UUIDs safely
+    // If you haven't created the function in Supabase SQL Editor yet, do that first!
+    const { error } = await supabase.rpc('claim_daily_reward', { 
+      user_id: userId, 
+      today: date 
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    console.error("Reward Claim Error:", err);
+    return { success: false, error: err };
+  }
+};
