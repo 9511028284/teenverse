@@ -339,7 +339,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
             </div>
             
             <div className="mt-8 flex items-center justify-center gap-6 text-xs font-mono text-gray-500">
-                <span className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/> Digilocker Verified</span>
+                <span className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/>Verified Users</span>
                 <span className="flex items-center gap-2"><CheckCircle size={14} className="text-green-500"/> 100% Payment Protection</span>
             </div>
          </div>

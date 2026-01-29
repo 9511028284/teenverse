@@ -61,7 +61,8 @@ const pageTransition = {
   duration: 0.4
 };
 
-// --- HELPER: Date Checker ---
+// --- HELPER: ROBUST DATE CHECKER ---
+// Compares YYYY-MM-DD strings to avoid Timezone issues
 const isSameDay = (dateString) => {
   if (!dateString) return false;
   const today = new Date();
@@ -101,18 +102,17 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [energy, setEnergy] = useState(20);
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
+  
+  // ✅ FIX: Use Ref to prevent re-checking after claim
+  const hasCheckedReward = useRef(false);
 
-  // --- PROFILE VIEW STATE (CLIENT VIEWING FREELANCER) ---
+  // --- PROFILE VIEW STATE ---
   const [viewProfileId, setViewProfileId] = useState(null);
   const [publicProfileData, setPublicProfileData] = useState(null);
-
-  // --- EDIT PROFILE STATE (FREELANCER EDITING SELF) ---
   const [editProfileModal, setEditProfileModal] = useState(false);
 
-  // --- KYC STATE ---
+  // --- KYC & QUIZ STATES ---
   const [kycFile, setKycFile] = useState(null);
-
-  // --- QUIZ & ACADEMY STATES ---
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
 
@@ -129,15 +129,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [parentMode, setParentMode] = useState(false);
   const [unlockedSkills, setUnlockedSkills] = useState(user?.unlockedSkills || []);
   const [badges, setBadges] = useState([]);
-    
   const [portfolioItems, setPortfolioItems] = useState([]);
   const [rawPortfolioText, setRawPortfolioText] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
     
   const SAFE_QUIZZES = QUIZZES || {};
   const profileCardRef = useRef(null);
-  
-  // --- CASHFREE REF ---
   const cashfree = useRef(null);
 
   // --- DERIVED VALUES ---
@@ -158,28 +155,27 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       await supabase.from('audit_logs').insert({
         action: actionType,
         actor_id: user.id,
-        details: {
-          ...details,
-          timestamp: new Date().toISOString(),
-          ip_hint: "client_side_trigger"
-        }
+        details: { ...details, timestamp: new Date().toISOString(), ip_hint: "client_side_trigger" }
       });
-    } catch (err) {
-      console.error("Audit Logging Failed:", err);
-    }
+    } catch (err) { console.error("Audit Logging Failed:", err); }
   };
 
   // ✅ FIXED: DAILY REWARD LOGIC
   const handleDailyRewardCheck = (lastLoginDate) => {
     if (isClient) return;
+    
+    // If we already checked this session, stop.
+    if (hasCheckedReward.current) return;
 
-    // 1. If date exists and IS today, hide modal
+    // 1. If date exists and IS today, Mark checked and Do NOT show
     if (lastLoginDate && isSameDay(lastLoginDate)) {
+        hasCheckedReward.current = true;
         setShowRewardModal(false);
         return;
     }
 
-    // 2. Otherwise (null or old date), show modal with small delay
+    // 2. Otherwise show modal
+    hasCheckedReward.current = true; // Mark checked so it doesn't loop
     setTimeout(() => setShowRewardModal(true), 1500);
   };
 
@@ -188,17 +184,21 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     const today = new Date().toISOString().split('T')[0];
     const rewardAmount = 10;
 
+    // Optimistic UI Updates (Instant)
+    setEnergy(prev => prev + rewardAmount);
+    setShowRewardModal(false);
+    showToast(`⚡ +${rewardAmount} Energy Claimed!`, "success");
+    
+    // Mark as checked locally so it never pops up again this session
+    hasCheckedReward.current = true;
+
     // API Call
     const { success } = await api.claimDailyReward(user.id, today);
-
     if (success) {
-        // Optimistic Update
-        setEnergy(prev => prev + rewardAmount);
-        setShowRewardModal(false);
-        showToast(`⚡ +${rewardAmount} Energy Claimed!`, "success");
         await logAction('DAILY_REWARD_CLAIMED', { date: today, amount: rewardAmount });
     } else {
-        showToast("Could not claim reward.", "error");
+        // Only show error if API fails, but keep UI claimed to avoid annoyance
+        console.error("Reward claim sync failed");
     }
     setIsClaiming(false);
   };
@@ -219,11 +219,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         if (jobs.length === 0) setIsLoading(true);
 
         try {
-            // 1. Start fetching general dashboard data
             const dashboardPromise = api.fetchDashboardData(user);
             const badgesPromise = supabase.from('user_badges').select('badge_name, badges(icon)').eq('user_id', user.id);
 
-            // 2. Fetch specific freelancer profile data (Energy + Last Login)
+            // Fetch Profile Data (Energy + Date)
             let userProfileData = null;
             if (!isClient) {
                 const { data } = await supabase
@@ -234,18 +233,18 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                 userProfileData = data;
             }
 
-            const [badgeRes, dashboardRes] = await Promise.all([
-                badgesPromise,
-                dashboardPromise
-            ]);
+            const [badgeRes, dashboardRes] = await Promise.all([badgesPromise, dashboardPromise]);
 
             if (!isMounted) return;
 
-            // 3. Set State based on results
+            // Set Energy & Check Reward
             if (!isClient && userProfileData) {
                 setEnergy(userProfileData.energy_points || 20);
-                // ✅ PASS THE DATE: This fixes the undefined error
-                handleDailyRewardCheck(userProfileData.last_login_date); 
+                
+                // Only run check if we haven't already verified it locally
+                if (!hasCheckedReward.current) {
+                    handleDailyRewardCheck(userProfileData.last_login_date); 
+                }
             }
 
             const formattedBadges = badgeRes.data?.map(b => ({
@@ -281,7 +280,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
     loadData();
     return () => { isMounted = false; };
-  }, [user, isClient, showToast, jobs.length]);
+  }, [user, isClient, showToast, jobs.length]); // Dependencies
 
   // --- ACTION HANDLERS ---
   const checkKycLock = (actionType) => {
@@ -1290,27 +1289,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         )}
 
         {viewProfileId && publicProfileData && (
-          <Modal 
-              title={`Profile: ${publicProfileData.user.name}`} 
-              onClose={() => { setViewProfileId(null); setPublicProfileData(null); }}
-          >
+          <Modal title={`Profile: ${publicProfileData.user.name}`} onClose={() => { setViewProfileId(null); setPublicProfileData(null); }}>
               <div className="max-h-[80vh] overflow-y-auto custom-scrollbar p-2">
-              
-              <UserProfile 
-                  user={publicProfileData.user}
-                  badges={publicProfileData.badges}
-                  unlockedSkills={publicProfileData.user.unlocked_skills || []}
-                  userLevel={Math.floor((publicProfileData.user.unlocked_skills?.length || 0) / 2) + 1}
-                  isClient={true} 
-                  readOnly={true} 
-                  onEditProfile={() => {}} 
-              />
-              
+              <UserProfile user={publicProfileData.user} badges={publicProfileData.badges} unlockedSkills={publicProfileData.user.unlocked_skills || []} userLevel={Math.floor((publicProfileData.user.unlocked_skills?.length || 0) / 2) + 1} isClient={true} readOnly={true} onEditProfile={() => {}} />
                {publicProfileData.portfolio?.length > 0 && (
                   <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-800">
-                      <h3 className="text-xl font-bold mb-6 dark:text-white flex items-center gap-2">
-                          <Sparkles size={20} className="text-purple-500"/> Portfolio Highlights
-                      </h3>
+                      <h3 className="text-xl font-bold mb-6 dark:text-white flex items-center gap-2"><Sparkles size={20} className="text-purple-500"/> Portfolio Highlights</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {publicProfileData.portfolio.map(item => (
                           <div key={item.id} className="p-5 bg-white dark:bg-[#09090b] border border-gray-200 dark:border-white/10 rounded-2xl shadow-sm">
@@ -1322,24 +1306,13 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                   </div>
                )}
               </div>
-              
               <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
                    <Button variant="outline" onClick={() => { setViewProfileId(null); setPublicProfileData(null); }}>Close</Button>
-                  <Button 
-                      onClick={() => {
+                  <Button onClick={() => {
                           const app = applications.find(a => a.freelancer_id === viewProfileId && a.status === 'Pending');
-                          if(app) {
-                              setViewProfileId(null);
-                              handleAppAction('accept', app);
-                          } else {
-                              showToast("Return to applications to hire.", "info");
-                              setViewProfileId(null);
-                          }
-                      }}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20"
-                  >
-                      Hire This Freelancer
-                  </Button>
+                          if(app) { setViewProfileId(null); handleAppAction('accept', app); } 
+                          else { showToast("Return to applications to hire.", "info"); setViewProfileId(null); }
+                      }} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20">Hire This Freelancer</Button>
               </div>
           </Modal>
         )}
@@ -1347,33 +1320,14 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         {editProfileModal && (
           <Modal title="Edit Public Profile" onClose={() => setEditProfileModal(false)}>
               <form onSubmit={handleSavePublicProfile} className="space-y-4">
-                  
-                  {/* Tagline */}
                   <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tagline (One Liner)</label>
-                      <input 
-                          name="tag_line" 
-                          defaultValue={user.tag_line} 
-                          maxLength={50}
-                          placeholder="e.g. React Developer & UI Designer"
-                          className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-black dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                      />
+                      <input name="tag_line" defaultValue={user.tag_line} maxLength={50} placeholder="e.g. React Developer & UI Designer" className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-black dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
                   </div>
-
-                  {/* Bio */}
                   <div>
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bio</label>
-                      <textarea 
-                          name="bio" 
-                          defaultValue={user.bio} 
-                          rows="4"
-                          maxLength={300}
-                          placeholder="Tell clients about your experience..."
-                          className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-black dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                      ></textarea>
+                      <textarea name="bio" defaultValue={user.bio} rows="4" maxLength={300} placeholder="Tell clients about your experience..." className="w-full p-3 border rounded-xl bg-gray-50 dark:bg-black dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none"></textarea>
                   </div>
-
-                  {/* Social Links Section */}
                   <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
                       <label className="block text-xs font-bold text-gray-500 uppercase mb-3">Social Links</label>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1383,8 +1337,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                           <input name="website" defaultValue={user.social_links?.website} placeholder="Portfolio Website" className="p-2 text-sm border rounded-lg dark:bg-black dark:border-gray-700 dark:text-white" />
                       </div>
                   </div>
-
-                  {/* Actions */}
                   <div className="flex justify-end gap-3 pt-4">
                       <Button variant="ghost" type="button" onClick={() => setEditProfileModal(false)}>Cancel</Button>
                       <Button className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg">Save Changes</Button>
@@ -1393,8 +1345,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
           </Modal>
         )}
 
-        {paymentModal && <PaymentModal onClose={() =>
-          setPaymentModal(null)} onConfirm={processPayment} paymentData={paymentModal} />}
+        {paymentModal && <PaymentModal onClose={() => setPaymentModal(null)} onConfirm={processPayment} paymentData={paymentModal} />}
       </AnimatePresence>
 
     </div>
