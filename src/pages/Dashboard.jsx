@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Menu, LayoutDashboard, Briefcase, FileText, BookOpen, Sparkles, Settings, 
   Award, Sun, Moon, Bell, Crown, Swords, ShieldCheck, ListChecks, Package, Share2, User,
-  Lock, Eye, RefreshCw, Zap, X // Added Zap and X
+  Lock, Eye, RefreshCw, Zap, X
 } from 'lucide-react';
 import UserProfile from '../components/dashboard/UserProfile'; 
 
@@ -23,7 +23,7 @@ import Modal from '../components/ui/Modal';
 import DashboardSidebar from '../components/dashboard/DashboardSidebar'; 
 import KycVerificationModal from '../components/modals/KycVerificationModal';
 import ActiveQuizModal from '../components/modals/ActiveQuizModal';
-import DailyRewardModal from '../components/modals/DailyRewardModal'; // <--- NEW IMPORT
+import DailyRewardModal from '../components/modals/DailyRewardModal';
 
 // Features
 import Overview from '../components/dashboard/Overview';
@@ -61,6 +61,19 @@ const pageTransition = {
   duration: 0.4
 };
 
+// --- HELPER: Date Checker ---
+const isSameDay = (dateString) => {
+  if (!dateString) return false;
+  const today = new Date();
+  const checkDate = new Date(dateString);
+  
+  return (
+    today.getDate() === checkDate.getDate() &&
+    today.getMonth() === checkDate.getMonth() &&
+    today.getFullYear() === checkDate.getFullYear()
+  );
+};
+
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
   const isClient = user?.type === 'client';
   
@@ -86,7 +99,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   
   // --- ENERGY & REWARD STATES ---
   const [energy, setEnergy] = useState(20);
-  const [showRewardModal, setShowRewardModal] = useState(false); // <--- NEW STATE
+  const [showRewardModal, setShowRewardModal] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
 
   // --- PROFILE VIEW STATE (CLIENT VIEWING FREELANCER) ---
   const [viewProfileId, setViewProfileId] = useState(null);
@@ -115,11 +129,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   const [parentMode, setParentMode] = useState(false);
   const [unlockedSkills, setUnlockedSkills] = useState(user?.unlockedSkills || []);
   const [badges, setBadges] = useState([]);
-   
+    
   const [portfolioItems, setPortfolioItems] = useState([]);
   const [rawPortfolioText, setRawPortfolioText] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
-   
+    
   const SAFE_QUIZZES = QUIZZES || {};
   const profileCardRef = useRef(null);
   
@@ -146,7 +160,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         actor_id: user.id,
         details: {
           ...details,
-          
           timestamp: new Date().toISOString(),
           ip_hint: "client_side_trigger"
         }
@@ -156,35 +169,38 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
-  // --- DAILY REWARD LOGIC ---
-  const handleDailyRewardCheck = () => {
+  // ✅ FIXED: DAILY REWARD LOGIC
+  const handleDailyRewardCheck = (lastLoginDate) => {
     if (isClient) return;
-    const today = new Date().toISOString().split('T')[0];
-    const lastCheckIn = user.last_check_in || null; 
 
-    // If dates don't match, trigger modal
-    if (lastCheckIn !== today) {
-      setTimeout(() => setShowRewardModal(true), 1500); // Small delay for effect
+    // 1. If date exists and IS today, hide modal
+    if (lastLoginDate && isSameDay(lastLoginDate)) {
+        setShowRewardModal(false);
+        return;
     }
+
+    // 2. Otherwise (null or old date), show modal with small delay
+    setTimeout(() => setShowRewardModal(true), 1500);
   };
 
   const claimReward = async () => {
+    setIsClaiming(true);
     const today = new Date().toISOString().split('T')[0];
     const rewardAmount = 10;
 
-    // Optimistic Update
-    setEnergy(prev => prev + rewardAmount);
-    setShowRewardModal(false);
-    showToast(`⚡ +${rewardAmount} Energy Claimed!`, "success");
-
-    // Update Local User to prevent re-trigger on refresh
-    setUser({ ...user, last_check_in: today });
-
-    // API Sync
+    // API Call
     const { success } = await api.claimDailyReward(user.id, today);
-    if(success) {
+
+    if (success) {
+        // Optimistic Update
+        setEnergy(prev => prev + rewardAmount);
+        setShowRewardModal(false);
+        showToast(`⚡ +${rewardAmount} Energy Claimed!`, "success");
         await logAction('DAILY_REWARD_CLAIMED', { date: today, amount: rewardAmount });
+    } else {
+        showToast("Could not claim reward.", "error");
     }
+    setIsClaiming(false);
   };
 
   // --- CASHFREE INITIALIZATION ---
@@ -203,27 +219,33 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         if (jobs.length === 0) setIsLoading(true);
 
         try {
-            const energyPromise = !isClient ? api.getEnergy(user.id) : Promise.resolve({ energy: 0 });
-            
-            const badgesPromise = supabase
-                .from('user_badges')
-                .select('badge_name, badges(icon)')
-                .eq('user_id', user.id);
-
+            // 1. Start fetching general dashboard data
             const dashboardPromise = api.fetchDashboardData(user);
+            const badgesPromise = supabase.from('user_badges').select('badge_name, badges(icon)').eq('user_id', user.id);
 
-            const [energyRes, badgeRes, dashboardRes] = await Promise.all([
-                energyPromise,
+            // 2. Fetch specific freelancer profile data (Energy + Last Login)
+            let userProfileData = null;
+            if (!isClient) {
+                const { data } = await supabase
+                    .from('freelancers')
+                    .select('energy_points, last_login_date')
+                    .eq('id', user.id)
+                    .single();
+                userProfileData = data;
+            }
+
+            const [badgeRes, dashboardRes] = await Promise.all([
                 badgesPromise,
                 dashboardPromise
             ]);
 
             if (!isMounted) return;
 
-            // 3. Set State
-            if (!isClient) {
-                setEnergy(energyRes.energy);
-                handleDailyRewardCheck(); // <--- Check for reward after loading energy
+            // 3. Set State based on results
+            if (!isClient && userProfileData) {
+                setEnergy(userProfileData.energy_points || 20);
+                // ✅ PASS THE DATE: This fixes the undefined error
+                handleDailyRewardCheck(userProfileData.last_login_date); 
             }
 
             const formattedBadges = badgeRes.data?.map(b => ({
@@ -567,15 +589,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
-  // ✅ HELPER: Client-Side Invoice Generation
-  // ✅ HELPER: Role-Based Invoice Generation (Client = Full, Freelancer = -5%)
   const generateAndStoreInvoice = async (app, baseAmount, customTitle = null) => {
     try {
       const doc = new jsPDF();
       const invoiceId = `INV-${Date.now().toString().slice(-8)}`;
       
-      // 1. Determine Amounts based on Role
-      // Client pays full amount. Freelancer gets 95%.
       const isFreelancer = user.type !== 'client'; // Freelancer or Admin
       const fee = isFreelancer ? (baseAmount * 0.05) : 0;
       const finalAmount = baseAmount - fee;
@@ -587,7 +605,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      doc.text(isFreelancer ? "Payout Statement" : "Payment Receipt", 20, 26); // Different Title
+      doc.text(isFreelancer ? "Payout Statement" : "Payment Receipt", 20, 26); 
       
       // -- METADATA --
       doc.setFontSize(10);
@@ -621,7 +639,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       doc.setTextColor(0, 0, 0);
 
       if (isFreelancer) {
-          // Show breakdown for Freelancer
           doc.text(`Gross Amount:`, 120, 110);
           doc.text(`₹${baseAmount}`, 190, 110, { align: 'right' });
           
@@ -635,14 +652,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
           doc.setFontSize(12);
           doc.text(`₹${finalAmount.toFixed(2)}`, 190, 126, { align: 'right' });
       } else {
-          // Simple view for Client
           doc.setFontSize(12);
           doc.text(`Total Paid:`, 120, 113);
           doc.setFont("helvetica", "bold");
           doc.text(`₹${finalAmount}`, 190, 113, { align: 'right' });
       }
       
-      // -- FOOTER --
       doc.setFontSize(9);
       doc.setFont("helvetica", "italic");
       doc.setTextColor(150, 150, 150);
@@ -650,7 +665,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       
       // -- UPLOAD --
       const pdfBlob = doc.output('blob');
-      // Store in User-Specific folder so Client gets one file, Freelancer gets another
       const filePath = `${user.id}/${app.id}_invoice.pdf`; 
 
       const { error: uploadError } = await supabase.storage
@@ -658,9 +672,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         .upload(filePath, pdfBlob, { upsert: true });
 
       if (uploadError) throw uploadError;
-
-      // Note: We don't update the DB 'invoice_path' here because it might overwrite 
-      // the other user's path. We just return the path for immediate download.
       return filePath;
 
     } catch (err) {
@@ -732,11 +743,13 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
   // --- 1. VIEW PROFILE ---
   const handleViewProfile = async (freelancerId) => {
     showToast("Fetching Profile...", "info");
-    const { user, badges, portfolio, error } = await api.getPublicProfile(freelancerId);
+    
+    const { user, badges, portfolio, resume, error } = await api.getPublicProfile(freelancerId);
+    
     if (error) {
         showToast("Could not load profile", "error");
     } else {
-        setPublicProfileData({ user, badges, portfolio });
+        setPublicProfileData({ user, badges, portfolio, resume }); 
         setViewProfileId(freelancerId);
     }
   };
@@ -757,7 +770,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         cleanUpdates.bank_name = profileForm.bank_name;
         cleanUpdates.account_number = profileForm.account_number; 
         cleanUpdates.ifsc_code = profileForm.ifsc_code;
-        // NOTE: Age is purposefully excluded from updates here for security
     } else { 
         cleanUpdates.is_organisation = profileForm.is_organisation; 
     }
@@ -772,7 +784,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     }
   };
 
-  // --- 3. UPDATE PUBLIC PROFILE (Fixed) ---
+  // --- 3. UPDATE PUBLIC PROFILE ---
   const handleSavePublicProfile = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -794,17 +806,13 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     if (error) {
         showToast(error.message, 'error');
     } else {
-        // ✅ LOGGING ADDED HERE
-        // This writes to the 'audit_logs' table via the helper above
-        await logAction('PUBLIC_PROFILE_UPDATED', { 
-            changed_fields: Object.keys(updates) 
-        });
-
+        await logAction('PUBLIC_PROFILE_UPDATED', { changed_fields: Object.keys(updates) });
         showToast("Public profile updated!", "success");
         setUser({ ...user, ...updates });
         setEditProfileModal(false);
     }
   };
+
   const handleAppAction = async (action, app, payload = null) => {
     if (action === 'view_profile') {
         handleViewProfile(app.freelancer_id);
@@ -831,19 +839,18 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         'pay': 'RELEASE_ESCROW', 
         'reject': 'REJECT_APPLICATION', 
         'revision': 'REQUEST_REVISION', 
-        'review': 'SUBMIT_REVIEW' // This matches the backend case
+        'review': 'SUBMIT_REVIEW'
     };
     const backendAction = backendActionMap[action];
     
     if (backendAction) {
         showToast(`Processing ${action}...`, "info");
         
-        // ✅ FIX IS HERE: Structure bodyData correctly
         const bodyData = { 
             action: backendAction, 
             appId: app.id, 
             userId: user.id,
-            payload: payload || {} // Ensure payload is always passed as a nested object
+            payload: payload || {} 
         };
 
         const { error } = await supabase.functions.invoke('order-manager', {
@@ -869,7 +876,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                 if (action === 'pay') return { ...a, status: 'Paid', paid_at: now, is_escrow_held: false };
                 if (action === 'reject') return { ...a, status: 'Rejected' };
                 if (action === 'revision') return { ...a, status: 'Revision Requested' };
-                if (action === 'review') return { ...a, client_rating: payload?.rating }; // Optimistic update
+                if (action === 'review') return { ...a, client_rating: payload?.rating }; 
                 return a;
             }));
             showToast("Action Successful!", "success");
@@ -968,7 +975,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         >
           <div className="flex flex-col items-center gap-4">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-              <p className="text-gray-500 text-sm animate-pulse">Loading TeenVerse...</p>
+              <p className="text-gray-500 text-sm animate-pulse">Loading TeenVerseHub.</p>
           </div>
         </motion.div>
     );
@@ -1081,17 +1088,17 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                    )}
 
                    {tab === 'resume' && !isClient && (
-   <ResumeBuilder user={user} showToast={showToast} />
-)}
+                       <ResumeBuilder user={user} showToast={showToast} />
+                   )}
                    
                    {tab === 'applications' && (
                      <Applications 
-                        applications={applications} 
-                        isClient={isClient} 
-                        parentMode={parentMode}
-                        onAction={handleAppAction} 
-                        onViewTimeline={(app) => setTimelineApp(app)}
-                        showToast={showToast}
+                       applications={applications} 
+                       isClient={isClient} 
+                       parentMode={parentMode}
+                       onAction={handleAppAction} 
+                       onViewTimeline={(app) => setTimelineApp(app)}
+                       showToast={showToast}
                      />
                    )}
                   
@@ -1167,6 +1174,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
             <DailyRewardModal 
                 isOpen={showRewardModal}
                 onClaim={claimReward}
+                isClaiming={isClaiming}
                 onClose={() => setShowRewardModal(false)}
             />
         )}

@@ -117,15 +117,15 @@ const DashboardSidebar = ({
                {isClient && <SidebarItem id="posted-jobs" icon={ListChecks} label="My Listings" />}
                {!isClient && <SidebarItem id="my-services" icon={Package} label="My Gigs" />}
                <SidebarItem id="applications" icon={FileText} label="Orders & Jobs" />
-               <SidebarItem id="messages" icon={MessageSquare} label="Messages" />
-               
+              
                {!isClient && (
                 <>
                   <div className="mt-6 mb-2 px-4 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Growth</div>
                   <SidebarItem id="profile" icon={UserCircle} label="My Profile" color="text-pink-500" />
-                  <SidebarItem id="resume" icon={FileText} label="Resume Builder" color="text-pink-500" badge="New" /> {/* ADDED RESUME HERE */}
-                  <SidebarItem id="academy" icon={BookOpen} label="Academy" />
                   
+                  <SidebarItem id="academy" icon={BookOpen} label="Academy" />
+                 <SidebarItem id="resume" icon={FileText} label="Resume Builder" color="text-pink-500" badge="New" /> {/* ADDED RESUME HERE */}
+                   
                   <SidebarItem id="profile-card" icon={Share2} label="Share Profile" />
                 </>
                )}

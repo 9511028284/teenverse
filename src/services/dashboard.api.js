@@ -417,21 +417,41 @@ export const requestRevision = async (appId, message, freelancerId) => {
 };
 
 export const getEnergy = async (userId) => {
-  const { data, error } = await supabase.from('freelancers').select('energy_points').eq('id', userId).single();
-  return { energy: data?.energy_points || 0, error };
+  const { data, error } = await supabase
+    .from('freelancers')
+    .select('energy_points') // <--- CHANGE THIS from 'energy'
+    .eq('id', userId)
+    .single();
+
+  if (error) return { energy: 0 };
+  
+  // We map 'energy_points' from DB to 'energy' for your frontend state
+  return { energy: data?.energy_points || 0 }; 
 };
 
 export const deductEnergy = async (userId, amount) => {
-  const { data: user } = await supabase.from('freelancers').select('energy_points').eq('id', userId).single();
-  if (!user || user.energy_points < amount) {
-    return { error: { message: "Not enough Energy points!" } };
-  }
-   
-  const { error } = await supabase
+  // First check if they have enough
+  const { data: user, error: fetchError } = await supabase
     .from('freelancers')
-    .update({ energy_points: user.energy_points - amount })
+    .select('energy_points') // <--- CHANGE THIS
+    .eq('id', userId)
+    .single();
+
+  if (fetchError || !user) return { success: false, error: fetchError };
+
+  if (user.energy_points < amount) { // <--- CHANGE THIS
+     return { success: false, error: { message: "Insufficient Energy Points" } };
+  }
+
+  // Perform deduction
+  const { error: updateError } = await supabase
+    .from('freelancers')
+    .update({ energy_points: user.energy_points - amount }) // <--- CHANGE THIS
     .eq('id', userId);
-  return { success: true, newBalance: user.energy_points - amount, error };
+
+  if (updateError) return { success: false, error: updateError };
+
+  return { success: true };
 };
 
 export const awardEnergy = async (userId, amount) => {
@@ -467,26 +487,43 @@ export const updateUserProfile = async (userId, updates, table) => {
   return { error };
 };
 export const getPublicProfile = async (userId) => {
+  // 1. Fetch User Details
   const { data: user, error } = await supabase
     .from('freelancers') 
-    .select('id, name, bio, nationality, tag_line, unlocked_skills, created_at, social_links')
+    .select('id, name, bio, nationality, tag_line, unlocked_skills, created_at, social_links, cover_image') // Added images just in case
     .eq('id', userId)
     .single();
     
   if (error) return { error };
 
+  // 2. Fetch Badges
   const { data: badges } = await supabase
     .from('user_badges')
-    .select('badge_name, earned_at')
+    .select('name:badge_name, earned_at') // <--- RENAME badge_name TO name
     .eq('user_id', userId);
 
+  // 3. Fetch Portfolio
   const { data: portfolio } = await supabase
     .from('portfolio_items')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
-  return { user, badges: badges || [], portfolio: portfolio || [] };
+  // 4. --- NEW: Fetch Latest Resume ---
+  const { data: resume } = await supabase
+    .from('resumes')
+    .select('content')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false }) // Get the newest one
+    .limit(1)
+    .single();
+
+  return { 
+      user, 
+      badges: badges || [], 
+      portfolio: portfolio || [], 
+      resume: resume?.content || null // Returns the resume JSON or null
+  };
 };
 
 // ==========================================
