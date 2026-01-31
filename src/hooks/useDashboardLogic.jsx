@@ -1,0 +1,742 @@
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '../supabase';
+import * as api from '../services/dashboard.api';
+import { toPng, toBlob } from 'html-to-image';
+import { jsPDF } from "jspdf";
+import { QUIZZES, APP_STATUS } from '../utils/constants';
+
+// Helper: Robust Date Checker
+const isSameDay = (dateString) => {
+  if (!dateString) return false;
+  const today = new Date();
+  const checkDate = new Date(dateString);
+  return (
+    today.getDate() === checkDate.getDate() &&
+    today.getMonth() === checkDate.getMonth() &&
+    today.getFullYear() === checkDate.getFullYear()
+  );
+};
+
+export const useDashboardLogic = (user, setUser, showToast) => {
+  const isClient = user?.type === 'client';
+  
+  // --- UI & TAB STATES ---
+  const [tab, setTab] = useState('overview');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [zenMode, setZenMode] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // --- DATA STATES ---
+  const [jobs, setJobs] = useState([]);
+  const [services, setServices] = useState([]);
+  const [applications, setApplications] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [referralStats, setReferralStats] = useState({ count: 0, earnings: 0 });
+  const [totalEarnings, setTotalEarnings] = useState(0);
+
+  // --- INTERACTION STATES ---
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [selectedJob, setSelectedJob] = useState(null); 
+  const [selectedApp, setSelectedApp] = useState(null);
+  
+  // --- ENERGY & REWARD STATES ---
+  const [energy, setEnergy] = useState(20);
+  const [showRewardModal, setShowRewardModal] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const hasCheckedReward = useRef(false);
+
+  // --- PROFILE VIEW STATE ---
+  const [viewProfileId, setViewProfileId] = useState(null);
+  const [publicProfileData, setPublicProfileData] = useState(null);
+  const [editProfileModal, setEditProfileModal] = useState(false);
+
+  // --- KYC & QUIZ STATES ---
+  const [kycFile, setKycFile] = useState(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [score, setScore] = useState(0);
+
+  // --- HYBRID DELIVERY STATES ---
+  const [timelineApp, setTimelineApp] = useState(null);
+  const [viewWorkApp, setViewWorkApp] = useState(null);
+  
+  const [searchTerm, setSearchTerm] = useState("");
+  const [profileForm, setProfileForm] = useState(user ? { ...user } : {});
+  const [paymentModal, setPaymentModal] = useState(null);
+
+  // --- FEATURE STATES ---
+  const [parentMode, setParentMode] = useState(false);
+  const [unlockedSkills, setUnlockedSkills] = useState(user?.unlockedSkills || []);
+  const [badges, setBadges] = useState([]);
+  const [portfolioItems, setPortfolioItems] = useState([]);
+  const [rawPortfolioText, setRawPortfolioText] = useState("");
+  const [isAiLoading, setIsAiLoading] = useState(false);
+    
+  const SAFE_QUIZZES = QUIZZES || {};
+  const profileCardRef = useRef(null);
+  const cashfree = useRef(null);
+
+  // --- DERIVED VALUES ---
+  const currentXP = unlockedSkills.length * 500 + (badges.length * 200);
+  const nextLevelXP = (Math.floor(currentXP / 2000) + 1) * 2000;
+  const progressPercent = Math.min((currentXP / nextLevelXP) * 100, 100);
+  const userLevel = Math.floor(currentXP / 2000) + 1;
+
+  const filteredJobs = jobs.filter(job => 
+    (job.title?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
+    (job.description?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (job.tags?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+  );
+
+  // --- LOGGING ---
+  const logAction = async (actionType, details = {}) => {
+    try {
+      await supabase.from('audit_logs').insert({
+        action: actionType,
+        actor_id: user.id,
+        details: { ...details, timestamp: new Date().toISOString(), ip_hint: "client_side_trigger" }
+      });
+    } catch (err) { console.error("Audit Logging Failed:", err); }
+  };
+
+  // --- DAILY REWARD ---
+  const handleDailyRewardCheck = (lastLoginDate) => {
+    if (isClient) return;
+    if (hasCheckedReward.current) return;
+
+    if (lastLoginDate && isSameDay(lastLoginDate)) {
+        hasCheckedReward.current = true;
+        setShowRewardModal(false);
+        return;
+    }
+    hasCheckedReward.current = true;
+    setTimeout(() => setShowRewardModal(true), 1500);
+  };
+
+  const claimReward = async () => {
+    setIsClaiming(true);
+    const today = new Date().toISOString().split('T')[0];
+    const rewardAmount = 10;
+    setEnergy(prev => prev + rewardAmount);
+    setShowRewardModal(false);
+    showToast(`⚡ +${rewardAmount} Energy Claimed!`, "success");
+    hasCheckedReward.current = true;
+    const { success } = await api.claimDailyReward(user.id, today);
+    if (success) await logAction('DAILY_REWARD_CLAIMED', { date: today, amount: rewardAmount });
+    setIsClaiming(false);
+  };
+
+  // --- INITIALIZATION ---
+  useEffect(() => {
+    if (window.Cashfree) {
+      cashfree.current = new window.Cashfree({ mode: "sandbox" });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let isMounted = true;
+
+    const loadData = async () => {
+        if (jobs.length === 0) setIsLoading(true);
+        try {
+            const dashboardPromise = api.fetchDashboardData(user);
+            const badgesPromise = supabase.from('user_badges').select('badge_name, badges(icon)').eq('user_id', user.id);
+
+            let userProfileData = null;
+            if (!isClient) {
+                const { data } = await supabase
+                    .from('freelancers')
+                    .select('energy_points, last_login_date')
+                    .eq('id', user.id)
+                    .single();
+                userProfileData = data;
+            }
+
+            const [badgeRes, dashboardRes] = await Promise.all([badgesPromise, dashboardPromise]);
+            if (!isMounted) return;
+
+            if (!isClient && userProfileData) {
+                setEnergy(userProfileData.energy_points || 20);
+                if (!hasCheckedReward.current) {
+                    handleDailyRewardCheck(userProfileData.last_login_date); 
+                }
+            }
+
+            const formattedBadges = badgeRes.data?.map(b => ({
+                name: b.badge_name,
+                icon: b.badges?.icon || 'Award'
+            })) || [];
+            setBadges(formattedBadges);
+
+            const { services, jobs, applications, notifications, referralCount, error } = dashboardRes;
+            if (!error) {
+                setServices(services);
+                setJobs(jobs);
+                setApplications(applications);
+                setNotifications(notifications);
+                setReferralStats({ count: referralCount, earnings: referralCount * 50 });
+                
+                const total = applications.reduce((acc, curr) => {
+                      if (curr.status === 'Paid') {
+                          const amount = Number(curr.bid_amount) || 0;
+                          return isClient ? acc + amount : acc + (amount * 0.95); 
+                      }
+                      return acc;
+                }, 0);
+                setTotalEarnings(total);
+            }
+        } catch (err) {
+            showToast("Dashboard sync failed: " + err.message, "error");
+        } finally {
+            if (isMounted) setIsLoading(false);
+        }
+    };
+
+    loadData();
+    return () => { isMounted = false; };
+  }, [user, isClient, showToast, jobs.length]);
+
+  // --- HANDLERS ---
+  const checkKycLock = (actionType) => {
+    if (user.kyc_status === 'approved') return true;
+    if (user.kyc_status === 'pending') {
+       showToast("⏳ Your verification is under review. Please wait.", "info");
+       return false;
+    }
+    const BLOCKED_ACTIONS = ['apply_paid', 'accept_job', 'release_escrow', 'post_job'];
+    if (BLOCKED_ACTIONS.includes(actionType)) {
+      setModal('kyc_verification'); 
+      return false;
+    }
+    return true;
+  };
+
+  const handlePostJob = async (e) => {
+    e.preventDefault();
+    if (!checkKycLock('post_job')) return;
+    const formData = new FormData(e.target);
+    const budget = parseFloat(formData.get('budget'));
+    const title = formData.get('title');
+    if (budget < 100) { showToast("Minimum budget is ₹100", "error"); return; }
+    if (title.length < 5) { showToast("Job title is too short", "error"); return; }
+    
+    const jobData = { 
+        client_id: user.id, client_name: user.name, title: title, budget: budget, 
+        job_type: 'Fixed', duration: formData.get('duration'), tags: formData.get('tags'), 
+        description: formData.get('description'), category: formData.get('category') || 'dev' 
+    };
+    
+    const { error } = await api.createJob(jobData);
+    if (error) { showToast(error.message, 'error'); } 
+    else { 
+        await logAction('JOB_POSTED', { title: title, budget: budget });
+        showToast('Job Posted!'); 
+        setModal(null); 
+        setJobs([jobData, ...jobs]); 
+    }
+  };
+
+  const handleKycSubmit = async ({ ageGroup, bankDetails }) => {
+    if (!kycFile) return showToast("Please select an ID file.", "error");
+    if (kycFile.size > 5 * 1024 * 1024) { showToast("File is too large. Max size is 5MB.", "error"); return; }
+
+    showToast("Encrypting & Uploading data...", "info");
+    try {
+        const fileName = `${user.id}/${Date.now()}_kyc`;
+        const { error: uploadError } = await supabase.storage.from('id_proofs').upload(fileName, kycFile);
+        if (uploadError) throw uploadError;
+
+        const beneficiaryId = `BEN-${Date.now().toString().slice(-6)}-${Math.floor(Math.random()*1000)}`;
+        const { error: bankError } = await supabase.from('user_banking').insert({
+            user_id: user.id,
+            account_holder_name: bankDetails.account_holder_name,
+            account_number: bankDetails.account_number,
+            ifsc_code: bankDetails.ifsc_code,
+            bank_name: bankDetails.bank_name,
+            is_guardian_account: ageGroup === 'minor',
+            guardian_name: ageGroup === 'minor' ? bankDetails.guardian_name : null,
+            guardian_relationship: ageGroup === 'minor' ? bankDetails.guardian_relationship : null,
+            parent_consent_verified: bankDetails.consent || false,
+            beneficiary_id: beneficiaryId
+        });
+        if (bankError) throw bankError;
+
+        const table = isClient ? 'clients' : 'freelancers';
+        const { error: dbError } = await supabase.from(table).update({ 
+            kyc_status: 'pending', id_proof_url: fileName, kyc_type: ageGroup, kyc_submitted_at: new Date().toISOString()
+        }).eq('id', user.id);
+        if (dbError) throw dbError;
+
+        await logAction('KYC_SUBMITTED', { age_group: ageGroup, has_guardian: ageGroup === 'minor' });
+        showToast("Success! Verification & Banking details submitted.", "success");
+        setUser({ ...user, kyc_status: 'pending', kyc_type: ageGroup }); 
+        setModal(null);
+    } catch (err) {
+        showToast("Submission failed: " + err.message, "error");
+    }
+  };
+
+  const handleDeleteJob = async (id) => {
+    if(!window.confirm("Are you sure you want to delete this job?")) return;
+    const { error } = await api.deleteJob(id);
+    if (error) { showToast(error.message, 'error'); } 
+    else { 
+        await logAction('JOB_DELETED', { job_id: id });
+        showToast('Job Deleted'); 
+        setJobs(jobs.filter(j => j.id !== id)); 
+    }
+  };
+
+  const handleCreateService = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const serviceData = {
+      freelancer_id: user.id, freelancer_name: user.name, title: formData.get('title'),
+      description: formData.get('description'), price: formData.get('price'),
+      delivery_time: formData.get('delivery_time'), category: formData.get('category')
+    };
+    const { error } = await api.createService(serviceData);
+    if (error) { showToast(error.message, 'error'); } 
+    else { showToast('Gig Created Successfully!'); setModal(null); setServices([serviceData, ...services]); }
+  };
+
+  const handleDeleteService = async (id) => {
+    if(!window.confirm("Delete this gig?")) return;
+    const { error } = await api.deleteService(id);
+    if (error) { showToast(error.message, 'error'); } 
+    else { showToast('Service Deleted'); setServices(services.filter(s => s.id !== id)); }
+  };
+
+  const handleApplyJob = async (e, energyCost, educationConsent) => {
+    e.preventDefault();
+    if (parentMode) { showToast("Parent Mode Active", "error"); return; }
+    if (!checkKycLock('apply_paid')) return;
+    
+    if (energy < energyCost) { showToast("Not enough energy! ⚡ Wait for daily reward or pass a quiz.", "error"); return; }
+
+    if (!isClient && selectedJob) {
+      const jobCategory = selectedJob.category || 'dev';
+      if (!unlockedSkills.includes(jobCategory)) {
+        showToast(`Locked! Pass the ${jobCategory} quiz in Academy first.`, "error");
+        setModal('quiz-locked');
+        return;
+      }
+    }
+    if (applications.some(app => app.job_id === selectedJob.id && app.freelancer_id === user.id)) { 
+      showToast("Already applied!", "error"); return; 
+    }
+    const { success, error: energyError } = await api.deductEnergy(user.id, energyCost);
+    if (!success) { showToast(energyError.message, "error"); return; }
+    
+    setEnergy(prev => prev - energyCost);
+    const formData = new FormData(e.target);
+    const appData = { 
+      job_id: selectedJob.id, freelancer_id: user.id, freelancer_name: user.name, 
+      client_id: selectedJob.client_id, cover_letter: formData.get('cover_letter'), 
+      bid_amount: formData.get('bid_amount'), is_educational_waiver_signed: educationConsent 
+    };
+    const { error } = await api.applyForJob(appData, selectedJob.title);
+    if (error) { showToast(error.message, 'error'); } 
+    else { showToast('Applied successfully!'); setModal(null); }
+  };
+
+  const handleAcceptApplication = async (app) => {
+    if (!checkKycLock('accept_job')) return;
+    if (!cashfree.current) { showToast("Payment Gateway initializing... please wait.", "error"); return; }
+    showToast("Securing Payment Session...", "info");
+    try {
+      const { paymentSessionId, orderId, error } = await api.createEscrowSession(
+        app.id, app.bid_amount, app.freelancer_id, user.phone 
+      );
+      if (error) throw new Error(error.message || "Secure Session Failed");
+      
+      cashfree.current.checkout({
+          paymentSessionId: paymentSessionId,
+          redirectTarget: "_modal",
+      }).then(() => {
+          setTimeout(() => handlePaymentVerification(orderId, app), 2000);
+      });
+    } catch (err) { showToast(err.message, "error"); }
+  };
+
+  const handlePaymentVerification = async (orderId, app) => {
+      showToast("Verifying Payment...", "info");
+      const { success } = await api.verifyAndStartEscrow(orderId, app.id);
+      
+      if (success) {
+         await logAction('ESCROW_FUNDED', { order_id: orderId, amount: app.bid_amount });
+         showToast("Payment Confirmed! Order Started.", "success");
+         setApplications(prev => prev.map(a => a.id == app.id ? { ...a, status: 'Accepted', started_at: new Date().toISOString(), is_escrow_held: true } : a));
+         setTimeout(async () => {
+             const { applications: newApps } = await api.fetchDashboardData(user);
+             if(newApps) setApplications(newApps);
+         }, 1500);
+      } else { showToast("Payment verification failed. Check if money was deducted.", "warning"); }
+  };
+
+  const handleSubmitWork = async (e) => {
+    e.preventDefault();
+    if (!selectedApp) { showToast("Error: No active application selected.", "error"); return; }
+    setModal(null);
+    showToast("Uploading work...", "info");
+    const formData = new FormData(e.target);
+    const workLink = formData.get('work_link');
+    const message = formData.get('message');
+    const files = e.target.files; 
+    let uploadedUrls = [];
+    
+    if (files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const filePath = `${user.id}/${Date.now()}_${file.name}`;
+        const { error } = await supabase.storage.from('project-files').upload(filePath, file);
+        if (!error) {
+          const { data: publicUrl } = supabase.storage.from('project-files').getPublicUrl(filePath);
+          uploadedUrls.push(publicUrl.publicUrl);
+        }
+      }
+    }
+    const timestamp = new Date().toISOString();
+    const { error } = await supabase.functions.invoke('order-manager', {
+      body: { action: 'SUBMIT_WORK', appId: selectedApp.id, userId: user.id, payload: { work_link: workLink, message: message, files: uploadedUrls } }
+    });
+    
+    if (error) { showToast("Submission failed: " + error.message, "error"); } 
+    else {
+      await logAction('WORK_SUBMITTED', { app_id: selectedApp.id, has_files: uploadedUrls.length > 0 });
+      showToast("Work Submitted Successfully!", "success");
+      setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, status: APP_STATUS.SUBMITTED, submitted_at: timestamp } : a));
+      setSelectedApp(null);
+    }
+  };
+
+  const handleApproveWork = async (app) => {
+    const prevApps = [...applications];
+    setApplications(apps => apps.map(a => a.id === app.id ? { ...a, status: APP_STATUS.COMPLETED } : a));
+    const { error } = await supabase.functions.invoke('order-manager', { body: { action: 'APPROVE_WORK', appId: app.id, userId: user.id } });
+    if (!error) {
+      await logAction('WORK_APPROVED', { app_id: app.id, freelancer_id: app.freelancer_id });
+      showToast("Work Approved! Please release payment.", "success");
+      setViewWorkApp(null);
+    } else {
+      setApplications(prevApps); 
+      showToast(error.message, 'error');
+    }
+  };
+
+  // ✅ HELPER: Invoice Generator (Fixed Names & Spacing)
+  const generateAndStoreInvoice = async (app, baseAmount, customTitle = null) => {
+    try {
+      const doc = new jsPDF();
+      const invoiceId = `INV-${Date.now().toString().slice(-8)}`;
+      
+      // 1. Determine Role & Math
+      const isFreelancer = user.type !== 'client'; 
+      const fee = isFreelancer ? (baseAmount * 0.05) : 0;
+      const finalAmount = baseAmount - fee;
+
+      // 2. Determine Names (Fixing the "Same Name" Bug)
+      // If Client is viewing: Billed To = Client (Me), Freelancer = app.freelancer_name
+      // If Freelancer is viewing: Payer = TeenVerse, Payee = Freelancer (Me)
+      const billedToName = isFreelancer ? "TeenVerseHub Payouts" : (user.name || "Client");
+      const otherPartyLabel = isFreelancer ? "Payee (You):" : "Freelancer:";
+      const otherPartyName = isFreelancer ? (user.name || "Freelancer") : (app.freelancer_name || "Freelancer");
+
+      // -- HEADER --
+      doc.setFontSize(22);
+      doc.setFont("helvetica", "bold");
+      doc.text("TeenVerseHub Invoice", 20, 20);
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(isFreelancer ? "Payout Statement" : "Payment Receipt", 20, 26);
+      
+      // -- METADATA --
+      doc.text(`Invoice ID: ${invoiceId}`, 20, 45);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 50);
+      const titleToUse = customTitle || selectedJob?.title || 'Freelance Service';
+      doc.text(`Job Title: ${titleToUse}`, 20, 55);
+
+      // -- DIVIDER --
+      doc.setDrawColor(200, 200, 200);
+      doc.line(20, 65, 190, 65);
+
+      // -- BILLING DETAILS --
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      
+      // Left Column
+      doc.text(isFreelancer ? "Payer:" : "Billed To:", 20, 80);
+      doc.setFont("helvetica", "normal");
+      doc.text(billedToName, 20, 86);
+
+      // Right Column
+      doc.setFont("helvetica", "bold");
+      doc.text(otherPartyLabel, 120, 80); 
+      doc.setFont("helvetica", "normal");
+      doc.text(otherPartyName, 120, 86); // ✅ Fixed: Now uses freelancer_name for clients
+      
+      // -- PAYMENT SECTION --
+      // Gray Box Background
+      const boxHeight = isFreelancer ? 30 : 20;
+      doc.setFillColor(248, 248, 248);
+      doc.rect(115, 100, 80, boxHeight, 'F');
+
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+
+      if (isFreelancer) {
+          // ✅ FREELANCER VIEW (Compact Spacing)
+          doc.text(`Gross Amount:`, 120, 108);
+          doc.text(`₹${Number(baseAmount).toFixed(2)}`, 190, 108, { align: 'right' });
+          
+          doc.setTextColor(220, 50, 50); // Red for deduction
+          doc.text(`Platform Fee (5%):`, 120, 114); // Tighter spacing (6 units down)
+          doc.text(`- ₹${fee.toFixed(2)}`, 190, 114, { align: 'right' });
+          
+          doc.setTextColor(0, 0, 0);
+          doc.setFont("helvetica", "bold");
+          doc.text(`Net Earnings:`, 120, 124); // Tighter spacing (10 units down)
+          doc.setFontSize(12);
+          doc.text(`₹${finalAmount.toFixed(2)}`, 190, 124, { align: 'right' });
+      } else {
+          // ✅ CLIENT VIEW (Simple)
+          doc.setFontSize(12);
+          doc.text(`Total Paid:`, 120, 113);
+          doc.setFont("helvetica", "bold");
+          doc.text(`₹${Number(baseAmount).toFixed(2)}`, 190, 113, { align: 'right' });
+      }
+      
+      // -- FOOTER --
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "italic");
+      doc.setTextColor(150, 150, 150);
+      doc.text("System generated document.", 20, 145);
+      
+      // -- UPLOAD --
+      const pdfBlob = doc.output('blob');
+      const filePath = `${user.id}/${app.id}_invoice.pdf`; 
+
+      const { error: uploadError } = await supabase.storage
+        .from('invoices')
+        .upload(filePath, pdfBlob, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      return filePath;
+
+    } catch (err) {
+      console.error("Invoice Error:", err);
+      showToast("Invoice generation failed.", "error");
+      return null;
+    }
+  };
+
+  const handleInvoiceDownload = async (app) => {
+    let path = app.invoice_path;
+    if (!path) {
+      showToast("Invoice missing. Generating a new one...", "info");
+      const relatedJob = jobs.find(j => j.id === app.job_id);
+      path = await generateAndStoreInvoice(app, app.bid_amount, relatedJob?.title);
+      if (!path) return;
+      setApplications(prev => prev.map(a => a.id === app.id ? { ...a, invoice_path: path } : a));
+    }
+    const url = await api.getInvoiceUrl(path);
+    if (url) window.open(url, '_blank');
+  };
+
+  const processPayment = async (escrowConsent) => {
+    if (!paymentModal) return;
+    const { appId, amount, freelancerId } = paymentModal;
+    const { error } = await api.processPayment(appId, amount, freelancerId, escrowConsent);
+    
+    if (error) { showToast(error.message, 'error'); } 
+    else { 
+       await logAction('RELEASE_ESCROW', { app_id: appId, amount: amount });
+       showToast("Payment Successful! Generating Invoice...", "success");
+       const targetApp = applications.find(a => a.id === appId);
+       const invoicePath = await generateAndStoreInvoice(targetApp, amount);
+
+       setApplications(apps => apps.map(a => a.id === appId ? { 
+           ...a, status: APP_STATUS.PAID, paid_at: new Date().toISOString(), invoice_path: invoicePath 
+       } : a));
+       
+       setPaymentModal(null);
+       if (applications.filter(a => a.status === APP_STATUS.PAID).length === 0) {
+          showToast("🏆 BADGE UNLOCKED: First Gig!", "success");
+          setBadges([...badges, { name: 'First Gig', icon: 'Briefcase' }]);
+       }
+    }
+  };
+
+  const handleAppAction = async (action, app, payload = null) => {
+    if (action === 'view_profile') { handleViewProfile(app.freelancer_id); return; }
+    const RESTRICTED = ['approve', 'pay', 'release_escrow'];
+    if (parentMode && RESTRICTED.includes(action)) { showToast("Parent Mode Active: Action Locked", "error"); return; }
+    if (action === 'accept') { handleAcceptApplication(app); return; }
+    if (action === 'pay' && !checkKycLock('release_escrow')) { return; }
+    if (action === 'submit') { setSelectedApp(app); setModal('submit_work'); return; }
+    if (action === 'view_submission') { setViewWorkApp(app); return; }
+    if (action === 'verify_payment') { handlePaymentVerification(app.id, app.escrow_order_id); return; }
+    
+    const backendActionMap = { 'approve': 'APPROVE_WORK', 'pay': 'RELEASE_ESCROW', 'reject': 'REJECT_APPLICATION', 'revision': 'REQUEST_REVISION', 'review': 'SUBMIT_REVIEW' };
+    const backendAction = backendActionMap[action];
+    
+    if (backendAction) {
+        showToast(`Processing ${action}...`, "info");
+        const { error } = await supabase.functions.invoke('order-manager', {
+            body: { action: backendAction, appId: app.id, userId: user.id, payload: payload || {} }
+        });
+
+        if (error) {
+             const errorBody = error.context?.json ? await error.context.json() : {};
+             if (errorBody.isSecurityBlock) {
+                 setParentMode(true);
+                 await logAction('SECURITY_BLOCK_TRIGGERED', { action: action, app_id: app.id });
+                 showToast("⛔ Security Block: Ask your parent to approve.", "error");
+             } else { showToast(error.message || "Action Failed", "error"); }
+        } else {
+             await logAction('APP_ACTION_COMPLETED', { action: action, app_id: app.id });
+             const now = new Date().toISOString();
+             setApplications(prev => prev.map(a => {
+                if (a.id !== app.id) return a;
+                if (action === 'approve') return { ...a, status: 'Completed', completed_at: now };
+                if (action === 'pay') return { ...a, status: 'Paid', paid_at: now, is_escrow_held: false };
+                if (action === 'reject') return { ...a, status: 'Rejected' };
+                if (action === 'revision') return { ...a, status: 'Revision Requested' };
+                if (action === 'review') return { ...a, client_rating: payload?.rating }; 
+                return a;
+             }));
+             showToast("Action Successful!", "success");
+             if (viewWorkApp) setViewWorkApp(null);
+        }
+    }
+  };
+
+  const handleViewProfile = async (freelancerId) => {
+    showToast("Fetching Profile...", "info");
+    const { user, badges, portfolio, resume, error } = await api.getPublicProfile(freelancerId);
+    if (error) { showToast("Could not load profile", "error"); } 
+    else { setPublicProfileData({ user, badges, portfolio, resume }); setViewProfileId(freelancerId); }
+  };
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    if (parentMode) { showToast("Parent Mode Restricted", "error"); return; }
+    
+    const tableName = isClient ? 'clients' : 'freelancers';
+    const cleanUpdates = { name: profileForm.name, phone: profileForm.phone, nationality: profileForm.nationality };
+    if (!isClient) {
+        Object.assign(cleanUpdates, { qualification: profileForm.qualification, specialty: profileForm.specialty, services: profileForm.services, upi: profileForm.upi, bank_name: profileForm.bank_name, account_number: profileForm.account_number, ifsc_code: profileForm.ifsc_code });
+    } else { cleanUpdates.is_organisation = profileForm.is_organisation; }
+    
+    const { error } = await api.updateUserProfile(user.id, cleanUpdates, tableName);
+    if (error) { showToast(error.message, 'error'); } 
+    else { await logAction('PROFILE_UPDATED', { updated_fields: Object.keys(cleanUpdates) }); showToast("Credentials updated successfully!", "success"); setUser({ ...user, ...cleanUpdates }); }
+  };
+
+  const handleSavePublicProfile = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const updates = {
+        bio: formData.get('bio'), tag_line: formData.get('tag_line'),
+        social_links: { github: formData.get('github'), instagram: formData.get('instagram'), linkedin: formData.get('linkedin'), website: formData.get('website') }
+    };
+    const tableName = isClient ? 'clients' : 'freelancers';
+    const { error } = await api.updateUserProfile(user.id, updates, tableName);
+    if (error) { showToast(error.message, 'error'); } 
+    else { await logAction('PUBLIC_PROFILE_UPDATED', {}); showToast("Public profile updated!", "success"); setUser({ ...user, ...updates }); setEditProfileModal(false); }
+  };
+
+  const handleQuizSelection = async (categoryId, passed) => {
+    if (passed) {
+      setTimeout(async () => {
+        const newSkills = [...unlockedSkills, categoryId];
+        setUnlockedSkills(newSkills);
+        await api.unlockSkill(user.id, newSkills); 
+        setUser({ ...user, unlockedSkills: newSkills });
+        await api.awardEnergy(user.id, 5); 
+        setEnergy(prev => prev + 5);
+        if (!badges.some(b => b.name === 'Skill Certified')) {
+            setBadges(prev => [...prev, { name: 'Skill Certified', icon: 'Award' }]);
+            await supabase.from('user_badges').insert({ user_id: user.id, badge_name: 'Skill Certified' });
+        }
+        showToast("🎉 Correct! +500 XP & +5 Energy ⚡", "success");
+        setModal(null); setScore(0); setCurrentQuestionIndex(0);
+      }, 1000);
+    }
+  };
+
+  const handleAiGenerate = () => {
+    if (!rawPortfolioText) return;
+    setIsAiLoading(true);
+    setTimeout(() => {
+      setPortfolioItems([{ id: Date.now(), title: "Professional Case Study", content: rawPortfolioText }, ...portfolioItems]);
+      setRawPortfolioText(""); setIsAiLoading(false); showToast("AI Magic Applied!");
+    }, 1500);
+  };
+
+  const handleDownloadCard = async () => {
+    if (profileCardRef.current === null) { showToast("Card not found.", "error"); return; }
+    try {
+      showToast("Generating HQ Image...", "info");
+      const dataUrl = await toPng(profileCardRef.current, { cacheBust: true, pixelRatio: 3, backgroundColor: null });
+      const link = document.createElement('a');
+      link.download = `TeenVerse-${user.name}.png`;
+      link.href = dataUrl;
+      link.click();
+      showToast("Downloaded successfully!", "success");
+    } catch (err) { showToast("Failed to download image: " + err.message, "error"); }
+  };
+
+  const handleShareToInstagram = async () => {
+    if (profileCardRef.current === null) return;
+    try {
+      showToast("Preparing for Share...", "info");
+      const blob = await toBlob(profileCardRef.current, { cacheBust: true, pixelRatio: 2 });
+      if (!blob) throw new Error('Failed to generate image');
+      const file = new File([blob], `TeenVerse-${user.name}.png`, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'My TeenVerse Profile', text: `Check out my freelancer profile! 🚀` });
+        showToast("Shared successfully!", "success");
+      } else {
+        const link = document.createElement('a'); link.download = `TeenVerse-${user.name}.png`; link.href = URL.createObjectURL(blob); link.click();
+        showToast("Sharing not supported. Downloading instead.", "info");
+      }
+    } catch (err) { if (err.name !== 'AbortError') showToast("Failed to share: " + err.message, "error"); }
+  };
+
+  const handleClearNotifications = async () => {
+      try {
+        const { error } = await api.clearUserNotifications(user.id);
+        if (error) showToast(error.message, 'error');
+        else { setNotifications([]); showToast("Notifications cleared", "success"); }
+      } catch (err) { showToast(err.message, "error"); }
+  };
+
+  return {
+    state: {
+        isClient, tab, menuOpen, zenMode, isLoading, jobs, services, applications, notifications,
+        referralStats, totalEarnings, showNotifications, modal, selectedJob, selectedApp,
+        energy, showRewardModal, isClaiming, viewProfileId, publicProfileData, editProfileModal,
+        kycFile, currentQuestionIndex, score, timelineApp, viewWorkApp, searchTerm, profileForm,
+        paymentModal, parentMode, unlockedSkills, badges, portfolioItems, rawPortfolioText,
+        isAiLoading, SAFE_QUIZZES, profileCardRef, currentXP, nextLevelXP, progressPercent,
+        userLevel, filteredJobs
+    },
+    setters: {
+        setTab, setMenuOpen, setZenMode, setModal, setSelectedJob, setShowRewardModal,
+        setKycFile, setScore, setCurrentQuestionIndex, setTimelineApp, setViewWorkApp,
+        setSearchTerm, setProfileForm, setPaymentModal, setParentMode, setRawPortfolioText,
+        setEditProfileModal, setViewProfileId, setPublicProfileData, setShowNotifications, setApplications
+    },
+    actions: {
+        handlePostJob, handleKycSubmit, handleDeleteJob, handleCreateService, handleDeleteService,
+        handleApplyJob, handleAcceptApplication, handlePaymentVerification, handleSubmitWork,
+        handleApproveWork, handleInvoiceDownload, processPayment, handleAppAction, handleViewProfile,
+        handleUpdateProfile, handleSavePublicProfile, handleQuizSelection, handleAiGenerate,
+        handleDownloadCard, handleShareToInstagram, handleClearNotifications, claimReward
+    }
+  };
+};
