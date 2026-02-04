@@ -5,7 +5,12 @@ import { toPng, toBlob } from 'html-to-image';
 import { jsPDF } from "jspdf";
 import { QUIZZES, APP_STATUS } from '../utils/constants';
 
-// Helper: Robust Date Checker
+// ------------------------------------------
+// 🛠️ SANDBOX CONFIGURATION
+// ------------------------------------------
+const KYC_MODE = 'sandbox'; 
+// ------------------------------------------
+
 const isSameDay = (dateString) => {
   if (!dateString) return false;
   const today = new Date();
@@ -19,7 +24,7 @@ const isSameDay = (dateString) => {
 
 export const useDashboardLogic = (user, setUser, showToast) => {
   const isClient = user?.type === 'client';
-  
+   
   // --- UI & TAB STATES ---
   const [tab, setTab] = useState('overview');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -39,7 +44,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [modal, setModal] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null); 
   const [selectedApp, setSelectedApp] = useState(null);
-  
+   
   // --- ENERGY & REWARD STATES ---
   const [energy, setEnergy] = useState(20);
   const [showRewardModal, setShowRewardModal] = useState(false);
@@ -59,7 +64,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // --- HYBRID DELIVERY STATES ---
   const [timelineApp, setTimelineApp] = useState(null);
   const [viewWorkApp, setViewWorkApp] = useState(null);
-  
+   
   const [searchTerm, setSearchTerm] = useState("");
   const [profileForm, setProfileForm] = useState(user ? { ...user } : {});
   const [paymentModal, setPaymentModal] = useState(null);
@@ -197,19 +202,121 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     return () => { isMounted = false; };
   }, [user, isClient, showToast, jobs.length]);
 
-  // --- HANDLERS ---
+  // ------------------------------------------
+  // 🔐 SMART LOCK SYSTEM (Updated for Clients)
+  // ------------------------------------------
   const checkKycLock = (actionType) => {
-    if (user.kyc_status === 'approved') return true;
-    if (user.kyc_status === 'pending') {
-       showToast("⏳ Your verification is under review. Please wait.", "info");
-       return false;
+    
+    // ✅ 1. CLIENT BYPASS: Clients face NO KYC locks for posting/hiring/paying
+    if (isClient) return true;
+
+    // 🔒 2. FREELANCER CHECKS (Keep these strict)
+    
+    // Check Identity before Apply
+    if (actionType === 'apply_paid') {
+        if (user.kyc_status !== 'verified') {
+            showToast("🔒 Identity Verification Required to apply.", "info");
+            setModal('kyc_verification');
+            return false;
+        }
     }
-    const BLOCKED_ACTIONS = ['apply_paid', 'accept_job', 'release_escrow', 'post_job'];
-    if (BLOCKED_ACTIONS.includes(actionType)) {
-      setModal('kyc_verification'); 
-      return false;
+
+    // Check Bank before Withdrawal
+    if (actionType === 'withdraw_funds') {
+        if (!user.is_bank_linked) { 
+            showToast("🏦 Please link a Bank Account to withdraw.", "info");
+            setModal('bank_linkage');
+            return false;
+        }
     }
+
     return true;
+  };
+
+  // ------------------------------------------
+  // ⚡ ACTION 1: IDENTITY VERIFICATION
+  // ------------------------------------------
+  const handleIdentitySubmit = async ({ ageGroup, panNumber, kycFile }) => {
+    if (!kycFile) return showToast("Please select an ID file.", "error");
+    if (!panNumber) return showToast("PAN Number is required.", "error");
+
+    showToast("Verifying Identity (Sandbox)...", "info");
+
+    try {
+        const fileName = `${user.id}/${Date.now()}_kyc`;
+        const { error: uploadError } = await supabase.storage.from('id_proofs').upload(fileName, kycFile);
+        if (uploadError) throw uploadError;
+
+        const { data, error: fnError } = await supabase.functions.invoke('kyc-handler', {
+            body: { 
+                action: 'VERIFY_IDENTITY', 
+                user_id: user.id, 
+                age_group: ageGroup,
+                pan_number: panNumber, 
+                file_path: fileName
+            }
+        });
+
+        if (fnError) throw new Error(fnError.message || "Verification Service Unreachable");
+        if (!data.success) throw new Error(data.error || "Identity Verification Failed");
+
+        await logAction('IDENTITY_VERIFIED', { mode: KYC_MODE });
+        showToast("✅ Identity Verified! You can now apply.", "success");
+        
+        setUser(prev => ({ 
+            ...prev, 
+            kyc_status: 'verified', 
+            kyc_type: ageGroup 
+        }));
+        setModal(null);
+        return true; 
+
+    } catch (err) {
+        console.error(err);
+        showToast("Identity check failed: " + err.message, "error");
+        return false;
+    }
+  };
+
+  // ------------------------------------------
+  // 🏦 ACTION 2: BANK ACCOUNT
+  // ------------------------------------------
+  const handleBankSubmit = async (bankDetails, ageGroup) => {
+    showToast("Linking Bank Account...", "info");
+    try {
+        const beneficiaryId = `BEN-${Date.now().toString().slice(-6)}`;
+        
+        const { error: bankError } = await supabase.from('user_banking').insert({
+            user_id: user.id,
+            account_holder_name: bankDetails.account_holder_name,
+            account_number: bankDetails.account_number,
+            ifsc_code: bankDetails.ifsc_code,
+            bank_name: bankDetails.bank_name,
+            is_guardian_account: ageGroup === 'minor',
+            guardian_name: ageGroup === 'minor' ? bankDetails.guardian_name : null,
+            guardian_relationship: ageGroup === 'minor' ? bankDetails.guardian_relationship : null,
+            parent_consent_verified: bankDetails.consent || false,
+            beneficiary_id: beneficiaryId
+        });
+
+        if (bankError) throw bankError;
+
+        await logAction('BANK_LINKED', { ifsc: bankDetails.ifsc_code });
+        showToast("🎉 Bank Account Linked! Withdrawals enabled.", "success");
+        
+        setUser(prev => ({ 
+            ...prev, 
+            is_bank_linked: true 
+        }));
+        setModal(null);
+
+        if (KYC_MODE === 'sandbox') {
+             setBadges(prev => [...prev, { name: 'Verified', icon: 'ShieldCheck' }]);
+        }
+
+    } catch (err) {
+        showToast("Banking linkage failed: " + err.message, "error");
+    }
   };
 
   const handlePostJob = async (e) => {
@@ -234,46 +341,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         showToast('Job Posted!'); 
         setModal(null); 
         setJobs([jobData, ...jobs]); 
-    }
-  };
-
-  const handleKycSubmit = async ({ ageGroup, bankDetails }) => {
-    if (!kycFile) return showToast("Please select an ID file.", "error");
-    if (kycFile.size > 5 * 1024 * 1024) { showToast("File is too large. Max size is 5MB.", "error"); return; }
-
-    showToast("Encrypting & Uploading data...", "info");
-    try {
-        const fileName = `${user.id}/${Date.now()}_kyc`;
-        const { error: uploadError } = await supabase.storage.from('id_proofs').upload(fileName, kycFile);
-        if (uploadError) throw uploadError;
-
-        const beneficiaryId = `BEN-${Date.now().toString().slice(-6)}-${Math.floor(Math.random()*1000)}`;
-        const { error: bankError } = await supabase.from('user_banking').insert({
-            user_id: user.id,
-            account_holder_name: bankDetails.account_holder_name,
-            account_number: bankDetails.account_number,
-            ifsc_code: bankDetails.ifsc_code,
-            bank_name: bankDetails.bank_name,
-            is_guardian_account: ageGroup === 'minor',
-            guardian_name: ageGroup === 'minor' ? bankDetails.guardian_name : null,
-            guardian_relationship: ageGroup === 'minor' ? bankDetails.guardian_relationship : null,
-            parent_consent_verified: bankDetails.consent || false,
-            beneficiary_id: beneficiaryId
-        });
-        if (bankError) throw bankError;
-
-        const table = isClient ? 'clients' : 'freelancers';
-        const { error: dbError } = await supabase.from(table).update({ 
-            kyc_status: 'pending', id_proof_url: fileName, kyc_type: ageGroup, kyc_submitted_at: new Date().toISOString()
-        }).eq('id', user.id);
-        if (dbError) throw dbError;
-
-        await logAction('KYC_SUBMITTED', { age_group: ageGroup, has_guardian: ageGroup === 'minor' });
-        showToast("Success! Verification & Banking details submitted.", "success");
-        setUser({ ...user, kyc_status: 'pending', kyc_type: ageGroup }); 
-        setModal(null);
-    } catch (err) {
-        showToast("Submission failed: " + err.message, "error");
     }
   };
 
@@ -342,7 +409,9 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   };
 
   const handleAcceptApplication = async (app) => {
-    if (!checkKycLock('accept_job')) return;
+    // Clients don't need KYC checks here anymore
+    if (isClient && !checkKycLock('accept_job')) return; 
+
     if (!cashfree.current) { showToast("Payment Gateway initializing... please wait.", "error"); return; }
     showToast("Securing Payment Session...", "info");
     try {
@@ -425,25 +494,19 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
   };
 
-  // ✅ HELPER: Invoice Generator (Fixed Names & Spacing)
   const generateAndStoreInvoice = async (app, baseAmount, customTitle = null) => {
     try {
       const doc = new jsPDF();
       const invoiceId = `INV-${Date.now().toString().slice(-8)}`;
       
-      // 1. Determine Role & Math
       const isFreelancer = user.type !== 'client'; 
       const fee = isFreelancer ? (baseAmount * 0.05) : 0;
       const finalAmount = baseAmount - fee;
 
-      // 2. Determine Names (Fixing the "Same Name" Bug)
-      // If Client is viewing: Billed To = Client (Me), Freelancer = app.freelancer_name
-      // If Freelancer is viewing: Payer = TeenVerse, Payee = Freelancer (Me)
       const billedToName = isFreelancer ? "TeenVerseHub Payouts" : (user.name || "Client");
       const otherPartyLabel = isFreelancer ? "Payee (You):" : "Freelancer:";
       const otherPartyName = isFreelancer ? (user.name || "Freelancer") : (app.freelancer_name || "Freelancer");
 
-      // -- HEADER --
       doc.setFontSize(22);
       doc.setFont("helvetica", "bold");
       doc.text("TeenVerseHub Invoice", 20, 20);
@@ -452,33 +515,26 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       doc.setFont("helvetica", "normal");
       doc.text(isFreelancer ? "Payout Statement" : "Payment Receipt", 20, 26);
       
-      // -- METADATA --
       doc.text(`Invoice ID: ${invoiceId}`, 20, 45);
       doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 50);
       const titleToUse = customTitle || selectedJob?.title || 'Freelance Service';
       doc.text(`Job Title: ${titleToUse}`, 20, 55);
 
-      // -- DIVIDER --
       doc.setDrawColor(200, 200, 200);
       doc.line(20, 65, 190, 65);
 
-      // -- BILLING DETAILS --
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
       
-      // Left Column
       doc.text(isFreelancer ? "Payer:" : "Billed To:", 20, 80);
       doc.setFont("helvetica", "normal");
       doc.text(billedToName, 20, 86);
 
-      // Right Column
       doc.setFont("helvetica", "bold");
       doc.text(otherPartyLabel, 120, 80); 
       doc.setFont("helvetica", "normal");
-      doc.text(otherPartyName, 120, 86); // ✅ Fixed: Now uses freelancer_name for clients
+      doc.text(otherPartyName, 120, 86); 
       
-      // -- PAYMENT SECTION --
-      // Gray Box Background
       const boxHeight = isFreelancer ? 30 : 20;
       doc.setFillColor(248, 248, 248);
       doc.rect(115, 100, 80, boxHeight, 'F');
@@ -487,34 +543,30 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       doc.setTextColor(0, 0, 0);
 
       if (isFreelancer) {
-          // ✅ FREELANCER VIEW (Compact Spacing)
           doc.text(`Gross Amount:`, 120, 108);
           doc.text(`₹${Number(baseAmount).toFixed(2)}`, 190, 108, { align: 'right' });
           
-          doc.setTextColor(220, 50, 50); // Red for deduction
-          doc.text(`Platform Fee (5%):`, 120, 114); // Tighter spacing (6 units down)
+          doc.setTextColor(220, 50, 50); 
+          doc.text(`Platform Fee (5%):`, 120, 114); 
           doc.text(`- ₹${fee.toFixed(2)}`, 190, 114, { align: 'right' });
           
           doc.setTextColor(0, 0, 0);
           doc.setFont("helvetica", "bold");
-          doc.text(`Net Earnings:`, 120, 124); // Tighter spacing (10 units down)
+          doc.text(`Net Earnings:`, 120, 124); 
           doc.setFontSize(12);
           doc.text(`₹${finalAmount.toFixed(2)}`, 190, 124, { align: 'right' });
       } else {
-          // ✅ CLIENT VIEW (Simple)
           doc.setFontSize(12);
           doc.text(`Total Paid:`, 120, 113);
           doc.setFont("helvetica", "bold");
           doc.text(`₹${Number(baseAmount).toFixed(2)}`, 190, 113, { align: 'right' });
       }
       
-      // -- FOOTER --
       doc.setFontSize(9);
       doc.setFont("helvetica", "italic");
       doc.setTextColor(150, 150, 150);
       doc.text("System generated document.", 20, 145);
       
-      // -- UPLOAD --
       const pdfBlob = doc.output('blob');
       const filePath = `${user.id}/${app.id}_invoice.pdf`; 
 
@@ -575,7 +627,10 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const RESTRICTED = ['approve', 'pay', 'release_escrow'];
     if (parentMode && RESTRICTED.includes(action)) { showToast("Parent Mode Active: Action Locked", "error"); return; }
     if (action === 'accept') { handleAcceptApplication(app); return; }
+    
+    // Clients bypass this check because checkKycLock returns true for them
     if (action === 'pay' && !checkKycLock('release_escrow')) { return; }
+    
     if (action === 'submit') { setSelectedApp(app); setModal('submit_work'); return; }
     if (action === 'view_submission') { setViewWorkApp(app); return; }
     if (action === 'verify_payment') { handlePaymentVerification(app.id, app.escrow_order_id); return; }
@@ -602,13 +657,16 @@ export const useDashboardLogic = (user, setUser, showToast) => {
              setApplications(prev => prev.map(a => {
                 if (a.id !== app.id) return a;
                 if (action === 'approve') return { ...a, status: 'Completed', completed_at: now };
-                if (action === 'pay') return { ...a, status: 'Paid', paid_at: now, is_escrow_held: false };
+                
+                // 🛑 CLIENT FUNDS HELD IN ADMIN PROCESS
+                if (action === 'pay') return { ...a, status: 'Processing', is_escrow_held: true };
+                
                 if (action === 'reject') return { ...a, status: 'Rejected' };
                 if (action === 'revision') return { ...a, status: 'Revision Requested' };
                 if (action === 'review') return { ...a, client_rating: payload?.rating }; 
                 return a;
              }));
-             showToast("Action Successful!", "success");
+             showToast(action === 'pay' ? "Funds released to Admin for review." : "Action Successful!", "success");
              if (viewWorkApp) setViewWorkApp(null);
         }
     }
@@ -732,11 +790,14 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         setEditProfileModal, setViewProfileId, setPublicProfileData, setShowNotifications, setApplications
     },
     actions: {
-        handlePostJob, handleKycSubmit, handleDeleteJob, handleCreateService, handleDeleteService,
+        handlePostJob, 
+        handleDeleteJob, handleCreateService, handleDeleteService,
         handleApplyJob, handleAcceptApplication, handlePaymentVerification, handleSubmitWork,
         handleApproveWork, handleInvoiceDownload, processPayment, handleAppAction, handleViewProfile,
         handleUpdateProfile, handleSavePublicProfile, handleQuizSelection, handleAiGenerate,
-        handleDownloadCard, handleShareToInstagram, handleClearNotifications, claimReward
+        handleDownloadCard, handleShareToInstagram, handleClearNotifications, claimReward,
+        handleIdentitySubmit, 
+        handleBankSubmit
     }
   };
 };

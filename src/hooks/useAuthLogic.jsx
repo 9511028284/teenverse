@@ -245,11 +245,11 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
       }
   };
 
-  // --- PASSWORD RESET LOGIC ---
+  // --- PASSWORD RESET HANDLERS ---
   const handleForgotPassword = async (e) => {
     e.preventDefault();
-    if(!formData.email) return showToast("Enter email first");
-    if (CLOUDFLARE_SITE_KEY && !captchaToken) return showToast("Security check required");
+    if(!formData.email) return showToast("Enter your email address first.");
+    if (CLOUDFLARE_SITE_KEY && !captchaToken) return showToast("Please complete the security check.");
 
     setLoading(true);
     try {
@@ -259,7 +259,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
       if (error) throw error;
       
       setShowResetVerify(true);
-      showToast("OTP sent to your email!", "success");
+      showToast("OTP sent! Check your email.", "success");
     } catch (err) {
       showToast(err.message || "Failed to send OTP");
       if (turnstileRef.current) turnstileRef.current.reset();
@@ -270,14 +270,19 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   };
 
   const handleVerifyResetOTP = async () => {
-    if(!resetOtp) return showToast("Enter the code");
+    if (!resetOtp) return showToast("Please enter the OTP.");
+    
     setLoading(true);
     try {
         const { data, error } = await supabase.functions.invoke('request-reset', {
-            body: { action: 'verify', email: formData.email.trim(), otp: resetOtp.trim() }
+            body: { 
+              action: 'verify', 
+              email: formData.email.trim(), 
+              otp: resetOtp.trim() 
+            }
         });
 
-        if (error || !data || !data.success) throw new Error(data?.error || "Invalid Code");
+        if (error || !data || !data.success) throw new Error(data?.error || "Invalid or Expired Code");
 
         showToast("Code Verified!", "success");
         setShowResetVerify(false);
@@ -291,8 +296,8 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
-    if(newPassword.length < 6) return showToast("Password too short");
-    
+    if (!newPassword || newPassword.length < 6) return showToast("Password must be at least 6 chars.");
+
     setLoading(true);
     try {
         const { data, error } = await supabase.functions.invoke('request-reset', {
@@ -304,7 +309,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
             }
         });
 
-        if (error || !data || !data.success) throw new Error(data?.error || "Update failed");
+        if (error || !data || !data.success) throw new Error(data?.error || "Failed to update password");
 
         showToast("Password updated! Please log in.", "success");
         setResetOtp('');

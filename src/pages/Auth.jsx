@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, ShieldAlert, Sparkles, Zap, CheckCircle } from 'lucide-react';
 import { useAuthLogic } from '../hooks/useAuthLogic';
 import { Toast, FloatingNotif, LegalFooter } from '../components/auth/AuthUI';
-import { LoginView, SignupView } from '../components/auth/AuthForms';
+import { LoginView, SignupView, ForgotPasswordView, UpdatePasswordView } from '../components/auth/AuthForms';
 
 const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const { state, actions, refs } = useAuthLogic(onLogin, onSignUpSuccess);
@@ -72,6 +72,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
                  <div className="w-full max-w-md mx-auto">
                     {state.viewMode === 'login' && <LoginView state={state} actions={actions} />}
                     {state.viewMode === 'signup' && <SignupView state={state} actions={actions} refs={refs} />}
+                      {state.viewMode === 'update_password' && <UpdatePasswordView state={state} actions={actions} />}
+                        {state.viewMode === 'forgot' && <ForgotPasswordView state={state} actions={actions} refs={refs} />}
+                 
                  </div>
              )}
           </AnimatePresence>

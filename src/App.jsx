@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from './supabase'; 
 import Toast from './components/ui/Toast';
 import { Loader2 } from 'lucide-react';
@@ -14,26 +15,56 @@ import ParentApproval from './pages/ParentApproval';
 import ParentLogin from './pages/ParentLogin'; 
 import ParentDashboard from './pages/ParentDashboard'; 
 
-export default function TeenVerse() {
-  const [view, setView] = useState('home');
+// --- 1. Helper Wrappers ---
+const LegalWrapper = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const query = new URLSearchParams(location.search);
+  return <Legal page={query.get('page') || 'terms'} onBack={() => navigate('/')} />;
+};
+
+const ParentApprovalWrapper = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const query = new URLSearchParams(location.search);
+  return <ParentApproval token={query.get('token')} onApprovalComplete={() => navigate('/')} />;
+};
+
+// --- 2. Main App Component ---
+// Note: We removed "TeenVerseRoutes" and just made this the main App component
+export default function App() {
   const [user, setUser] = useState(null);
   const [toast, setToast] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
-  const [legalPage, setLegalPage] = useState('terms');
-  const [approvalToken, setApprovalToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 1. Handle Approval Tokens (Parent Mode)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    if (token) {
-      setApprovalToken(token);
-      setView('parent-approval');
-    }
-  }, []);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // 2. Auth Listener
+  // Compatibility helper
+  const setView = (viewName) => {
+      switch(viewName) {
+          case 'home': navigate('/'); break;
+          case 'auth': navigate('/auth'); break;
+          case 'dashboard': navigate('/dashboard'); break;
+          case 'legal': navigate('/legal'); break;
+          case 'admin': navigate('/admin'); break;
+          case 'parent-login': navigate('/parent-login'); break;
+          case 'parent-dashboard': navigate('/parent-dashboard'); break;
+          default: navigate('/'); 
+      }
+  };
+
+  // Redirect handling for approval tokens
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token');
+    if (token && !location.pathname.includes('/parent-approval')) {
+       navigate(`/parent-approval?token=${token}`);
+    }
+  }, [location, navigate]);
+
+  // Auth & Session Logic
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -47,13 +78,13 @@ export default function TeenVerse() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 3. Session Handler with RETRY LOGIC (Fixes the Login Race Condition)
   const handleSession = async (session, attempts = 0) => {
+    const currentPath = location.pathname;
+    const isPublic = ['/', '/auth', '/legal', '/terms-agreement', '/parent-approval', '/parent-login'].some(path => currentPath.startsWith(path));
+
     if (!session) {
-      if (!['parent-approval', 'landing', 'legal', 'auth', 'parent-login'].includes(view)) {
-         setUser(null);
-         setView('home');
-      }
+      setUser(null);
+      if (!isPublic) navigate('/');
       setLoading(false);
       return;
     }
@@ -61,34 +92,34 @@ export default function TeenVerse() {
     const u = session.user;
 
     try {
-      // 1. CHECK ADMIN
+      // 1. ADMIN
       const { data: adminCheck } = await supabase.from('admins').select('*').eq('email', u.email).maybeSingle();
       if (adminCheck) {
         setUser({ ...u, type: "admin" });
-        setView('admin');
+        if (currentPath !== '/admin') navigate('/admin');
         setLoading(false);
         return;
       }
 
-      // 2. CHECK CLIENT
+      // 2. CLIENT
       let { data: c } = await supabase.from('clients').select('*').eq('id', u.id).maybeSingle();
       if (c) { 
           setUser({ ...c, type: 'client' }); 
-          setView('dashboard');
+          if (!currentPath.startsWith('/dashboard')) navigate('/dashboard');
           setLoading(false);
           return;
       }
 
-      // 3. CHECK FREELANCER
+      // 3. FREELANCER
       let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
       if (f) { 
           setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] });
-          setView('dashboard');
+          if (!currentPath.startsWith('/dashboard')) navigate('/dashboard');
           setLoading(false);
           return;
       }
        
-      // 4. CHECK IF PARENT
+      // 4. PARENT
       const { data: parentMatch } = await supabase
         .from('parent_consents')
         .select('user_id')
@@ -97,32 +128,30 @@ export default function TeenVerse() {
 
       if (parentMatch) {
           setUser({ ...u, type: 'parent', teenId: parentMatch.user_id });
-          setView('parent-dashboard');
+          if (!currentPath.startsWith('/parent-dashboard')) navigate('/parent-dashboard');
           setLoading(false);
           return;
       }
 
-      // 5. NO PROFILE FOUND - RETRY LOGIC
-      // If the DB trigger is slow, wait 1s and try again (up to 3 times)
+      // 5. RETRY
       if (attempts < 3) {
-          console.log(`Syncing profile... Attempt ${attempts + 1}/3`);
           setTimeout(() => handleSession(session, attempts + 1), 1000);
           return; 
       }
 
-      // 6. GAVE UP (Really no profile)
-      console.warn("No profile found. Redirecting to Auth.");
+      // 6. FALLBACK
+      console.warn("No profile found.");
       setUser(null); 
-      setView('auth');
+      navigate('/auth');
       setLoading(false);
 
     } catch (err) {
-      console.error("Profile Fetch Error:", err);
+      console.error("Profile Error:", err);
       setLoading(false);
     }
   };
 
-  // Dark Mode & Helpers
+  // Theme Logic
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -154,8 +183,6 @@ export default function TeenVerse() {
       if (!error) { showToast('Feedback sent!'); e.target.reset(); } 
       else { showToast('Failed to send feedback', 'error'); }
   };
-  
-  const handleLegalNavigation = (page) => { setLegalPage(page); setView('legal'); };
 
   if (loading) {
       return (
@@ -169,51 +196,67 @@ export default function TeenVerse() {
    <>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
-      {view === 'home' && <LandingPage setView={setView} onFeedback={handleFeedback} darkMode={darkMode} toggleTheme={toggleTheme} onLegalClick={handleLegalNavigation} />}
-      {view === 'legal' && <Legal page={legalPage} onBack={() => setView('home')} />}
-      {view === 'terms' && <TermsAgreement onAgree={() => window.location.reload()} />}
-      {view === 'parent-approval' && <ParentApproval token={approvalToken} onApprovalComplete={() => setView('home')} />}
-      
-      {view === 'auth' && (
-        <Auth 
-            setView={setView} 
-            onLogin={(msg) => { showToast(msg); }} 
-            onSignUpSuccess={() => {
-                // Force a check immediately after signup
-                supabase.auth.getUser().then(({ data }) => {
-                    if(data?.session) handleSession(data.session);
-                });
-            }} 
-        />
-      )}
-      
-      {view === 'parent-login' && <ParentLogin />}
+      <Routes>
+        <Route path="/" element={
+            <LandingPage 
+                setView={setView} 
+                onFeedback={handleFeedback} 
+                darkMode={darkMode} 
+                toggleTheme={toggleTheme} 
+                onLegalClick={(page) => navigate(`/legal?page=${page}`)} 
+            />
+        } />
 
-      {/* Parent Dashboard */}
-      {view === 'parent-dashboard' && user?.type === 'parent' && (
-          <ParentDashboard 
-            user={user} 
-            onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out'); }} 
-          />
-      )}
-      
-      {view === 'admin' && user?.type === 'admin' && (
-          <AdminDashboard 
-            user={user} 
-            onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out'); }} 
-          />
-      )}
-      
-      {view === 'dashboard' && user && (user.type === 'client' || user.type === 'freelancer') && (
-          <Dashboard 
-            user={user} 
-            setUser={setUser} 
-            onLogout={async () => { await supabase.auth.signOut(); setView('home'); showToast('Logged out successfully'); }} 
-            showToast={showToast} 
-            darkMode={darkMode} 
-            toggleTheme={toggleTheme} 
-          />
-      )}
+        <Route path="/legal" element={<LegalWrapper />} />
+        <Route path="/terms-agreement" element={<TermsAgreement onAgree={() => window.location.reload()} />} />
+        <Route path="/parent-approval" element={<ParentApprovalWrapper />} />
+        
+        <Route path="/auth" element={
+            <Auth 
+                setView={setView} 
+                onLogin={(msg) => showToast(msg)} 
+                onSignUpSuccess={() => {
+                    supabase.auth.getUser().then(({ data }) => {
+                        if(data?.session) handleSession(data.session);
+                    });
+                }} 
+            />
+        } />
+        <Route path="/parent-login" element={<ParentLogin />} />
+
+        <Route path="/parent-dashboard" element={
+            user?.type === 'parent' ? (
+                <ParentDashboard 
+                    user={user} 
+                    onLogout={async () => { await supabase.auth.signOut(); navigate('/'); showToast('Logged out'); }} 
+                />
+            ) : <Navigate to="/auth" />
+        } />
+
+        <Route path="/admin" element={
+            user?.type === 'admin' ? (
+                <AdminDashboard 
+                    user={user} 
+                    onLogout={async () => { await supabase.auth.signOut(); navigate('/'); showToast('Logged out'); }} 
+                />
+            ) : <Navigate to="/auth" />
+        } />
+
+        <Route path="/dashboard/*" element={
+            user && (user.type === 'client' || user.type === 'freelancer') ? (
+                <Dashboard 
+                    user={user} 
+                    setUser={setUser} 
+                    onLogout={async () => { await supabase.auth.signOut(); navigate('/'); showToast('Logged out successfully'); }} 
+                    showToast={showToast} 
+                    darkMode={darkMode} 
+                    toggleTheme={toggleTheme} 
+                />
+            ) : <Navigate to="/auth" />
+        } />
+
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
    </>
   );
 }

@@ -4,15 +4,11 @@ import {
   Menu, LayoutDashboard, Briefcase, BookOpen, Settings, 
   Sun, Moon, Bell, User, Swords, ShieldCheck, Zap, ListChecks, Crown 
 } from 'lucide-react';
-
-// Hooks
 import { useDashboardLogic } from '../hooks/useDashboardLogic';
 
 // Components
 import DashboardSidebar from '../components/dashboard/DashboardSidebar'; 
-import DashboardModals from '../components/dashboard/DashboardModals'; 
-
-// Sections
+import DashboardModals from '../components/dashboard/DashboardModals';
 import Overview from '../components/dashboard/Overview';
 import Jobs from '../components/dashboard/Jobs';
 import MyServices from '../components/dashboard/MyServices';
@@ -26,7 +22,6 @@ import SettingsComp from '../components/dashboard/SettingsComp';
 import ResumeBuilder from '../components/dashboard/ResumeBuilder';
 import UserProfile from '../components/dashboard/UserProfile';
 
-// Animation
 const pageVariants = {
   initial: { opacity: 0, y: 10, scale: 0.98 },
   in: { opacity: 1, y: 0, scale: 1 },
@@ -88,6 +83,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       <main className="flex-1 flex flex-col min-w-0 relative z-10">
          <header className="sticky top-0 z-30 px-6 py-4">
              <div className="bg-white/70 dark:bg-[#0F172A]/70 backdrop-blur-xl border border-gray-200/50 dark:border-white/5 rounded-2xl shadow-sm px-6 py-3 flex justify-between items-center">
+               
                <div className="flex items-center gap-4">
                   <button onClick={() => setters.setMenuOpen(true)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl"><Menu/></button>
                    <div className="flex items-center gap-3">
@@ -107,7 +103,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                )}
 
                <div className="flex items-center gap-3">
-                  <div className="hidden md:flex items-center gap-1 bg-gray-100 dark:bg-black/30 p-1 rounded-full">
+                 <div className="hidden md:flex items-center gap-1 bg-gray-100 dark:bg-black/30 p-1 rounded-full">
                       <button onClick={() => !darkMode && toggleTheme()} className={`p-2 rounded-full transition-all ${!darkMode ? 'bg-white shadow-sm text-amber-500' : 'text-gray-400'}`}><Sun size={18}/></button>
                       <button onClick={() => darkMode && toggleTheme()} className={`p-2 rounded-full transition-all ${darkMode ? 'bg-gray-800 shadow-sm text-indigo-400' : 'text-gray-400'}`}><Moon size={18}/></button>
                   </div>
@@ -117,13 +113,13 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                       {notifications.length > 0 && <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-[#0F172A]"></span>}
                     </button>
                     {showNotifications && (
-                       <div className="absolute right-0 top-12 w-80 bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden animate-fade-in z-50">
+                      <div className="absolute right-0 top-12 w-80 bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden animate-fade-in z-50">
                           <div className="p-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-white/5">
                              <span className="font-bold text-sm dark:text-white">Notifications</span>
                              <button onClick={actions.handleClearNotifications} className="text-xs font-medium text-indigo-500 hover:text-indigo-600">Clear All</button>
                           </div>
                           <div className="max-h-64 overflow-y-auto">
-                           {notifications.length === 0 ? <div className="p-8 text-center text-gray-400 text-xs">No new alerts</div> : notifications.map(n => (
+                            {notifications.length === 0 ? <div className="p-8 text-center text-gray-400 text-xs">No new alerts</div> : notifications.map(n => (
                                <div key={n.id} className="p-3 border-b border-gray-50 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 text-xs text-gray-600 dark:text-gray-300 flex gap-2">
                                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0"></div>
                                   {n.message}
@@ -179,7 +175,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                        ref={profileCardRef} user={user} unlockedSkills={unlockedSkills} badges={badges} 
                        userLevel={userLevel} applications={applications} handleDownloadCard={actions.handleDownloadCard} 
                        handleShareToInstagram={actions.handleShareToInstagram} showToast={showToast} 
-                     />
+                      />
                     )}
 
                     {tab === 'profile' && !isClient && (
@@ -190,11 +186,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                     )}
 
                     {tab === 'records' && (
-                     <Records applications={applications} onDownloadInvoice={actions.handleInvoiceDownload} />
+                      <Records applications={applications} onDownloadInvoice={actions.handleInvoiceDownload} />
                     )}
                     
                     {tab === 'settings' && (
-                     <SettingsComp 
+                      <SettingsComp 
                        profileForm={profileForm} setProfileForm={setters.setProfileForm} isClient={isClient} 
                        handleUpdateProfile={actions.handleUpdateProfile} parentMode={parentMode} 
                        setParentMode={(val) => { setters.setParentMode(val); actions.logAction && actions.logAction('PARENT_MODE_TOGGLE', { enabled: val }); }}

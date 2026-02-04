@@ -8,7 +8,8 @@ import {
   UserCheck,
   Scale,
   Briefcase,
-  Gavel
+  Gavel,
+  CheckCircle
 } from "lucide-react";
 
 const Legal = ({ onBack, page = "terms" }) => {
@@ -58,6 +59,70 @@ const Legal = ({ onBack, page = "terms" }) => {
       )
     },
 
+    verification: {
+      title: "Identity & Verification",
+      icon: <CheckCircle size={20} />,
+      content: (
+        <div className="space-y-6 text-gray-600 dark:text-gray-300 leading-relaxed">
+           <p className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 text-blue-800 dark:text-blue-200 text-sm">
+            <strong>Compliance Notice:</strong> This section outlines our strict protocols regarding identity verification and DigiLocker usage.
+          </p>
+
+          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">1. DigiLocker Consent</h4>
+          <p>
+            By proceeding with verification, you explicitly consent to TeenVerseHub
+            requesting and accessing your government-issued documents (such as PAN
+            or Aadhaar XML, where legally permitted) via DigiLocker, solely for the purpose of identity
+            verification and regulatory compliance.
+          </p>
+          <p>
+            Access to DigiLocker is initiated only by the user through an explicit
+            verification request. TeenVerseHub does not access documents automatically
+            or without user action.
+          </p>
+          <p>
+            TeenVerseHub does not store your Aadhaar number or biometric information.
+            Only document references and verification status are stored.
+          </p>
+          <p className="text-sm">
+            Where DigiLocker is unavailable, TeenVerseHub may offer alternative lawful
+            verification methods with equivalent consent protections.
+          </p>
+
+          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">2. Minors and Guardian Verification</h4>
+          <p>
+            Users below the age of 18 are required to complete verification through
+            their parent or legal guardian. TeenVerseHub does not access or verify
+            government documents of minors directly. Only guardian documents are
+            used for verification and payout eligibility.
+          </p>
+
+          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">3. Purpose-Limited Use</h4>
+          <p>
+            Verification is performed only when required for financial actions such
+            as payouts or paid engagements. TeenVerseHub does not perform identity
+            verification at the time of signup.
+          </p>
+
+          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">4. Data Retention & Audits</h4>
+          <p>
+            Verification records are retained only as long as required for legal,
+            accounting, or regulatory purposes. Users may request deletion of their
+            data where permitted by law.
+          </p>
+          <p>
+            All verification access is logged with timestamps for audit and compliance
+            purposes.
+          </p>
+
+          <p className="text-xs text-gray-500 italic mt-4 border-t border-gray-200 dark:border-gray-800 pt-4">
+            Verification confirms identity and eligibility for payouts and does not
+            constitute endorsement, certification, or employment by TeenVerseHub.
+          </p>
+        </div>
+      )
+    },
+
     privacy: {
       title: "Privacy Policy",
       icon: <Lock size={20} />,
@@ -68,7 +133,7 @@ const Legal = ({ onBack, page = "terms" }) => {
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">1. Data Collection</h4>
           <ul className="list-disc ml-5 space-y-2">
             <li><strong>Personal Data:</strong> Name, Email, Phone, Date of Birth (for age verification).</li>
-            <li><strong>KYC Data:</strong> Government ID (Aadhaar/Passport) is collected for identity verification but is <strong>encrypted</strong> and strictly accessible only to authorized compliance staff.</li>
+            <li><strong>KYC Data:</strong> Government-issued documents voluntarily shared by the user via DigiLocker are used for identity verification but strictly adhere to our Identity & Verification policy.</li>
             <li><strong>Financial Data:</strong> Bank account or UPI details for payouts.</li>
           </ul>
 

@@ -5,10 +5,11 @@ import ReviewModal from '../modals/ReviewModal';
 import { 
   Clock, CheckCircle, XCircle, Package, Lock, Unlock, 
   FileText, ExternalLink, RefreshCw, AlertTriangle, Star, ShieldCheck, 
-  Receipt, Wallet, AlertOctagon, User
+  Receipt, Wallet, AlertOctagon, User, Banknote
 } from 'lucide-react';
 
-const Applications = ({ applications, isClient, onAction, onViewTimeline, parentMode, showToast }) => {
+// Added 'user' to props so we can check is_bank_linked
+const Applications = ({ user, applications, isClient, onAction, onViewTimeline, parentMode, showToast }) => {
   
   // --- STATES ---
   const [revisionModal, setRevisionModal] = useState(null); 
@@ -18,30 +19,25 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
 
   // --- HANDLERS ---
   
-  // 1. Send Revision Request
   const handleSendRevision = async (e) => {
     e.preventDefault();
     const message = e.target.revision_msg.value;
     if (!message) return;
-
     onAction('revision', revisionModal, { message }); 
     setRevisionModal(null);
   };
 
-  // 2. Submit Review
   const handleReviewSubmit = async (rating, tags) => {
      onAction('review', reviewApp, { rating, tags });
      setReviewApp(null);
   };
 
-  // 3. Confirm Payment Release
   const confirmRelease = () => {
     if (!releaseModal) return;
     onAction('pay', releaseModal); 
     setReleaseModal(null); 
   };
 
-  // 4. Confirm Rejection / Cancellation
   const handleRejectConfirm = (e) => {
     e.preventDefault();
     const reason = e.target.reason.value;
@@ -61,6 +57,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
     // B. PAID / COMPLETED STATE
     if (app.status === 'Paid') {
         if (isClient) {
+            // Client View (Review Logic)
             if (!app.client_rating) {
                 return (
                     <div className="flex flex-col items-end gap-1">
@@ -80,8 +77,26 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     </div>
                  );
             }
+        } else {
+            // 🚨 FREELANCER VIEW (WITHDRAWAL LOGIC) 🚨
+            // If user hasn't linked bank, show the button to trigger Modal
+            if (!user?.is_bank_linked) {
+                return (
+                    <div className="flex flex-col items-end gap-1">
+                        <span className="text-xs text-gray-500">Payment Released</span>
+                        <Button 
+                            size="sm" 
+                            onClick={() => onAction('withdraw_funds', app)} // Triggers 'bank_linkage' modal in logic
+                            className="bg-green-600 hover:bg-green-700 text-white shadow-lg animate-pulse"
+                        >
+                            <Banknote size={14} className="mr-1"/> Link Bank to Withdraw
+                        </Button>
+                    </div>
+                );
+            }
+            // If Bank Linked:
+            return <span className="text-emerald-500 text-xs font-bold flex items-center gap-1"><CheckCircle size={12}/> Funds Deposited</span>;
         }
-        return <span className="text-emerald-500 text-xs font-bold flex items-center gap-1"><CheckCircle size={12}/> Payment Received</span>;
     }
 
     // C. CLIENT ACTIONS
@@ -113,7 +128,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
       if (app.status === 'Submitted') {
         return (
           <div className="flex flex-col items-end gap-2">
-             <div className="flex items-center gap-3 text-xs mb-1 bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-3 text-xs mb-1 bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
                 {app.work_link ? (
                   <a href={app.work_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-500 hover:underline">
                     <ExternalLink size={12}/> Link
@@ -125,9 +140,9 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     <FileText size={12}/> {app.work_files.length} File(s)
                   </span>
                 ) : <span className="text-gray-400 italic text-[10px]">No Files</span>}
-             </div>
+              </div>
 
-             <div className="flex gap-2 justify-end">
+              <div className="flex gap-2 justify-end">
                 <Button size="sm" variant="outline" onClick={() => onAction('view_submission', app)}>View</Button>
                 <Button size="sm" variant="outline" onClick={() => setRevisionModal(app)} className="text-amber-600 border-amber-200 hover:bg-amber-50" title="Request Revision">
                     <RefreshCw size={14}/>
@@ -136,7 +151,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     <XCircle size={14}/>
                 </Button>
                 <Button size="sm" onClick={() => onAction('approve', app)} className="bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200 shadow-md">Approve</Button>
-             </div>
+              </div>
           </div>
         );
       }
@@ -160,6 +175,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
       }
     }
 
+    // D. FREELANCER ACTIONS
     if (!isClient) {
       if (app.status === 'Pending') return <span className="text-gray-400 text-xs italic">Waiting for client...</span>;
       if (app.status === 'Revision Requested') {
@@ -215,7 +231,6 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     </button>
                   </td>
                   
-                  {/* --- FREELANCER COLUMN --- */}
                   <td className="p-4 text-gray-600 dark:text-gray-300">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-400 to-purple-400 text-white flex items-center justify-center text-xs font-bold">
@@ -264,7 +279,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
 
        {/* --- MODALS SECTION --- */}
 
-       {/* 1. Revision Modal - Responsive Buttons */}
+       {/* 1. Revision Modal */}
        {revisionModal && (
         <Modal title="Request Revisions" onClose={() => setRevisionModal(null)}>
             <form onSubmit={handleSendRevision} className="space-y-4">
@@ -282,7 +297,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
         </Modal>
        )}
 
-       {/* 2. Release Modal - Responsive & 5% Fee */}
+       {/* 2. Release Modal */}
        {releaseModal && (
          <Modal title="Confirm Payment Release" onClose={() => setReleaseModal(null)}>
            <div className="space-y-6">
@@ -299,7 +314,6 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                     <span className="font-bold text-gray-900 dark:text-white">₹{releaseModal.bid_amount}</span>
                 </div>
                 
-                {/* 5% FEE CHANGE START */}
                 <div className="flex justify-between items-center text-sm text-amber-600 dark:text-amber-500">
                     <span className="flex items-center gap-1"><ShieldCheck size={12}/> Platform Fee (5%)</span>
                     <span className="font-medium">- ₹{(releaseModal.bid_amount * 0.05).toFixed(2)}</span>
@@ -311,8 +325,6 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
                         ₹{(releaseModal.bid_amount * 0.95).toFixed(2)}
                     </span>
                 </div>
-                {/* 5% FEE CHANGE END */}
-
              </div>
 
              <div className="flex flex-col sm:flex-row gap-3 pt-2">
@@ -325,7 +337,7 @@ const Applications = ({ applications, isClient, onAction, onViewTimeline, parent
          </Modal>
        )}
 
-       {/* 3. Reject Modal - Responsive Buttons */}
+       {/* 3. Reject Modal */}
        {rejectModal && (
         <Modal title="Reject & Refund" onClose={() => setRejectModal(null)}>
             <form onSubmit={handleRejectConfirm} className="space-y-4">

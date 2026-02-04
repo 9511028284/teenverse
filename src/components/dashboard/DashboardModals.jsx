@@ -35,15 +35,29 @@ const DashboardModals = ({ user, logic, showToast }) => {
         )}
 
         {/* KYC */}
-        {modal === 'kyc_verification' && (
-          <KycVerificationModal 
-            user={user} 
-            kycFile={kycFile} 
-            setKycFile={setKycFile} 
-            handleKycSubmit={actions.handleKycSubmit} 
-            onClose={() => setModal(null)} 
-          />
-        )}
+        {/* 🔐 MODE 1: IDENTITY (Apply Gate) */}
+      {modal === 'kyc_verification' && (
+        <KycVerificationModal 
+          mode="identity" // <--- TELLS MODAL TO SHOW ONLY ID STEPS
+          user={user}
+          kycFile={kycFile}
+          setKycFile={setters.setKycFile}
+          actions={actions} 
+          onClose={() => setters.setModal(null)}
+        />
+      )}
+
+      {/* 🏦 MODE 2: BANKING (Payout Gate) */}
+      {modal === 'bank_linkage' && (
+        <KycVerificationModal 
+          mode="banking" // <--- TELLS MODAL TO SHOW ONLY BANK STEPS
+          user={user}
+          kycFile={kycFile}
+          setKycFile={setters.setKycFile}
+          actions={actions} 
+          onClose={() => setters.setModal(null)}
+        />
+      )}
 
         {/* JOBS & SERVICES */}
         {modal === 'post-job' && <PostJobModal onClose={() => setModal(null)} onSubmit={actions.handlePostJob} />}
