@@ -5,10 +5,10 @@ import ReviewModal from '../modals/ReviewModal';
 import { 
   Clock, CheckCircle, XCircle, Package, Lock, Unlock, 
   FileText, ExternalLink, RefreshCw, AlertTriangle, Star, ShieldCheck, 
-  Receipt, Wallet, AlertOctagon, User, Banknote
+  Receipt, Wallet, AlertOctagon, User, Banknote, Hourglass
 } from 'lucide-react';
 
-// Added 'user' to props so we can check is_bank_linked
+// Added 'user' to props so we can check is_bank_linked for the Just-in-Time flow
 const Applications = ({ user, applications, isClient, onAction, onViewTimeline, parentMode, showToast }) => {
   
   // --- STATES ---
@@ -54,10 +54,47 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
         return <span className="text-red-500 text-xs font-bold flex items-center gap-1"><XCircle size={12}/> Refunded/Rejected</span>;
     }
 
-    // B. PAID / COMPLETED STATE
+    // ✅ B. PROCESSING STATE (Funds Released by Client -> Admin Hold)
+    // This is where the Freelancer is prompted to Link Bank
+    if (app.status === 'Processing') {
+        if (isClient) {
+            return (
+                <div className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md">
+                    <Hourglass size={12} className="animate-pulse"/> Processing Payout
+                </div>
+            );
+        } else {
+            // 🚨 FREELANCER VIEW: The Critical "Link Bank" Trigger
+            // If the user has NOT linked a bank account yet
+            if (!user?.is_bank_linked) {
+                return (
+                    <div className="flex flex-col items-end gap-1">
+                        <span className="text-xs text-green-600 font-bold">Payment Approved!</span>
+                        <Button 
+                            size="sm" 
+                            onClick={() => onAction('withdraw_funds', app)} // Triggers 'bank_linkage' modal
+                            className="bg-green-600 hover:bg-green-700 text-white shadow-lg animate-bounce"
+                        >
+                            <Banknote size={14} className="mr-1"/> Link Bank to Receive
+                        </Button>
+                    </div>
+                );
+            }
+            // If Bank IS Linked:
+            return (
+                <div className="flex flex-col items-end">
+                    <span className="text-amber-600 text-xs font-bold flex items-center gap-1">
+                        <Hourglass size={12}/> Payment in Queue
+                    </span>
+                    <span className="text-[10px] text-gray-400">Admin processing (24hrs)</span>
+                </div>
+            );
+        }
+    }
+
+    // C. PAID STATE (Admin has manually released RTGS)
     if (app.status === 'Paid') {
         if (isClient) {
-            // Client View (Review Logic)
             if (!app.client_rating) {
                 return (
                     <div className="flex flex-col items-end gap-1">
@@ -78,28 +115,12 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                  );
             }
         } else {
-            // 🚨 FREELANCER VIEW (WITHDRAWAL LOGIC) 🚨
-            // If user hasn't linked bank, show the button to trigger Modal
-            if (!user?.is_bank_linked) {
-                return (
-                    <div className="flex flex-col items-end gap-1">
-                        <span className="text-xs text-gray-500">Payment Released</span>
-                        <Button 
-                            size="sm" 
-                            onClick={() => onAction('withdraw_funds', app)} // Triggers 'bank_linkage' modal in logic
-                            className="bg-green-600 hover:bg-green-700 text-white shadow-lg animate-pulse"
-                        >
-                            <Banknote size={14} className="mr-1"/> Link Bank to Withdraw
-                        </Button>
-                    </div>
-                );
-            }
-            // If Bank Linked:
+            // Freelancer View
             return <span className="text-emerald-500 text-xs font-bold flex items-center gap-1"><CheckCircle size={12}/> Funds Deposited</span>;
         }
     }
 
-    // C. CLIENT ACTIONS
+    // D. CLIENT ACTIONS (Standard Flow)
     if (isClient) {
       if (app.status === 'Pending') {
         return (
@@ -175,7 +196,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
       }
     }
 
-    // D. FREELANCER ACTIONS
+    // E. FREELANCER ACTIONS (Standard Flow)
     if (!isClient) {
       if (app.status === 'Pending') return <span className="text-gray-400 text-xs italic">Waiting for client...</span>;
       if (app.status === 'Revision Requested') {
@@ -257,6 +278,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border
                       ${app.status === 'Paid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 
                         app.status === 'Rejected' ? 'bg-red-50 text-red-500 border-red-100' :
+                        app.status === 'Processing' ? 'bg-amber-100 text-amber-700 border-amber-200' :
                         app.status === 'Completed' ? 'bg-blue-100 text-blue-600 border-blue-200' :
                         app.status === 'Submitted' ? 'bg-purple-100 text-purple-600 border-purple-200' :
                         app.status === 'Revision Requested' ? 'bg-amber-100 text-amber-700 border-amber-200' :

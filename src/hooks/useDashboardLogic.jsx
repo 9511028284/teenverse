@@ -222,12 +222,15 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
 
     // Check Bank before Withdrawal
-    if (actionType === 'withdraw_funds') {
+   if (actionType === 'withdraw_funds') {
         if (!user.is_bank_linked) { 
-            showToast("🏦 Please link a Bank Account to withdraw.", "info");
-            setModal('bank_linkage');
+            // This opens the modal defined in DashboardModals.jsx
+            setModal('bank_linkage'); 
             return false;
         }
+        // If already linked, maybe show a toast "Bank already linked"
+        showToast("Bank account already active.", "success");
+        return true;
     }
 
     return true;
