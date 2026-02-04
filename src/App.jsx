@@ -211,7 +211,7 @@ export default function App() {
         <Route path="/terms-agreement" element={<TermsAgreement onAgree={() => window.location.reload()} />} />
         <Route path="/parent-approval" element={<ParentApprovalWrapper />} />
         
-        <Route path="/auth" element={
+        <Route path="/Auth" element={
             <Auth 
                 setView={setView} 
                 onLogin={(msg) => showToast(msg)} 

@@ -212,7 +212,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
 
       {/* Dynamic Backgrounds */}
       <div className={`fixed inset-0 pointer-events-none ${darkMode ? 'bg-grid-pattern opacity-30' : 'opacity-0'}`}></div>
-      <div className="fixed inset-0 pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03]"></div>
+      <div className="fixed inset-0 pointer-events-none opacity-[0.03]"></div>
       <motion.div style={{ scaleX }} className="fixed top-0 left-0 right-0 h-1.5 bg-[#ccff00] origin-left z-[100]" />
 
       {/* --- NAVBAR --- */}

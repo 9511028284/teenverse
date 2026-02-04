@@ -38,11 +38,7 @@ export const LoginView = ({ state, actions }) => {
            </div>
         </div>
       </div>
-       {state.CLOUDFLARE_SITE_KEY && (
-                    <div className="flex justify-center py-2 bg-black/20 rounded-xl">
-                        <Turnstile ref={refs.turnstileRef} siteKey={state.CLOUDFLARE_SITE_KEY} onSuccess={actions.setCaptchaToken} onExpire={() => actions.setCaptchaToken(null)} theme="dark" />
-                    </div>
-                )}
+       
       <button onClick={actions.handleFinalSubmit} disabled={state.loading} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all shadow-[0_0_30px_rgba(79,70,229,0.3)] flex justify-center items-center gap-2 transform active:scale-[0.98] uppercase tracking-widest text-sm">
          {state.loading ? <Loader2 className="animate-spin"/> : <>Login <ArrowRight size={18}/></>}
       </button>
