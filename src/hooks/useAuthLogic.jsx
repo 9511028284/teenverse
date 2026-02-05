@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '../supabase';
+import { supabase } from '../supabase'; // Ensure this path matches your project
 import { initRecaptcha, sendPhoneOtp, verifyPhoneOtp } from '../utils/phoneAuth';
 
 // LEGAL: Version control
@@ -12,12 +12,12 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
-  
+   
   // Verification
   const [showVerify, setShowVerify] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
   const [otp, setOtp] = useState('');
-  
+   
   // Password Reset
   const [showResetVerify, setShowResetVerify] = useState(false);
   const [resetOtp, setResetOtp] = useState('');
@@ -41,6 +41,8 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     nationality: '', dob: '', gender: 'Male', org: '', 
     parentEmail: '', referralCode: ''
   });
+  
+  // Age Logic State
   const [age, setAge] = useState(null);
   const [isMinor, setIsMinor] = useState(false);
 
@@ -58,8 +60,48 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     platform: navigator.platform 
   });
 
+  // --- CORE UPDATE LOGIC (Fixed Buffer Issue) ---
   const updateField = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      
+      // Calculate Age Instantly (No useEffect lag)
+      if (field === 'dob') {
+        if (!value) {
+            setAge(null);
+            setIsMinor(false);
+            return newData;
+        }
+
+        const birthDate = new Date(value);
+        const today = new Date();
+        let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+          calculatedAge--;
+        }
+
+        // 1. STRICT PLATFORM LIMIT: 14 to 19 ONLY
+        if (calculatedAge < 14 || calculatedAge > 19) {
+          showToast("Platform is exclusive to ages 14 to 19 only.");
+          setAge(null);
+          setIsMinor(false);
+          return { ...newData, dob: '' }; // Clear the invalid date
+        }
+
+        // 2. MINOR LOGIC (Under 18)
+        setAge(calculatedAge);
+        setIsMinor(calculatedAge < 18);
+        
+        // If they turn 18+, clear parent email requirement automatically
+        if (calculatedAge >= 18) {
+            newData.parentEmail = '';
+        }
+      }
+      
+      return newData;
+    });
   };
 
   // --- EFFECTS ---
@@ -81,22 +123,13 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   useEffect(() => {
     if (viewMode === 'signup') {
       setTimeout(() => {
-         try { initRecaptcha('recaptcha-container'); } 
-         catch (e) { console.warn("Recaptcha Init:", e); }
+          try { initRecaptcha('recaptcha-container'); } 
+          catch (e) { console.warn("Recaptcha Init:", e); }
       }, 1000);
     }
   }, [viewMode]);
 
-  useEffect(() => {
-    if (formData.dob) {
-      const birthDate = new Date(formData.dob);
-      const today = new Date();
-      let calculatedAge = today.getFullYear() - birthDate.getFullYear();
-      if (today.getMonth() < birthDate.getMonth() || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())) calculatedAge--;
-      setAge(calculatedAge);
-      setIsMinor(calculatedAge < 18);
-    }
-  }, [formData.dob]);
+  // NOTE: REMOVED formData.dob useEffect to prevent render loop/buffer
 
   // --- HANDLERS ---
   const handleAuthRedirect = async (user) => {
@@ -257,7 +290,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
         body: { action: 'send', email: formData.email.trim() }
       });
       if (error) throw error;
-      
+       
       setShowResetVerify(true);
       showToast("OTP sent! Check your email.", "success");
     } catch (err) {
@@ -304,7 +337,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
             body: { 
                 action: 'reset_password', 
                 email: formData.email.trim(),
-                otp: resetOtp.trim(), // Re-send OTP for double verification security
+                otp: resetOtp.trim(),
                 new_password: newPassword
             }
         });
@@ -336,7 +369,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
       setParentAgreed, setCaptchaToken, setPhoneOtp, updateField, showToast, setIsPhoneVerified,
       handleNext, handleBack: () => setStep(s => s - 1), 
       handleFinalSubmit, handlePhoneVerify, handleSendPhoneOtp,
-      
+       
       // Forgot Password Actions
       handleForgotPassword,
       handleVerifyResetOTP,

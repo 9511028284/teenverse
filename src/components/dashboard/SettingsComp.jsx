@@ -30,6 +30,16 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
   const kycStatus = profileForm.kyc_status || 'not_started';
   
   const kycConfig = {
+    // ✅ NEW STATUS: VERIFIED (Used by new Edge Function logic)
+    verified: {
+      color: "bg-emerald-500",
+      lightColor: "bg-emerald-50 dark:bg-emerald-900/20",
+      textColor: "text-emerald-700 dark:text-emerald-400",
+      icon: CheckCircle,
+      title: "Identity Verified",
+      desc: "Your account is fully verified & active."
+    },
+    // Legacy support for 'approved'
     approved: {
       color: "bg-emerald-500",
       lightColor: "bg-emerald-50 dark:bg-emerald-900/20",
@@ -121,16 +131,16 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
               onChange={e => setProfileForm({...profileForm, nationality: e.target.value})} 
             />
              {!isClient && (
-  <ModernInput 
-    label="Age" 
-    icon={Activity}
-    type="number"
-    value={profileForm.age || ""} 
-    readOnly // Prevents typing
-    disabled // Grays out the field and prevents focus
-    className="opacity-60 cursor-not-allowed bg-gray-100 dark:bg-gray-800" // Visual feedback
-  />
-)}
+              <ModernInput 
+                label="Age" 
+                icon={Activity}
+                type="number"
+                value={profileForm.age || ""} 
+                readOnly // Prevents typing
+                disabled // Grays out the field and prevents focus
+                className="opacity-60 cursor-not-allowed bg-gray-100 dark:bg-gray-800" // Visual feedback
+              />
+            )}
           </div>
         </div>
 
@@ -184,7 +194,8 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
                             {statusUI.desc}
                         </p>
                     </div>
-                    {kycStatus !== 'approved' && kycStatus !== 'pending' && (
+                    {/* Hides button if status is verified OR approved OR pending */}
+                    {kycStatus !== 'verified' && kycStatus !== 'approved' && kycStatus !== 'pending' && (
                         <button onClick={onOpenKyc} className="bg-gray-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
                             Start Verification <ChevronRight size={18} />
                         </button>

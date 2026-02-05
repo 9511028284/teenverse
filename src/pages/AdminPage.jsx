@@ -275,15 +275,30 @@ const AdminDashboard = ({ onLogout }) => {
     setPayoutLoading(true);
     setPayoutModalOpen(true);
     
-    // Fetch Freelancer Banking Details
-    const { data: bankData, error } = await api.getUserBankingDetails(order.freelancer_id);
-    
-    if (error || !bankData) {
+    // 🛠️ FIX: Direct DB Query instead of API wrapper to avoid context errors
+    // We check for user banking details in the 'user_banking' table
+    try {
+        const { data: bankData, error } = await supabase
+            .from('user_banking')
+            .select('*')
+            .eq('user_id', order.freelancer_id)
+            .maybeSingle(); // Use maybeSingle to avoid 0 row errors
+        
+        if (error) {
+            console.error("Bank Fetch Error:", error);
+            setPayoutData({ order, bankDetails: null });
+            showToast("Error fetching bank details.", "error");
+        } else if (!bankData) {
+            setPayoutData({ order, bankDetails: null });
+            showToast("Warning: No bank details found for this user.", "error");
+        } else {
+            setPayoutData({ order, bankDetails: bankData });
+        }
+    } catch (err) {
+        console.error("Critical Bank Fetch Error:", err);
         setPayoutData({ order, bankDetails: null });
-        showToast("Warning: No bank details found for this user.", "error");
-    } else {
-        setPayoutData({ order, bankDetails: bankData });
     }
+    
     setPayoutLoading(false);
   };
 
@@ -539,7 +554,7 @@ const AdminDashboard = ({ onLogout }) => {
                                      </div>
                                      {reportFilter === 'pending' && (
                                          <button onClick={() => openCaseFile(report)} className="text-xs flex items-center gap-1 bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-100 transition-colors">
-                                             <Eye size={12} /> Review Evidence
+                                              <Eye size={12} /> Review Evidence
                                          </button>
                                      )}
                                 </div>
@@ -553,7 +568,7 @@ const AdminDashboard = ({ onLogout }) => {
                                  {reportFilter === 'pending' && (
                                     <div className="flex gap-2 mt-2 pt-4 border-t border-gray-100 dark:border-gray-700">
                                         <button onClick={() => handleResolveReport(report.id, 'dismissed')} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"><XCircle size={16}/> Dismiss</button>
-                                        <button onClick={() => handleBanUser(report.reported_user_id, 'freelancers')} className="px-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg" title="Ban User"><Trash2 size={18}/></button>
+                                        <button onClick={() => handleBanUser(report.reported_user_id, 'freelancers')} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-colors shadow-lg shadow-red-500/30 flex items-center justify-center gap-2"><Trash2 size={18}/> Ban User & Resolve</button>
                                     </div>
                                 )}
                             </div>
@@ -776,7 +791,7 @@ const AdminDashboard = ({ onLogout }) => {
             <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col">
                 <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20">
                     <h2 className="font-bold text-xl text-emerald-800 dark:text-emerald-400 flex items-center gap-2">
-                       <DollarSign size={20}/> Manual Payout
+                        <DollarSign size={20}/> Manual Payout
                     </h2>
                     <button onClick={() => setPayoutModalOpen(false)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"><XCircle className="text-gray-400" /></button>
                 </div>

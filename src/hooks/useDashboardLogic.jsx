@@ -6,11 +6,12 @@ import { jsPDF } from "jspdf";
 import { QUIZZES, APP_STATUS } from '../utils/constants';
 
 // ------------------------------------------
-// 🛠️ SANDBOX CONFIGURATION
+// 🚀 PRODUCTION CONFIGURATION
 // ------------------------------------------
-const KYC_MODE = 'sandbox'; 
+const KYC_MODE = 'production'; // Set to 'production' for live verification flows
 // ------------------------------------------
 
+// Helper: Robust Date Checker
 const isSameDay = (dateString) => {
   if (!dateString) return false;
   const today = new Date();
@@ -134,7 +135,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // --- INITIALIZATION ---
   useEffect(() => {
     if (window.Cashfree) {
-      cashfree.current = new window.Cashfree({ mode: "sandbox" });
+      // ✅ CHANGED TO PRODUCTION: Initializes SDK in Live Mode
+      cashfree.current = new window.Cashfree({ mode: "production" });
     }
   }, []);
 
@@ -222,7 +224,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
 
     // Check Bank before Withdrawal
-   if (actionType === 'withdraw_funds') {
+    if (actionType === 'withdraw_funds') {
         if (!user.is_bank_linked) { 
             // This opens the modal defined in DashboardModals.jsx
             setModal('bank_linkage'); 
@@ -239,11 +241,11 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // ------------------------------------------
   // ⚡ ACTION 1: IDENTITY VERIFICATION
   // ------------------------------------------
-  const handleIdentitySubmit = async ({ ageGroup, panNumber, kycFile }) => {
+  const handleIdentitySubmit = async ({ ageGroup, panNumber, kycFile, guardianConsent }) => {
     if (!kycFile) return showToast("Please select an ID file.", "error");
     if (!panNumber) return showToast("PAN Number is required.", "error");
 
-    showToast("Verifying Identity (Sandbox)...", "info");
+    showToast("Verifying Identity...", "info");
 
     try {
         const fileName = `${user.id}/${Date.now()}_kyc`;
@@ -256,7 +258,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
                 user_id: user.id, 
                 age_group: ageGroup,
                 pan_number: panNumber, 
-                file_path: fileName
+                file_path: fileName,
+                guardian_consent: guardianConsent // Pass consent flag
             }
         });
 
@@ -269,7 +272,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         setUser(prev => ({ 
             ...prev, 
             kyc_status: 'verified', 
-            kyc_type: ageGroup 
+            kyc_type: ageGroup,
+            id_proof_url: fileName
         }));
         setModal(null);
         return true; 
@@ -286,31 +290,41 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // ------------------------------------------
   const handleBankSubmit = async (bankDetails, ageGroup) => {
     showToast("Linking Bank Account...", "info");
+    
     try {
-        const beneficiaryId = `BEN-${Date.now().toString().slice(-6)}`;
-        
-        const { error: bankError } = await supabase.from('user_banking').insert({
-            user_id: user.id,
-            account_holder_name: bankDetails.account_holder_name,
-            account_number: bankDetails.account_number,
-            ifsc_code: bankDetails.ifsc_code,
-            bank_name: bankDetails.bank_name,
-            is_guardian_account: ageGroup === 'minor',
-            guardian_name: ageGroup === 'minor' ? bankDetails.guardian_name : null,
-            guardian_relationship: ageGroup === 'minor' ? bankDetails.guardian_relationship : null,
-            parent_consent_verified: bankDetails.consent || false,
-            beneficiary_id: beneficiaryId
+        const { data, error: fnError } = await supabase.functions.invoke('kyc-handler', {
+            body: { 
+                action: 'LINK_BANK', 
+                user_id: user.id, 
+                age_group: ageGroup,
+                bank_details: bankDetails 
+            }
         });
 
-        if (bankError) throw bankError;
+        // 🔍 IMPROVED ERROR HANDLING
+        if (fnError) {
+            // Try to parse the real error from the response body if available
+            let detailedError = fnError.message;
+            if (fnError instanceof Error && fnError.context) {
+               try {
+                   const errBody = await fnError.context.json();
+                   if (errBody.error) detailedError = errBody.error;
+               } catch(e) { /* ignore json parse error */ }
+            }
+            throw new Error(detailedError || "Banking Service Unreachable");
+        }
 
-        await logAction('BANK_LINKED', { ifsc: bankDetails.ifsc_code });
+        if (!data.success) throw new Error(data.error || "Bank Linking Failed");
+
+        await logAction('BANK_LINKED', { ifsc: bankDetails.ifsc_code, mode: 'sandbox' });
         showToast("🎉 Bank Account Linked! Withdrawals enabled.", "success");
         
         setUser(prev => ({ 
             ...prev, 
-            is_bank_linked: true 
+            is_bank_linked: true,
+            kyc_status: 'approved'
         }));
+        
         setModal(null);
 
         if (KYC_MODE === 'sandbox') {
@@ -318,7 +332,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         }
 
     } catch (err) {
-        showToast("Banking linkage failed: " + err.message, "error");
+        console.error("Bank Submit Error:", err);
+        showToast("Banking failed: " + err.message, "error");
     }
   };
 
@@ -328,7 +343,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const formData = new FormData(e.target);
     const budget = parseFloat(formData.get('budget'));
     const title = formData.get('title');
-    if (budget < 100) { showToast("Minimum budget is ₹100", "error"); return; }
+    
+    // ✅ CHANGED: Minimum budget validation from 100 to 1
+    if (budget < 1) { 
+        showToast("Minimum budget is ₹1", "error"); 
+        return; 
+    }
+    
     if (title.length < 5) { showToast("Job title is too short", "error"); return; }
     
     const jobData = { 
@@ -627,6 +648,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
   const handleAppAction = async (action, app, payload = null) => {
     if (action === 'view_profile') { handleViewProfile(app.freelancer_id); return; }
+    
+    // ✅ NEW ACTION: WITHDRAWAL TRIGGER (For Just-in-Time Flow)
+    if (action === 'withdraw_funds') {
+        checkKycLock('withdraw_funds'); // This will open the 'bank_linkage' modal
+        return;
+    }
+
     const RESTRICTED = ['approve', 'pay', 'release_escrow'];
     if (parentMode && RESTRICTED.includes(action)) { showToast("Parent Mode Active: Action Locked", "error"); return; }
     if (action === 'accept') { handleAcceptApplication(app); return; }
