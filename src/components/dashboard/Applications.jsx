@@ -8,17 +8,13 @@ import {
   Receipt, Wallet, AlertOctagon, User, Banknote, Hourglass
 } from 'lucide-react';
 
-// Added 'user' to props so we can check is_bank_linked for the Just-in-Time flow
 const Applications = ({ user, applications, isClient, onAction, onViewTimeline, parentMode, showToast }) => {
   
-  // --- STATES ---
   const [revisionModal, setRevisionModal] = useState(null); 
   const [reviewApp, setReviewApp] = useState(null); 
   const [releaseModal, setReleaseModal] = useState(null); 
   const [rejectModal, setRejectModal] = useState(null);
 
-  // --- HANDLERS ---
-  
   const handleSendRevision = async (e) => {
     e.preventDefault();
     const message = e.target.revision_msg.value;
@@ -46,16 +42,13 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
     setRejectModal(null);
   };
 
-  // --- RENDER ACTIONS LOGIC ---
   const renderActions = (app) => {
     
-    // A. REJECTED STATE
     if (app.status === 'Rejected') {
         return <span className="text-red-500 text-xs font-bold flex items-center gap-1"><XCircle size={12}/> Refunded/Rejected</span>;
     }
 
     // ✅ B. PROCESSING STATE (Funds Released by Client -> Admin Hold)
-    // This is where the Freelancer is prompted to Link Bank
     if (app.status === 'Processing') {
         if (isClient) {
             return (
@@ -64,15 +57,15 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                 </div>
             );
         } else {
-            // 🚨 FREELANCER VIEW: The Critical "Link Bank" Trigger
-            // If the user has NOT linked a bank account yet
+            // 🚨 FREELANCER VIEW
+            // Button only shows if !is_bank_linked
             if (!user?.is_bank_linked) {
                 return (
                     <div className="flex flex-col items-end gap-1">
                         <span className="text-xs text-green-600 font-bold">Payment Approved!</span>
                         <Button 
                             size="sm" 
-                            onClick={() => onAction('withdraw_funds', app)} // Triggers 'bank_linkage' modal
+                            onClick={() => onAction('withdraw_funds', app)} 
                             className="bg-green-600 hover:bg-green-700 text-white shadow-lg animate-bounce"
                         >
                             <Banknote size={14} className="mr-1"/> Link Bank to Receive
@@ -92,7 +85,6 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
         }
     }
 
-    // C. PAID STATE (Admin has manually released RTGS)
     if (app.status === 'Paid') {
         if (isClient) {
             if (!app.client_rating) {
@@ -115,12 +107,10 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                  );
             }
         } else {
-            // Freelancer View
             return <span className="text-emerald-500 text-xs font-bold flex items-center gap-1"><CheckCircle size={12}/> Funds Deposited</span>;
         }
     }
 
-    // D. CLIENT ACTIONS (Standard Flow)
     if (isClient) {
       if (app.status === 'Pending') {
         return (
@@ -196,7 +186,6 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
       }
     }
 
-    // E. FREELANCER ACTIONS (Standard Flow)
     if (!isClient) {
       if (app.status === 'Pending') return <span className="text-gray-400 text-xs italic">Waiting for client...</span>;
       if (app.status === 'Revision Requested') {

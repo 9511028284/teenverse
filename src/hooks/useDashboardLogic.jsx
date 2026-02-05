@@ -6,12 +6,11 @@ import { jsPDF } from "jspdf";
 import { QUIZZES, APP_STATUS } from '../utils/constants';
 
 // ------------------------------------------
-// 🚀 PRODUCTION CONFIGURATION
+// 🛠️ SANDBOX CONFIGURATION
 // ------------------------------------------
-const KYC_MODE = 'production'; // Set to 'production' for live verification flows
+const KYC_MODE = 'sandbox'; 
 // ------------------------------------------
 
-// Helper: Robust Date Checker
 const isSameDay = (dateString) => {
   if (!dateString) return false;
   const today = new Date();
@@ -26,13 +25,11 @@ const isSameDay = (dateString) => {
 export const useDashboardLogic = (user, setUser, showToast) => {
   const isClient = user?.type === 'client';
    
-  // --- UI & TAB STATES ---
   const [tab, setTab] = useState('overview');
   const [menuOpen, setMenuOpen] = useState(false);
   const [zenMode, setZenMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- DATA STATES ---
   const [jobs, setJobs] = useState([]);
   const [services, setServices] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -40,29 +37,24 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [referralStats, setReferralStats] = useState({ count: 0, earnings: 0 });
   const [totalEarnings, setTotalEarnings] = useState(0);
 
-  // --- INTERACTION STATES ---
   const [showNotifications, setShowNotifications] = useState(false);
   const [modal, setModal] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null); 
   const [selectedApp, setSelectedApp] = useState(null);
    
-  // --- ENERGY & REWARD STATES ---
   const [energy, setEnergy] = useState(20);
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const hasCheckedReward = useRef(false);
 
-  // --- PROFILE VIEW STATE ---
   const [viewProfileId, setViewProfileId] = useState(null);
   const [publicProfileData, setPublicProfileData] = useState(null);
   const [editProfileModal, setEditProfileModal] = useState(false);
 
-  // --- KYC & QUIZ STATES ---
   const [kycFile, setKycFile] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
 
-  // --- HYBRID DELIVERY STATES ---
   const [timelineApp, setTimelineApp] = useState(null);
   const [viewWorkApp, setViewWorkApp] = useState(null);
    
@@ -70,7 +62,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [profileForm, setProfileForm] = useState(user ? { ...user } : {});
   const [paymentModal, setPaymentModal] = useState(null);
 
-  // --- FEATURE STATES ---
   const [parentMode, setParentMode] = useState(false);
   const [unlockedSkills, setUnlockedSkills] = useState(user?.unlockedSkills || []);
   const [badges, setBadges] = useState([]);
@@ -82,7 +73,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const profileCardRef = useRef(null);
   const cashfree = useRef(null);
 
-  // --- DERIVED VALUES ---
   const currentXP = unlockedSkills.length * 500 + (badges.length * 200);
   const nextLevelXP = (Math.floor(currentXP / 2000) + 1) * 2000;
   const progressPercent = Math.min((currentXP / nextLevelXP) * 100, 100);
@@ -94,7 +84,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     (job.tags?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
-  // --- LOGGING ---
   const logAction = async (actionType, details = {}) => {
     try {
       await supabase.from('audit_logs').insert({
@@ -105,7 +94,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     } catch (err) { console.error("Audit Logging Failed:", err); }
   };
 
-  // --- DAILY REWARD ---
   const handleDailyRewardCheck = (lastLoginDate) => {
     if (isClient) return;
     if (hasCheckedReward.current) return;
@@ -132,14 +120,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     setIsClaiming(false);
   };
 
-  // --- INITIALIZATION ---
   useEffect(() => {
     if (window.Cashfree) {
-      // ✅ CHANGED TO PRODUCTION: Initializes SDK in Live Mode
-      cashfree.current = new window.Cashfree({ mode: "production" });
+      cashfree.current = new window.Cashfree({ mode: "sandbox" });
     }
   }, []);
 
+  // --- 🛠️ UPDATED DATA LOADER ---
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
@@ -150,24 +137,44 @@ export const useDashboardLogic = (user, setUser, showToast) => {
             const dashboardPromise = api.fetchDashboardData(user);
             const badgesPromise = supabase.from('user_badges').select('badge_name, badges(icon)').eq('user_id', user.id);
 
+            // 1. Fetch Profile Data (Energy, KYC Status)
             let userProfileData = null;
             if (!isClient) {
                 const { data } = await supabase
                     .from('freelancers')
-                    .select('energy_points, last_login_date')
+                    .select('energy_points, last_login_date, kyc_status')
                     .eq('id', user.id)
-                    .single();
+                    .maybeSingle();
                 userProfileData = data;
             }
 
-            const [badgeRes, dashboardRes] = await Promise.all([badgesPromise, dashboardPromise]);
+            // 2. Fetch Banking Status (Exists in user_banking?)
+            const bankingPromise = supabase
+                .from('user_banking')
+                .select('id', { count: 'exact', head: true })
+                .eq('user_id', user.id);
+
+            const [badgeRes, dashboardRes, bankRes] = await Promise.all([badgesPromise, dashboardPromise, bankingPromise]);
+            
             if (!isMounted) return;
 
+            // 3. Update User Context with Fresh Data
+            const isBankLinked = (bankRes.count || 0) > 0;
+            
             if (!isClient && userProfileData) {
                 setEnergy(userProfileData.energy_points || 20);
                 if (!hasCheckedReward.current) {
                     handleDailyRewardCheck(userProfileData.last_login_date); 
                 }
+                // SYNC USER STATE
+                setUser(prev => ({
+                    ...prev,
+                    is_bank_linked: isBankLinked, // ✅ Persist banking status
+                    kyc_status: userProfileData.kyc_status || prev.kyc_status
+                }));
+            } else {
+                // For Clients
+                 setUser(prev => ({ ...prev, is_bank_linked: isBankLinked }));
             }
 
             const formattedBadges = badgeRes.data?.map(b => ({
@@ -202,19 +209,11 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
     loadData();
     return () => { isMounted = false; };
-  }, [user, isClient, showToast, jobs.length]);
+  }, [user?.id, isClient]); // Only re-run if ID changes
 
-  // ------------------------------------------
-  // 🔐 SMART LOCK SYSTEM (Updated for Clients)
-  // ------------------------------------------
   const checkKycLock = (actionType) => {
-    
-    // ✅ 1. CLIENT BYPASS: Clients face NO KYC locks for posting/hiring/paying
     if (isClient) return true;
 
-    // 🔒 2. FREELANCER CHECKS (Keep these strict)
-    
-    // Check Identity before Apply
     if (actionType === 'apply_paid') {
         if (user.kyc_status !== 'verified') {
             showToast("🔒 Identity Verification Required to apply.", "info");
@@ -223,29 +222,21 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         }
     }
 
-    // Check Bank before Withdrawal
     if (actionType === 'withdraw_funds') {
         if (!user.is_bank_linked) { 
-            // This opens the modal defined in DashboardModals.jsx
             setModal('bank_linkage'); 
             return false;
         }
-        // If already linked, maybe show a toast "Bank already linked"
         showToast("Bank account already active.", "success");
         return true;
     }
-
     return true;
   };
 
-  // ------------------------------------------
-  // ⚡ ACTION 1: IDENTITY VERIFICATION
-  // ------------------------------------------
   const handleIdentitySubmit = async ({ ageGroup, panNumber, kycFile, guardianConsent }) => {
     if (!kycFile) return showToast("Please select an ID file.", "error");
-    if (!panNumber) return showToast("PAN Number is required.", "error");
-
-    showToast("Verifying Identity...", "info");
+    
+    showToast("Verifying Identity (Sandbox)...", "info");
 
     try {
         const fileName = `${user.id}/${Date.now()}_kyc`;
@@ -259,12 +250,12 @@ export const useDashboardLogic = (user, setUser, showToast) => {
                 age_group: ageGroup,
                 pan_number: panNumber, 
                 file_path: fileName,
-                guardian_consent: guardianConsent // Pass consent flag
+                guardian_consent: guardianConsent 
             }
         });
 
-        if (fnError) throw new Error(fnError.message || "Verification Service Unreachable");
-        if (!data.success) throw new Error(data.error || "Identity Verification Failed");
+        if (fnError) throw new Error(fnError.message);
+        if (!data.success) throw new Error(data.error);
 
         await logAction('IDENTITY_VERIFIED', { mode: KYC_MODE });
         showToast("✅ Identity Verified! You can now apply.", "success");
@@ -285,9 +276,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
   };
 
-  // ------------------------------------------
-  // 🏦 ACTION 2: BANK ACCOUNT
-  // ------------------------------------------
   const handleBankSubmit = async (bankDetails, ageGroup) => {
     showToast("Linking Bank Account...", "info");
     
@@ -301,15 +289,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
             }
         });
 
-        // 🔍 IMPROVED ERROR HANDLING
         if (fnError) {
-            // Try to parse the real error from the response body if available
             let detailedError = fnError.message;
             if (fnError instanceof Error && fnError.context) {
                try {
                    const errBody = await fnError.context.json();
                    if (errBody.error) detailedError = errBody.error;
-               } catch(e) { /* ignore json parse error */ }
+               } catch(e) { }
             }
             throw new Error(detailedError || "Banking Service Unreachable");
         }
@@ -322,7 +308,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         setUser(prev => ({ 
             ...prev, 
             is_bank_linked: true,
-            kyc_status: 'approved'
+            kyc_status: 'verified' 
         }));
         
         setModal(null);
@@ -343,13 +329,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const formData = new FormData(e.target);
     const budget = parseFloat(formData.get('budget'));
     const title = formData.get('title');
-    
-    // ✅ CHANGED: Minimum budget validation from 100 to 1
-    if (budget < 1) { 
-        showToast("Minimum budget is ₹1", "error"); 
-        return; 
-    }
-    
+    if (budget < 100) { showToast("Minimum budget is ₹100", "error"); return; }
     if (title.length < 5) { showToast("Job title is too short", "error"); return; }
     
     const jobData = { 
@@ -433,7 +413,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   };
 
   const handleAcceptApplication = async (app) => {
-    // Clients don't need KYC checks here anymore
     if (isClient && !checkKycLock('accept_job')) return; 
 
     if (!cashfree.current) { showToast("Payment Gateway initializing... please wait.", "error"); return; }
@@ -527,83 +506,27 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       const fee = isFreelancer ? (baseAmount * 0.05) : 0;
       const finalAmount = baseAmount - fee;
 
-      const billedToName = isFreelancer ? "TeenVerseHub Payouts" : (user.name || "Client");
-      const otherPartyLabel = isFreelancer ? "Payee (You):" : "Freelancer:";
-      const otherPartyName = isFreelancer ? (user.name || "Freelancer") : (app.freelancer_name || "Freelancer");
-
       doc.setFontSize(22);
       doc.setFont("helvetica", "bold");
       doc.text("TeenVerseHub Invoice", 20, 20);
-      
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      doc.text(isFreelancer ? "Payout Statement" : "Payment Receipt", 20, 26);
-      
       doc.text(`Invoice ID: ${invoiceId}`, 20, 45);
       doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 50);
       const titleToUse = customTitle || selectedJob?.title || 'Freelance Service';
       doc.text(`Job Title: ${titleToUse}`, 20, 55);
 
-      doc.setDrawColor(200, 200, 200);
-      doc.line(20, 65, 190, 65);
-
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
-      
-      doc.text(isFreelancer ? "Payer:" : "Billed To:", 20, 80);
-      doc.setFont("helvetica", "normal");
-      doc.text(billedToName, 20, 86);
-
-      doc.setFont("helvetica", "bold");
-      doc.text(otherPartyLabel, 120, 80); 
-      doc.setFont("helvetica", "normal");
-      doc.text(otherPartyName, 120, 86); 
-      
-      const boxHeight = isFreelancer ? 30 : 20;
-      doc.setFillColor(248, 248, 248);
-      doc.rect(115, 100, 80, boxHeight, 'F');
-
-      doc.setFontSize(10);
-      doc.setTextColor(0, 0, 0);
-
-      if (isFreelancer) {
-          doc.text(`Gross Amount:`, 120, 108);
-          doc.text(`₹${Number(baseAmount).toFixed(2)}`, 190, 108, { align: 'right' });
-          
-          doc.setTextColor(220, 50, 50); 
-          doc.text(`Platform Fee (5%):`, 120, 114); 
-          doc.text(`- ₹${fee.toFixed(2)}`, 190, 114, { align: 'right' });
-          
-          doc.setTextColor(0, 0, 0);
-          doc.setFont("helvetica", "bold");
-          doc.text(`Net Earnings:`, 120, 124); 
-          doc.setFontSize(12);
-          doc.text(`₹${finalAmount.toFixed(2)}`, 190, 124, { align: 'right' });
-      } else {
-          doc.setFontSize(12);
-          doc.text(`Total Paid:`, 120, 113);
-          doc.setFont("helvetica", "bold");
-          doc.text(`₹${Number(baseAmount).toFixed(2)}`, 190, 113, { align: 'right' });
-      }
-      
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "italic");
-      doc.setTextColor(150, 150, 150);
-      doc.text("System generated document.", 20, 145);
+      doc.text(`Total Amount: ${baseAmount}`, 20, 70);
+      if (isFreelancer) doc.text(`Fee (5%): -${fee}`, 20, 76);
+      doc.text(`Net Amount: ${finalAmount}`, 20, 82);
       
       const pdfBlob = doc.output('blob');
       const filePath = `${user.id}/${app.id}_invoice.pdf`; 
 
-      const { error: uploadError } = await supabase.storage
-        .from('invoices')
-        .upload(filePath, pdfBlob, { upsert: true });
-
+      const { error: uploadError } = await supabase.storage.from('invoices').upload(filePath, pdfBlob, { upsert: true });
       if (uploadError) throw uploadError;
-
       return filePath;
-
     } catch (err) {
-      console.error("Invoice Error:", err);
       showToast("Invoice generation failed.", "error");
       return null;
     }
@@ -649,9 +572,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const handleAppAction = async (action, app, payload = null) => {
     if (action === 'view_profile') { handleViewProfile(app.freelancer_id); return; }
     
-    // ✅ NEW ACTION: WITHDRAWAL TRIGGER (For Just-in-Time Flow)
     if (action === 'withdraw_funds') {
-        checkKycLock('withdraw_funds'); // This will open the 'bank_linkage' modal
+        checkKycLock('withdraw_funds');
         return;
     }
 
@@ -659,7 +581,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     if (parentMode && RESTRICTED.includes(action)) { showToast("Parent Mode Active: Action Locked", "error"); return; }
     if (action === 'accept') { handleAcceptApplication(app); return; }
     
-    // Clients bypass this check because checkKycLock returns true for them
     if (action === 'pay' && !checkKycLock('release_escrow')) { return; }
     
     if (action === 'submit') { setSelectedApp(app); setModal('submit_work'); return; }
@@ -688,10 +609,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
              setApplications(prev => prev.map(a => {
                 if (a.id !== app.id) return a;
                 if (action === 'approve') return { ...a, status: 'Completed', completed_at: now };
-                
-                // 🛑 CLIENT FUNDS HELD IN ADMIN PROCESS
                 if (action === 'pay') return { ...a, status: 'Processing', is_escrow_held: true };
-                
                 if (action === 'reject') return { ...a, status: 'Rejected' };
                 if (action === 'revision') return { ...a, status: 'Revision Requested' };
                 if (action === 'review') return { ...a, client_rating: payload?.rating }; 
