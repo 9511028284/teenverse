@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
-import { Search, MapPin, ArrowUpRight, Sparkles, Filter, Briefcase, ChevronDown, ChevronUp, Clock, Calendar, DollarSign } from 'lucide-react';
+import { 
+  Search, MapPin, ArrowUpRight, Sparkles, Filter, Briefcase, 
+  ChevronDown, ChevronUp, Clock, Calendar, DollarSign, Flag, AlertTriangle 
+} from 'lucide-react';
 import Button from '../ui/Button';
+import Modal from '../ui/Modal'; // Ensure this matches your file structure
 
 // --- HELPER: TIME AGO ---
 const getTimeAgo = (dateString) => {
@@ -18,8 +22,30 @@ const getTimeAgo = (dateString) => {
     return 'Just now';
 };
 
-const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, setModal, setActiveChat, setTab, setSelectedJob }) => {
+// Added 'onAction' to props to handle reporting
+const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, setModal, setActiveChat, setTab, setSelectedJob, onAction }) => {
   
+  // --- LOCAL STATE FOR REPORTING ---
+  const [reportModal, setReportModal] = useState(null);
+
+  const handleReportSubmit = (e) => {
+    e.preventDefault();
+    if (!reportModal) return;
+
+    const formData = new FormData(e.target);
+    const reason = formData.get('reason');
+    const description = formData.get('description');
+
+    // Trigger the action if passed from parent, or log it
+    if (onAction) {
+        onAction('report', reportModal, { reason, description });
+    } else {
+        console.warn("onAction prop missing in Jobs.jsx. Report data:", { ...reportModal, reason, description });
+    }
+    
+    setReportModal(null);
+  };
+
   const JobCard = ({ data, type }) => {
     // State to handle Read More / Read Less toggle
     const [isExpanded, setIsExpanded] = useState(false);
@@ -131,6 +157,35 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                    <div className="flex items-center text-gray-900 dark:text-white font-black text-lg">
                        <span className="text-sm text-gray-400 font-medium mr-0.5">₹</span>{data.price || data.budget}
                    </div>
+                   
+                   {/* 🚩 NEW: REPORT BUTTON */}
+                   {/* 🚩 REPORT BUTTON */}
+<button 
+  onClick={(e) => {
+     e.stopPropagation();
+     
+     // 1. Prepare the payload explicitly
+     const reportPayload = { 
+        target_type: 'job', 
+        target_id: data.id, // <--- Force this key to be 'target_id'
+        reported_user_id: isClient ? data.freelancer_id : data.client_id 
+     };
+
+     // 2. Send it via onAction (Preferred)
+     if (onAction) {
+         console.log("🚀 Sending Report from Jobs:", reportPayload);
+         onAction('report', reportPayload);
+     } 
+     // 3. Fallback for local state (Safety net)
+     else if (setModal) {
+         setModal(reportPayload); 
+     }
+  }}
+  className="text-[10px] text-gray-300 hover:text-red-500 flex items-center gap-1 mt-1 transition-colors"
+  title="Report this post"
+>
+  <Flag size={10} /> Report
+</button>
                </div>
                
                <button 
@@ -210,6 +265,52 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Void Detected</h3>
            <p className="text-gray-500 dark:text-gray-400 text-sm">No signals matching your query.</p>
         </div>
+      )}
+
+      {/* --- 🆕 REPORT MODAL --- */}
+      {reportModal && (
+        <Modal title="Report Post" onClose={() => setReportModal(null)}>
+            <form onSubmit={handleReportSubmit} className="space-y-4">
+                <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl border border-red-100 dark:border-red-800 flex gap-3">
+                    <div className="bg-red-100 dark:bg-red-800 p-2 rounded-full h-fit text-red-600 dark:text-red-200">
+                       <Flag size={18} />
+                    </div>
+                    <div>
+                       <h4 className="font-bold text-red-800 dark:text-red-200 text-sm">Trust & Safety</h4>
+                       <p className="text-xs text-red-700 dark:text-red-300 mt-1">
+                         Reports are reviewed by admins. False reporting may lead to a ban.
+                       </p>
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Reason</label>
+                    <select name="reason" required className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-red-500">
+                      <option value="">Select a reason...</option>
+                      <option value="Scam/Fraud">Scam or Fraudulent Activity</option>
+                      <option value="Harassment">Harassment / Abusive Content</option>
+                      <option value="Misleading">Misleading Description</option>
+                      <option value="Inappropriate">Inappropriate Content</option>
+                      <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Details</label>
+                    <textarea 
+                      name="description" 
+                      required 
+                      placeholder="Please describe the issue..." 
+                      className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none min-h-[100px] text-sm dark:bg-gray-800 dark:text-white dark:border-gray-700 resize-none"
+                    ></textarea>
+                </div>
+                
+                <div className="flex justify-end gap-3 pt-2">
+                     <Button variant="ghost" type="button" onClick={() => setReportModal(null)}>Cancel</Button>
+                     <Button className="bg-red-600 hover:bg-red-700 text-white">Submit Report</Button>
+                </div>
+            </form>
+        </Modal>
       )}
 
     </div>

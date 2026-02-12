@@ -2,9 +2,13 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Menu, LayoutDashboard, Briefcase, BookOpen, Settings, 
-  Sun, Moon, Bell, User, Swords, ShieldCheck, Zap, ListChecks, Crown 
+  Sun, Moon, Bell, User, Swords, ShieldCheck, Zap, ListChecks, Crown, Flag 
 } from 'lucide-react';
 import { useDashboardLogic } from '../hooks/useDashboardLogic';
+
+// ✅ FIXED: Missing UI Imports
+import Button from '../components/ui/Button'; 
+import Modal from '../components/ui/Modal';   
 
 // Components
 import DashboardSidebar from '../components/dashboard/DashboardSidebar'; 
@@ -32,11 +36,14 @@ const pageTransition = { type: "tween", ease: "anticipate", duration: 0.4 };
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
   const logic = useDashboardLogic(user, setUser, showToast);
   const { state, setters, actions } = logic;
+  
+  // ✅ FIXED: Added reportModal to destructuring
   const { 
       tab, menuOpen, isLoading, isClient, energy, notifications, showNotifications,
       jobs, services, filteredJobs, searchTerm, applications, referralStats, totalEarnings,
       badges, unlockedSkills, userLevel, progressPercent, zenMode, parentMode, profileForm,
-      portfolioItems, rawPortfolioText, isAiLoading, SAFE_QUIZZES, profileCardRef
+      portfolioItems, rawPortfolioText, isAiLoading, SAFE_QUIZZES, profileCardRef, isQuizLoading,
+      reportModal 
   } = state;
 
   const getTabIcon = () => {
@@ -146,7 +153,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                         energy={energy}
                       />
                     )}
-                    {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setters.setSearchTerm} setModal={setters.setModal} setTab={setters.setTab} setSelectedJob={setters.setSelectedJob} parentMode={parentMode} />}
+                    {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setters.setSearchTerm} setModal={setters.setModal} setTab={setters.setTab} setSelectedJob={setters.setSelectedJob} parentMode={parentMode} onAction={actions.handleAppAction} />}
                     {tab === 'posted-jobs' && isClient && <ClientPostedJobs jobs={jobs} setModal={setters.setModal} handleDeleteJob={actions.handleDeleteJob} />}
                     
                     {tab === 'my-services' && !isClient && (
@@ -167,14 +174,23 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                       />
                     )}
                   
-                    {tab === 'academy' && !isClient && <Academy unlockedSkills={unlockedSkills} setModal={setters.setModal} quizzes={SAFE_QUIZZES} />}
+                    {tab === 'academy' && !isClient && (
+                      <Academy 
+                        unlockedSkills={unlockedSkills} 
+                        setModal={setters.setModal} 
+                        quizzes={SAFE_QUIZZES}
+                        startAiQuiz={actions.startAiQuiz} 
+                        isQuizLoading={isQuizLoading}     
+                      />
+                    )}
+
                     {tab === 'portfolio' && !isClient && <Portfolio rawPortfolioText={rawPortfolioText} setRawPortfolioText={setters.setRawPortfolioText} handleAiGenerate={actions.handleAiGenerate} isAiLoading={isAiLoading} portfolioItems={portfolioItems} />}
                     
                     {tab === 'profile-card' && !isClient && (
                       <ProfileCard 
-                       ref={profileCardRef} user={user} unlockedSkills={unlockedSkills} badges={badges} 
-                       userLevel={userLevel} applications={applications} handleDownloadCard={actions.handleDownloadCard} 
-                       handleShareToInstagram={actions.handleShareToInstagram} showToast={showToast} 
+                        ref={profileCardRef} user={user} unlockedSkills={unlockedSkills} badges={badges} 
+                        userLevel={userLevel} applications={applications} handleDownloadCard={actions.handleDownloadCard} 
+                        handleShareToInstagram={actions.handleShareToInstagram} showToast={showToast} 
                       />
                     )}
 
@@ -191,11 +207,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                     
                     {tab === 'settings' && (
                       <SettingsComp 
-                       profileForm={profileForm} setProfileForm={setters.setProfileForm} isClient={isClient} 
-                       handleUpdateProfile={actions.handleUpdateProfile} parentMode={parentMode} 
-                       setParentMode={(val) => { setters.setParentMode(val); actions.logAction && actions.logAction('PARENT_MODE_TOGGLE', { enabled: val }); }}
-                       onOpenKyc={() => setters.setModal('kyc_verification')} 
-                     />
+                        profileForm={profileForm} setProfileForm={setters.setProfileForm} isClient={isClient} 
+                        handleUpdateProfile={actions.handleUpdateProfile} parentMode={parentMode} 
+                        setParentMode={(val) => { setters.setParentMode(val); actions.logAction && actions.logAction('PARENT_MODE_TOGGLE', { enabled: val }); }}
+                        onOpenKyc={() => setters.setModal('kyc_verification')} 
+                      />
                     )}
 
                     <footer className="text-center py-6 text-[10px] text-gray-400 dark:text-gray-600 space-y-1 mt-auto">
@@ -210,6 +226,52 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
       {/* MODALS */}
       <DashboardModals user={user} logic={logic} showToast={showToast} />
+
+      {/* ✅ REPORT MODAL (Uses logic setters & actions) */}
+      {reportModal && (
+        <Modal title="Submit a Report" onClose={() => setters.setReportModal(null)}>
+          <form onSubmit={actions.handleReportSubmit} className="space-y-4">
+            <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl border border-red-100 dark:border-red-800 flex gap-3">
+              <div className="bg-red-100 dark:bg-red-800 p-2 rounded-full h-fit text-red-600 dark:text-red-200">
+                 <Flag size={18} />
+              </div>
+              <div>
+                 <h4 className="font-bold text-red-800 dark:text-red-200 text-sm">Trust & Safety</h4>
+                 <p className="text-xs text-red-700 dark:text-red-300 mt-1">
+                   Reports are taken seriously. False reporting may lead to account restrictions.
+                 </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Reason</label>
+              <select name="reason" required className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-red-500">
+                <option value="">Select a reason...</option>
+                <option value="Scam/Fraud">Scam or Fraudulent Activity</option>
+                <option value="Harassment">Harassment or Abusive Behavior</option>
+                <option value="Non-Payment">Payment Issue / Non-Payment</option>
+                <option value="Inappropriate">Inappropriate Content</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Details</label>
+              <textarea 
+                name="description" 
+                required 
+                placeholder="Please describe the issue..." 
+                className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none min-h-[100px] text-sm dark:bg-gray-800 dark:text-white dark:border-gray-700 resize-none"
+              ></textarea>
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-2">
+               <Button variant="ghost" type="button" onClick={() => setters.setReportModal(null)}>Cancel</Button>
+               <Button className="bg-red-600 hover:bg-red-700 text-white">Submit Report</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
     </div>
   );

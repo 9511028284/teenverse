@@ -7,10 +7,36 @@ const ActiveQuizModal = ({ modalData, currentQuestionIndex, score, setScore, set
 
   const questions = modalData.data.questions;
   const currentQ = questions[currentQuestionIndex];
-  const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
+  
+  // 🛑 FIX 1: Handle case where AI returns "question" but Static quizzes return "q"
+  const questionText = currentQ.question || currentQ.q; 
+  const correctAns = currentQ.correctAnswer || currentQ.a;
 
-  // Generate a fake "hash" for the question to make it look technical
+  const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
   const questionHash = `0x${(currentQuestionIndex + 99).toString(16).toUpperCase()}F`;
+
+  const handleOptionClick = (opt) => {
+      // 🛑 FIX 2: Check against the correct answer variable
+      if (opt === correctAns) {
+          setScore(prev => prev + 1);
+          showToast("Correct! +10 XP", "success");
+      } else {
+          showToast("Wrong answer!", "error");
+      }
+
+      if (currentQuestionIndex + 1 < questions.length) {
+          setCurrentQuestionIndex(prev => prev + 1);
+      } else {
+          // Quiz Finished
+          const finalScore = (score + (opt === correctAns ? 1 : 0));
+          const passThreshold = Math.ceil(questions.length * 0.6); // 60% to pass
+          const passed = finalScore >= passThreshold;
+          
+          // 🛑 FIX 3: Pass the 'isGeneral' flag to logic so it knows reward type
+          handleQuizSelection(modalData.category, passed, modalData.isGeneral);
+          onClose();
+      }
+  };
 
   return (
     <Modal 
@@ -26,84 +52,55 @@ const ActiveQuizModal = ({ modalData, currentQuestionIndex, score, setScore, set
         
         {/* --- 1. HUD HEADER (Progress & Stats) --- */}
         <div className="bg-[#020617] rounded-2xl p-4 border border-white/10 relative overflow-hidden">
-            {/* Background Grid/Noise */}
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-overlay"></div>
-            
-            <div className="relative z-10 flex justify-between items-end mb-3">
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-gray-500 font-mono uppercase tracking-widest mb-1 flex items-center gap-1">
-                        <Target size={10} /> Progress Tracker
-                    </span>
-                    <span className="text-xl font-black text-white">
-                        {String(currentQuestionIndex + 1).padStart(2, '0')} <span className="text-gray-600 text-sm">/ {String(questions.length).padStart(2, '0')}</span>
-                    </span>
+            {/* Background Grid */}
+            <div className="absolute inset-0 opacity-10" 
+                 style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 1px)', backgroundSize: '16px 16px' }}>
+            </div>
+
+            <div className="relative z-10 flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2 text-xs font-mono text-indigo-400">
+                    <Hash size={12}/> 
+                    <span>ID: {questionHash}</span>
                 </div>
-                <div className="flex flex-col items-end">
-                    <span className="text-[10px] text-gray-500 font-mono uppercase tracking-widest mb-1 flex items-center gap-1">
-                        <Trophy size={10} /> Current Yield
-                    </span>
-                    <span className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
-                        {score * 100} XP
-                    </span>
+                <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                   <span>Sector {currentQuestionIndex + 1}/{questions.length}</span>
                 </div>
             </div>
 
-            {/* Futuristic Progress Bar */}
-            <div className="h-2 w-full bg-gray-800 rounded-full overflow-hidden relative">
-                <div 
-                    className="h-full bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-500 relative transition-all duration-500 ease-out"
-                    style={{ width: `${progress}%` }}
-                >
-                    {/* Shimmer Effect */}
-                    <div className="absolute inset-0 bg-white/30 w-full h-full animate-[shimmer_2s_infinite]"></div>
-                    <div className="absolute right-0 top-0 bottom-0 w-1 bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]"></div>
-                </div>
+            {/* Progress Bar */}
+            <div className="h-1 bg-gray-800 rounded-full overflow-hidden mb-6">
+                <div className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)] transition-all duration-500" 
+                     style={{ width: `${progress}%` }}></div>
+            </div>
+
+            {/* 🛑 FIX 4: DISPLAY THE QUESTION TEXT HERE */}
+            <h3 className="text-xl md:text-2xl font-bold text-white leading-relaxed mb-2">
+                {questionText}
+            </h3>
+            {/* ------------------------------------------------ */}
+
+            <div className="flex gap-2 mt-4">
+                <span className="px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-[10px] text-indigo-400 font-mono">
+                    XP_REWARD: {modalData.isGeneral ? "50" : "500"}
+                </span>
+                <span className="px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-mono">
+                    DIFFICULTY: LOW
+                </span>
             </div>
         </div>
 
-        {/* --- 2. THE QUESTION TERMINAL --- */}
+        {/* --- 2. OPTIONS GRID --- */}
         <div className="flex-grow">
-            <div className="flex items-center gap-2 mb-4 opacity-50">
-                <Hash size={12} className="text-indigo-400"/>
-                <span className="text-[10px] font-mono text-indigo-400">{questionHash} // DECRYPTING...</span>
-            </div>
-
-            <h3 className="text-2xl md:text-3xl font-bold text-white leading-tight mb-8">
-               {currentQ.q}
-            </h3>
-
-            {/* --- 3. OPTIONS (Interactive Blocks) --- */}
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-3">
                {currentQ.options.map((opt, i) => (
                  <button 
-                   key={i} 
-                   onClick={() => {
-                     const isCorrect = opt === currentQ.a;
-                     if (isCorrect) setScore(score + 1);
-                     
-                     // Next Question or Finish
-                     if (currentQuestionIndex + 1 < questions.length) {
-                       setCurrentQuestionIndex(currentQuestionIndex + 1);
-                     } else {
-                       // FINISH LOGIC
-                       const finalScore = score + (isCorrect ? 1 : 0);
-                       if (finalScore >= 7) { 
-                         handleQuizSelection(modalData.category, true); 
-                       } else {
-                         showToast(`System Failure. Score: ${finalScore}/10. Rebooting...`, "error");
-                         onClose();
-                         setCurrentQuestionIndex(0);
-                         setScore(0);
-                       }
-                     }
-                   }} 
-                   className="group relative w-full text-left p-[1px] rounded-xl overflow-hidden transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] focus:outline-none"
+                    key={i}
+                    onClick={() => handleOptionClick(opt)}
+                    className="group relative p-4 rounded-xl bg-gray-50/5 dark:bg-white/5 border border-gray-200/10 dark:border-white/10 hover:border-indigo-500/50 hover:bg-indigo-500/10 transition-all text-left overflow-hidden"
                  >
-                    {/* Gradient Border on Hover */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"/>
                     
-                    {/* Button Content */}
-                    <div className="relative bg-[#0F172A] hover:bg-[#0F172A]/95 rounded-[11px] p-5 border border-white/5 flex items-center justify-between group-hover:border-transparent">
+                    <div className="relative z-10 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-xs font-bold text-gray-500 group-hover:text-white group-hover:bg-indigo-500 group-hover:border-indigo-400 transition-all font-mono">
                                 {String.fromCharCode(65 + i)}
@@ -112,8 +109,6 @@ const ActiveQuizModal = ({ modalData, currentQuestionIndex, score, setScore, set
                                 {opt}
                             </span>
                         </div>
-                        
-                        {/* Hover Arrow */}
                         <ChevronRight className="text-white opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" size={18}/>
                     </div>
                  </button>
@@ -127,7 +122,7 @@ const ActiveQuizModal = ({ modalData, currentQuestionIndex, score, setScore, set
                 <Zap size={10} className="text-yellow-500"/> Live Session
             </span>
             <span className="flex items-center gap-1 opacity-50">
-                <HelpCircle size={10} /> 70% Required to Pass
+                <HelpCircle size={10} /> 60% Required to Pass
             </span>
         </div>
 

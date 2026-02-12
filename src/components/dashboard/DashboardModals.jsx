@@ -59,6 +59,8 @@ const DashboardModals = ({ user, logic, showToast }) => {
         />
       )}
 
+      
+
         {/* JOBS & SERVICES */}
         {modal === 'post-job' && <PostJobModal onClose={() => setModal(null)} onSubmit={actions.handlePostJob} />}
         {modal === 'create-service' && <CreateServiceModal onClose={() => setModal(null)} onSubmit={actions.handleCreateService} />}

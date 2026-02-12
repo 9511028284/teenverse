@@ -8,7 +8,7 @@ import { QUIZZES, APP_STATUS } from '../utils/constants';
 // ------------------------------------------
 // 🚀 PRODUCTION CONFIGURATION
 // ------------------------------------------
-const KYC_MODE = 'production'; // Set to 'production' for live verification flows
+const KYC_MODE = 'production'; 
 // ------------------------------------------
 
 // Helper: Robust Date Checker
@@ -31,6 +31,9 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [zenMode, setZenMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // --- REPORTING STATE ---
+  const [reportModal, setReportModal] = useState(null); 
 
   // --- DATA STATES ---
   const [jobs, setJobs] = useState([]);
@@ -61,6 +64,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [kycFile, setKycFile] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
+  const [isQuizLoading, setIsQuizLoading] = useState(false);
 
   // --- HYBRID DELIVERY STATES ---
   const [timelineApp, setTimelineApp] = useState(null);
@@ -135,7 +139,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // --- INITIALIZATION ---
   useEffect(() => {
     if (window.Cashfree) {
-      // ✅ CHANGED TO PRODUCTION: Initializes SDK in Live Mode
       cashfree.current = new window.Cashfree({ mode: "production" });
     }
   }, []);
@@ -205,16 +208,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   }, [user, isClient, showToast, jobs.length]);
 
   // ------------------------------------------
-  // 🔐 SMART LOCK SYSTEM (Updated for Clients)
+  // 🔐 SMART LOCK SYSTEM
   // ------------------------------------------
   const checkKycLock = (actionType) => {
-    
-    // ✅ 1. CLIENT BYPASS: Clients face NO KYC locks for posting/hiring/paying
+    // 1. CLIENT BYPASS
     if (isClient) return true;
 
-    // 🔒 2. FREELANCER CHECKS (Keep these strict)
-    
-    // Check Identity before Apply
+    // 2. FREELANCER CHECKS
     if (actionType === 'apply_paid') {
         if (user.kyc_status !== 'verified') {
             showToast("🔒 Identity Verification Required to apply.", "info");
@@ -223,14 +223,11 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         }
     }
 
-    // Check Bank before Withdrawal
     if (actionType === 'withdraw_funds') {
         if (!user.is_bank_linked) { 
-            // This opens the modal defined in DashboardModals.jsx
             setModal('bank_linkage'); 
             return false;
         }
-        // If already linked, maybe show a toast "Bank already linked"
         showToast("Bank account already active.", "success");
         return true;
     }
@@ -238,8 +235,67 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     return true;
   };
 
+  // ✅ FIXED: Report Handler moved outside checkKycLock
+  // Inside useDashboardLogic.jsx
+
+  const handleReportSubmit = async (e) => {
+    e.preventDefault();
+    if (!reportModal) return;
+
+    // 🔍 DEBUG: See exactly what data we have
+    console.log("📝 Submitting Report with State:", reportModal);
+
+    const formData = new FormData(e.target);
+
+    // 1. ROBUST ID FINDER
+    // Checks all possible places the ID might be hiding
+    const resolvedTargetId = 
+        reportModal.target_id || 
+        reportModal.id || 
+        reportModal.job_id;
+
+    // 2. ROBUST TYPE FINDER
+    let resolvedType = reportModal.target_type || reportModal.type;
+    // Auto-detect type if missing
+    if (!resolvedType) {
+        resolvedType = reportModal.bid_amount ? 'application' : 'job';
+    }
+
+    // 3. ROBUST USER FINDER
+    const resolvedReportedUser = 
+        reportModal.reported_user_id || 
+        reportModal.reportedId || 
+        reportModal.freelancer_id || 
+        reportModal.client_id;
+
+    // 🛑 STOP if ID is missing (Prevents the DB Crash)
+    if (!resolvedTargetId) {
+        showToast("Error: Content ID is missing. Cannot submit.", "error");
+        console.error("❌ Failed to find target_id in:", reportModal);
+        return;
+    }
+
+    const reportData = {
+        target_type: resolvedType,
+        target_id: String(resolvedTargetId), // Convert to string to be safe
+        reported_user_id: resolvedReportedUser,
+        reason: formData.get('reason'),
+        description: formData.get('description')
+    };
+
+    showToast("Submitting report...", "info");
+    const { error } = await api.submitReport(reportData);
+
+    if (error) {
+        console.error("API Error:", error);
+        showToast(error.message, "error");
+    } else {
+        showToast("Report submitted successfully.", "success");
+        setReportModal(null);
+    }
+  };
   // ------------------------------------------
-  // ⚡ ACTION 1: IDENTITY VERIFICATION
+  // ⚡ ACTION: IDENTITY VERIFICATION
   // ------------------------------------------
   const handleIdentitySubmit = async ({ ageGroup, panNumber, kycFile, guardianConsent }) => {
     if (!kycFile) return showToast("Please select an ID file.", "error");
@@ -259,7 +315,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
                 age_group: ageGroup,
                 pan_number: panNumber, 
                 file_path: fileName,
-                guardian_consent: guardianConsent // Pass consent flag
+                guardian_consent: guardianConsent 
             }
         });
 
@@ -286,39 +342,34 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   };
 
   // ------------------------------------------
-  // 🏦 ACTION 2: BANK ACCOUNT
+  // 🏦 ACTION: BANK ACCOUNT
   // ------------------------------------------
   const handleBankSubmit = async (bankDetails, ageGroup) => {
     showToast("Linking Bank Account...", "info");
-    
     try {
-        // Call the Edge Function
         const { data, error: fnError } = await supabase.functions.invoke('kyc-handler', {
             body: { 
                 action: 'LINK_BANK', 
                 user_id: user.id, 
                 age_group: ageGroup,
-                bank_details: bankDetails // Pass the form data
+                bank_details: bankDetails 
             }
         });
 
         if (fnError) throw new Error(fnError.message || "Banking Service Unreachable");
         if (!data.success) throw new Error(data.error || "Bank Linking Failed");
 
-        // ✅ LOGGING: Uses KYC_MODE constant
         await logAction('BANK_LINKED', { ifsc: bankDetails.ifsc_code, mode: KYC_MODE });
         showToast("🎉 Bank Account Linked! Withdrawals enabled.", "success");
         
-        // Update Local State to unlock UI immediately
         setUser(prev => ({ 
             ...prev, 
             is_bank_linked: true,
-            kyc_status: 'approved' // Fully approved now
+            kyc_status: 'approved' 
         }));
         
         setModal(null);
 
-        // Add Badge if configured (Optional logic for Prod)
         if (KYC_MODE === 'sandbox') {
              setBadges(prev => [...prev, { name: 'Verified', icon: 'ShieldCheck' }]);
         }
@@ -329,14 +380,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
   };
 
- const handlePostJob = async (e) => {
+  const handlePostJob = async (e) => {
     e.preventDefault();
     if (!checkKycLock('post_job')) return;
     const formData = new FormData(e.target);
     const budget = parseFloat(formData.get('budget'));
     const title = formData.get('title');
     
-    // ✅ CHANGED: Minimum budget validation from 100 to 1
     if (budget < 1) { 
         showToast("Minimum budget is ₹1", "error"); 
         return; 
@@ -359,6 +409,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         setJobs([jobData, ...jobs]); 
     }
   };
+
   const handleDeleteJob = async (id) => {
     if(!window.confirm("Are you sure you want to delete this job?")) return;
     const { error } = await api.deleteJob(id);
@@ -395,19 +446,23 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     if (parentMode) { showToast("Parent Mode Active", "error"); return; }
     if (!checkKycLock('apply_paid')) return;
     
-    if (energy < energyCost) { showToast("Not enough energy! ⚡ Wait for daily reward or pass a quiz.", "error"); return; }
-
+    // --- SKILL VERIFICATION LOGIC ---
     if (!isClient && selectedJob) {
       const jobCategory = selectedJob.category || 'dev';
       if (!unlockedSkills.includes(jobCategory)) {
-        showToast(`Locked! Pass the ${jobCategory} quiz in Academy first.`, "error");
-        setModal('quiz-locked');
-        return;
+        if (confirm(`⚠️ Skill Verification Required\n\nYou need a verified '${jobCategory}' badge to apply for "${selectedJob.title}".\n\nWould you like to take the AI Assessment now?`)) {
+           await startAiQuiz(jobCategory, selectedJob.title);
+        }
+        return; 
       }
     }
+
+    if (energy < energyCost) { showToast("Not enough energy! ⚡", "error"); return; }
+
     if (applications.some(app => app.job_id === selectedJob.id && app.freelancer_id === user.id)) { 
       showToast("Already applied!", "error"); return; 
     }
+
     const { success, error: energyError } = await api.deductEnergy(user.id, energyCost);
     if (!success) { showToast(energyError.message, "error"); return; }
     
@@ -418,13 +473,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       client_id: selectedJob.client_id, cover_letter: formData.get('cover_letter'), 
       bid_amount: formData.get('bid_amount'), is_educational_waiver_signed: educationConsent 
     };
+    
     const { error } = await api.applyForJob(appData, selectedJob.title);
     if (error) { showToast(error.message, 'error'); } 
     else { showToast('Applied successfully!'); setModal(null); }
   };
 
   const handleAcceptApplication = async (app) => {
-    // Clients don't need KYC checks here anymore
     if (isClient && !checkKycLock('accept_job')) return; 
 
     if (!cashfree.current) { showToast("Payment Gateway initializing... please wait.", "error"); return; }
@@ -640,17 +695,29 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const handleAppAction = async (action, app, payload = null) => {
     if (action === 'view_profile') { handleViewProfile(app.freelancer_id); return; }
     
-    // ✅ NEW ACTION: WITHDRAWAL TRIGGER (For Just-in-Time Flow)
     if (action === 'withdraw_funds') {
-        checkKycLock('withdraw_funds'); // This will open the 'bank_linkage' modal
+        checkKycLock('withdraw_funds'); 
         return;
     }
+
+    // ✅ FIXED: Report Action triggers Modal
+if (action === 'report') {
+    // If payload/app contains the data, set it to state
+    const reportData = app || payload; 
+    console.log("🚩 Report Action Triggered with:", reportData);
+    
+    setReportModal({
+        target_type: reportData.target_type || 'job',
+        target_id: reportData.id || reportData.target_id, // Store it safely
+        reported_user_id: reportData.reported_user_id
+    });
+    return;
+}
 
     const RESTRICTED = ['approve', 'pay', 'release_escrow'];
     if (parentMode && RESTRICTED.includes(action)) { showToast("Parent Mode Active: Action Locked", "error"); return; }
     if (action === 'accept') { handleAcceptApplication(app); return; }
     
-    // Clients bypass this check because checkKycLock returns true for them
     if (action === 'pay' && !checkKycLock('release_escrow')) { return; }
     
     if (action === 'submit') { setSelectedApp(app); setModal('submit_work'); return; }
@@ -679,10 +746,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
              setApplications(prev => prev.map(a => {
                 if (a.id !== app.id) return a;
                 if (action === 'approve') return { ...a, status: 'Completed', completed_at: now };
-                
-                // 🛑 CLIENT FUNDS HELD IN ADMIN PROCESS
                 if (action === 'pay') return { ...a, status: 'Processing', is_escrow_held: true };
-                
                 if (action === 'reject') return { ...a, status: 'Rejected' };
                 if (action === 'revision') return { ...a, status: 'Revision Requested' };
                 if (action === 'review') return { ...a, client_rating: payload?.rating }; 
@@ -729,22 +793,55 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     else { await logAction('PUBLIC_PROFILE_UPDATED', {}); showToast("Public profile updated!", "success"); setUser({ ...user, ...updates }); setEditProfileModal(false); }
   };
 
-  const handleQuizSelection = async (categoryId, passed) => {
+  const startAiQuiz = async (categoryId, specificTopic = 'Basics') => {
+    setIsQuizLoading(true);
+    setModal(null); 
+    showToast(`🤖 Generating ${specificTopic} assessment...`, "info");
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-academy-quiz', {
+        body: { category: categoryId, subCategory: specificTopic }
+      });
+      if (error) throw error;
+      setModal({ type: 'quiz', category: categoryId, data: data });
+    } catch (err) {
+      console.error(err);
+      showToast("Quiz generation failed. Try again.", "error");
+    } finally {
+      setIsQuizLoading(false);
+    }
+  };
+
+  const handleQuizSelection = async (categoryId, passed, isGeneral = false) => {
     if (passed) {
       setTimeout(async () => {
+        if (isGeneral) {
+             await api.awardEnergy(user.id, 2); 
+             setEnergy(prev => prev + 2);
+             showToast("🎉 Module Complete! +50 XP & +2 Energy ⚡", "success");
+             setModal(null); setScore(0); setCurrentQuestionIndex(0);
+             return;
+        }
+
         const newSkills = [...unlockedSkills, categoryId];
         setUnlockedSkills(newSkills);
         await api.unlockSkill(user.id, newSkills); 
         setUser({ ...user, unlockedSkills: newSkills });
-        await api.awardEnergy(user.id, 5); 
+        
+        await api.awardEnergy(user.id, 5);
         setEnergy(prev => prev + 5);
+        
         if (!badges.some(b => b.name === 'Skill Certified')) {
             setBadges(prev => [...prev, { name: 'Skill Certified', icon: 'Award' }]);
             await supabase.from('user_badges').insert({ user_id: user.id, badge_name: 'Skill Certified' });
         }
-        showToast("🎉 Correct! +500 XP & +5 Energy ⚡", "success");
+        
+        showToast("🏆 CERTIFIED! +500 XP & +5 Energy ⚡", "success");
         setModal(null); setScore(0); setCurrentQuestionIndex(0);
+
       }, 1000);
+    } else {
+        showToast("❌ Failed. Try again to earn rewards.", "error");
     }
   };
 
@@ -803,13 +900,16 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         kycFile, currentQuestionIndex, score, timelineApp, viewWorkApp, searchTerm, profileForm,
         paymentModal, parentMode, unlockedSkills, badges, portfolioItems, rawPortfolioText,
         isAiLoading, SAFE_QUIZZES, profileCardRef, currentXP, nextLevelXP, progressPercent,
-        userLevel, filteredJobs
+        userLevel, filteredJobs,
+        isQuizLoading, 
+        reportModal // ✅ ADDED TO STATE
     },
     setters: {
         setTab, setMenuOpen, setZenMode, setModal, setSelectedJob, setShowRewardModal,
         setKycFile, setScore, setCurrentQuestionIndex, setTimelineApp, setViewWorkApp,
         setSearchTerm, setProfileForm, setPaymentModal, setParentMode, setRawPortfolioText,
-        setEditProfileModal, setViewProfileId, setPublicProfileData, setShowNotifications, setApplications
+        setEditProfileModal, setViewProfileId, setPublicProfileData, setShowNotifications, setApplications,
+        setReportModal // ✅ ADDED TO SETTERS
     },
     actions: {
         handlePostJob, 
@@ -819,7 +919,9 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         handleUpdateProfile, handleSavePublicProfile, handleQuizSelection, handleAiGenerate,
         handleDownloadCard, handleShareToInstagram, handleClearNotifications, claimReward,
         handleIdentitySubmit, 
-        handleBankSubmit
+        handleBankSubmit,
+        startAiQuiz,
+        handleReportSubmit // ✅ ADDED TO ACTIONS
     }
   };
 };

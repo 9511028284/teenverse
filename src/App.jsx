@@ -96,7 +96,7 @@ export default function App() {
       const { data: adminCheck } = await supabase.from('admins').select('*').eq('email', u.email).maybeSingle();
       if (adminCheck) {
         setUser({ ...u, type: "admin" });
-        setView('admin');
+        if (currentPath !== '/admin') navigate('/admin');
         setLoading(false);
         return;
       }

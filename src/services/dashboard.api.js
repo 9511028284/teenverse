@@ -611,3 +611,39 @@ export const claimDailyReward = async (userId, date) => {
     return { success: false, error: err };
   }
 };
+
+// ==========================================
+// 10. REPORTING SYSTEM (MVP)
+// ==========================================
+
+// Inside dashboard.api.js
+
+export const submitReport = async (reportData) => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Must be logged in to report");
+
+    // Check if we received the ID
+    if (!reportData.target_id) {
+        throw new Error("Missing target_id in API call");
+    }
+
+    const { error } = await supabase.from('reports').insert([{
+      reporter_id: user.id,
+      
+      // ✅ DIRECT MAPPING (Ensure these match your logic file)
+      reported_user_id: reportData.reported_user_id, 
+      target_type: reportData.target_type,
+      target_id: reportData.target_id, // <--- This was likely undefined before
+      
+      reason: reportData.reason,
+      details: reportData.description // Maps 'description' from form to 'details' in DB
+    }]);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    console.error("Report API Error:", err);
+    return { error: err };
+  }
+};

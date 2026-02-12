@@ -5,16 +5,23 @@ import ReviewModal from '../modals/ReviewModal';
 import { 
   Clock, CheckCircle, XCircle, Package, Lock, Unlock, 
   FileText, ExternalLink, RefreshCw, AlertTriangle, Star, ShieldCheck, 
-  Receipt, Wallet, AlertOctagon, User, Banknote, Hourglass
+  Receipt, Wallet, AlertOctagon, User, Banknote, Hourglass, Flag
 } from 'lucide-react';
+import { supabase } from '../../supabase'; // Assuming you have this set up
 
 const Applications = ({ user, applications, isClient, onAction, onViewTimeline, parentMode, showToast }) => {
   
+  // --- STATES ---
   const [revisionModal, setRevisionModal] = useState(null); 
   const [reviewApp, setReviewApp] = useState(null); 
   const [releaseModal, setReleaseModal] = useState(null); 
   const [rejectModal, setRejectModal] = useState(null);
+  
+  // New Report Modal State
+  const [reportModal, setReportModal] = useState(null); 
 
+  // --- HANDLERS ---
+  
   const handleSendRevision = async (e) => {
     e.preventDefault();
     const message = e.target.revision_msg.value;
@@ -42,13 +49,31 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
     setRejectModal(null);
   };
 
+  const handleReportSubmit = async (e) => {
+      e.preventDefault();
+      if (!reportModal) return;
+
+      const formData = new FormData(e.target);
+      const reason = formData.get('reason');
+      const description = formData.get('description');
+
+      // Call the onAction prop with 'report' type
+      // OR handle it directly here if you prefer, but keeping it consistent with onAction is better
+      onAction('report', reportModal, { reason, description });
+      
+      setReportModal(null);
+  };
+
+
+  // --- RENDER ACTIONS LOGIC ---
   const renderActions = (app) => {
     
+    // A. REJECTED STATE
     if (app.status === 'Rejected') {
         return <span className="text-red-500 text-xs font-bold flex items-center gap-1"><XCircle size={12}/> Refunded/Rejected</span>;
     }
 
-    // ✅ B. PROCESSING STATE (Funds Released by Client -> Admin Hold)
+    // B. PROCESSING STATE (Funds Released by Client -> Admin Hold)
     if (app.status === 'Processing') {
         if (isClient) {
             return (
@@ -85,8 +110,10 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
         }
     }
 
+    // C. PAID / COMPLETED STATE
     if (app.status === 'Paid') {
         if (isClient) {
+            // Client View (Review Logic)
             if (!app.client_rating) {
                 return (
                     <div className="flex flex-col items-end gap-1">
@@ -107,10 +134,12 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                  );
             }
         } else {
+            // FREELANCER VIEW (WITHDRAWAL LOGIC)
             return <span className="text-emerald-500 text-xs font-bold flex items-center gap-1"><CheckCircle size={12}/> Funds Deposited</span>;
         }
     }
 
+    // D. CLIENT ACTIONS
     if (isClient) {
       if (app.status === 'Pending') {
         return (
@@ -186,6 +215,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
       }
     }
 
+    // E. FREELANCER ACTIONS
     if (!isClient) {
       if (app.status === 'Pending') return <span className="text-gray-400 text-xs italic">Waiting for client...</span>;
       if (app.status === 'Revision Requested') {
@@ -278,7 +308,17 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                     </span>
                   </td>
                   <td className="p-4 text-right">
-                    {renderActions(app)}
+                    <div className="flex flex-col items-end gap-2">
+                         {renderActions(app)}
+                         {/* REPORT BUTTON */}
+                         <button 
+                             onClick={() => setReportModal(app)} 
+                             className="text-[10px] text-gray-300 hover:text-red-500 flex items-center gap-1 transition-colors"
+                             title="Report Issue"
+                         >
+                             <Flag size={10}/> Report Issue
+                         </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -366,6 +406,52 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                 <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
                     <Button variant="ghost" type="button" onClick={() => setRejectModal(null)} className="w-full sm:w-auto">Go Back</Button>
                     <Button className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200 w-full sm:w-auto">{rejectModal.status === 'Accepted' ? 'Cancel Order' : 'Reject Work'}</Button>
+                </div>
+            </form>
+        </Modal>
+       )}
+       
+       {/* 4. Report Modal */}
+       {reportModal && (
+        <Modal title="Submit a Report" onClose={() => setReportModal(null)}>
+            <form onSubmit={handleReportSubmit} className="space-y-4">
+                <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl border border-red-100 dark:border-red-800 flex gap-3">
+                    <div className="bg-red-100 dark:bg-red-800 p-2 rounded-full h-fit text-red-600 dark:text-red-200">
+                       <Flag size={18} />
+                    </div>
+                    <div>
+                       <h4 className="font-bold text-red-800 dark:text-red-200 text-sm">Trust & Safety</h4>
+                       <p className="text-xs text-red-700 dark:text-red-300 mt-1">
+                         Reports are taken seriously. False reporting may lead to account restrictions.
+                       </p>
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Reason</label>
+                    <select name="reason" required className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-red-500">
+                      <option value="">Select a reason...</option>
+                      <option value="Scam/Fraud">Scam or Fraudulent Activity</option>
+                      <option value="Harassment">Harassment or Abusive Behavior</option>
+                      <option value="Non-Payment">Payment Issue / Non-Payment</option>
+                      <option value="Inappropriate">Inappropriate Content</option>
+                      <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Details</label>
+                    <textarea 
+                      name="description" 
+                      required 
+                      placeholder="Please describe the issue..." 
+                      className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none min-h-[100px] text-sm dark:bg-gray-800 dark:text-white dark:border-gray-700 resize-none"
+                    ></textarea>
+                </div>
+                
+                <div className="flex justify-end gap-3 pt-2">
+                     <Button variant="ghost" type="button" onClick={() => setReportModal(null)}>Cancel</Button>
+                     <Button className="bg-red-600 hover:bg-red-700 text-white">Submit Report</Button>
                 </div>
             </form>
         </Modal>
