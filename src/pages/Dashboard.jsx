@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Menu, LayoutDashboard, Briefcase, BookOpen, Settings, 
-  Sun, Moon, Bell, User, Swords, ShieldCheck, Zap, ListChecks, Crown, Flag 
+  Sun, Moon, Bell, User, Swords, ShieldCheck, Zap, ListChecks, Crown, Flag, Fingerprint
 } from 'lucide-react';
 import { useDashboardLogic } from '../hooks/useDashboardLogic';
 
@@ -61,12 +61,20 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
     return icons[tab] || <LayoutDashboard size={20} className="text-indigo-500"/>;
   };
 
+ // --- EDITORIAL LOADING SCREEN ---
   if (isLoading) {
     return (
-        <motion.div initial={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex h-screen items-center justify-center bg-[#F8FAFC] dark:bg-[#020617]">
-          <div className="flex flex-col items-center gap-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-              <p className="text-gray-500 text-sm animate-pulse">Loading TeenVerseHub.</p>
+        <motion.div initial={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex h-screen items-center justify-center bg-[#f8f9ff] dark:bg-[#020202]">
+          <div className="flex flex-col items-center gap-6 relative px-4 text-center">
+              <div className="absolute inset-0 bg-indigo-500/20 blur-[100px] w-64 h-64 rounded-full -z-10 animate-pulse mx-auto"></div>
+              <div className="w-20 h-20 bg-white/10 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-3xl flex items-center justify-center shadow-2xl relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 animate-[spin_3s_linear_infinite]"></div>
+                  <Fingerprint size={40} className="text-indigo-600 dark:text-indigo-400 relative z-10 animate-pulse" strokeWidth={1.5} />
+              </div>
+              <div className="space-y-2">
+                  <h3 className="font-black text-xl tracking-widest uppercase text-slate-900 dark:text-white">Authenticating</h3>
+                  <p className="text-slate-500 dark:text-gray-500 text-xs font-mono uppercase tracking-[0.2em]">Initializing Workspace...</p>
+              </div>
           </div>
         </motion.div>
     );
