@@ -79,11 +79,7 @@ const styles = `
   }
   .custom-cursor.hovered { transform: scale(4); background: white; mix-blend-mode: difference; }
   
-  .bg-grid-pattern {
-    background-size: 40px 40px;
-    background-image: linear-gradient(to right, currentColor 1px, transparent 1px),
-                      linear-gradient(to bottom, currentColor 1px, transparent 1px);
-  }
+  
   
   @keyframes float {
     0% { transform: translateY(0px) rotate(0deg); }
