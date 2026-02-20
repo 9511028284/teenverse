@@ -8,6 +8,13 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
   const { handleIdentitySubmit, handleBankSubmit } = actions;
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Read directly from the synced user object
+  const digilockerVerified = user.kyc_status === 'age_verified' || user.kyc_status === 'verified';
+  const userDob = user.dob; // Reads directly from DB now, no temp_dob needed
+  
+  const calculatedAge = userDob ? (new Date().getFullYear() - new Date(userDob).getFullYear()) : null;
+  const isMinor = calculatedAge !== null ? calculatedAge < 18 : false;
+
   // ==========================================
   // IDENTITY STATE (DigiLocker & PAN)
   // ==========================================

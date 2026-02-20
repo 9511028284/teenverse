@@ -110,7 +110,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   };
 
   // ------------------------------------------
-  // 🔄 DIGILOCKER REDIRECT CATCHER
+ // ------------------------------------------
+  // 🔄 DIGILOCKER REDIRECT CATCHER & DOB FETCH
   // ------------------------------------------
   useEffect(() => {
     if (typeof window === 'undefined' || !user) return;
@@ -119,17 +120,34 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const dlSuccess = urlParams.get('dl_success');
 
     if (dlSuccess === 'true') {
-      // Clean the URL so a page refresh doesn't trigger this again
       window.history.replaceState({}, document.title, window.location.pathname);
+      const verificationId = localStorage.getItem('cf_verification_id');
       
-      // Update local state to indicate Step 1 is done
-      setUser(prev => ({ ...prev, digilocker_verified: true, kyc_status: 'age_verified' }));
-
-      // Re-open the modal automatically
-      setModal('kyc_verification');
-      showToast("Age verified via DigiLocker! Complete the final step.", "success");
+      if (verificationId) {
+          showToast("Fetching Aadhaar details securely...", "info");
+          setModal('kyc_verification'); 
+          
+          supabase.functions.invoke('digilocker', {
+              // 🚨 NEW: Passing user_id so the Edge Function can update the DB
+              body: { action: 'GET_DOCUMENT', verification_id: verificationId, user_id: user.id }
+          }).then(({ data, error }) => {
+              if (error || !data?.success) {
+                  showToast("DigiLocker failed or consent was denied.", "error");
+              } else {
+                  // The DB is now updated! We just sync the local React state to match it.
+                  setUser(prev => ({ 
+                      ...prev, 
+                      digilocker_verified: true, 
+                      kyc_status: 'age_verified', // Triggers Step 2 UI
+                      dob: data.dob 
+                  }));
+                  showToast(`Age Verified! Please enter your PAN.`, "success");
+              }
+              localStorage.removeItem('cf_verification_id'); 
+          });
+      }
     }
-  }, [user?.id]); // Run when user is available
+  }, [user?.id]);
 
   // --- INITIALIZATION ---
   useEffect(() => {
