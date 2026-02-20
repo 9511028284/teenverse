@@ -25,8 +25,7 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
   const [panVerified, setPanVerified] = useState(false);
   const [identityConsent, setIdentityConsent] = useState(false);
 
-  // In KycVerificationModal.jsx
-const digilockerVerified = user.kyc_status === 'age_verified' || user.kyc_status === 'verified';
+  
 
   // Bank Form State
   const isBankMinor = user.kyc_type === 'minor' || isMinor;
