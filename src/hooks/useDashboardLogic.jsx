@@ -61,7 +61,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [editProfileModal, setEditProfileModal] = useState(false);
 
   // --- KYC & QUIZ STATES ---
-  const [kycFile, setKycFile] = useState(null);
+  const [kycFile, setKycFile] = useState(null); // Kept for backward compatibility if needed elsewhere
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [isQuizLoading, setIsQuizLoading] = useState(false);
@@ -109,32 +109,27 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     } catch (err) { console.error("Audit Logging Failed:", err); }
   };
 
-  // --- DAILY REWARD ---
-  const handleDailyRewardCheck = (lastLoginDate) => {
-    if (isClient) return;
-    if (hasCheckedReward.current) return;
+  // ------------------------------------------
+  // 🔄 DIGILOCKER REDIRECT CATCHER
+  // ------------------------------------------
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user) return;
 
-    if (lastLoginDate && isSameDay(lastLoginDate)) {
-        hasCheckedReward.current = true;
-        setShowRewardModal(false);
-        return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const dlSuccess = urlParams.get('dl_success');
+
+    if (dlSuccess === 'true') {
+      // Clean the URL so a page refresh doesn't trigger this again
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Update local state to indicate Step 1 is done
+      setUser(prev => ({ ...prev, digilocker_verified: true, kyc_status: 'age_verified' }));
+
+      // Re-open the modal automatically
+      setModal('kyc_verification');
+      showToast("Age verified via DigiLocker! Complete the final step.", "success");
     }
-    hasCheckedReward.current = true;
-    setTimeout(() => setShowRewardModal(true), 1500);
-  };
-
-  const claimReward = async () => {
-    setIsClaiming(true);
-    const today = new Date().toISOString().split('T')[0];
-    const rewardAmount = 10;
-    setEnergy(prev => prev + rewardAmount);
-    setShowRewardModal(false);
-    showToast(`⚡ +${rewardAmount} Energy Claimed!`, "success");
-    hasCheckedReward.current = true;
-    const { success } = await api.claimDailyReward(user.id, today);
-    if (success) await logAction('DAILY_REWARD_CLAIMED', { date: today, amount: rewardAmount });
-    setIsClaiming(false);
-  };
+  }, [user?.id]); // Run when user is available
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -168,8 +163,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
             if (!isClient && userProfileData) {
                 setEnergy(userProfileData.energy_points || 20);
-                if (!hasCheckedReward.current) {
-                    handleDailyRewardCheck(userProfileData.last_login_date); 
+                if (!hasCheckedReward.current && userProfileData.last_login_date) {
+                    if (isSameDay(userProfileData.last_login_date)) {
+                        hasCheckedReward.current = true;
+                    } else {
+                        hasCheckedReward.current = true;
+                        setTimeout(() => setShowRewardModal(true), 1500);
+                    }
                 }
             }
 
@@ -207,77 +207,81 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     return () => { isMounted = false; };
   }, [user, isClient, showToast, jobs.length]);
 
+  const claimReward = async () => {
+    setIsClaiming(true);
+    const today = new Date().toISOString().split('T')[0];
+    const rewardAmount = 10;
+    setEnergy(prev => prev + rewardAmount);
+    setShowRewardModal(false);
+    showToast(`⚡ +${rewardAmount} Energy Claimed!`, "success");
+    hasCheckedReward.current = true;
+    const { success } = await api.claimDailyReward(user.id, today);
+    if (success) await logAction('DAILY_REWARD_CLAIMED', { date: today, amount: rewardAmount });
+    setIsClaiming(false);
+  };
+
   // ------------------------------------------
-  // 🔐 SMART LOCK SYSTEM
+  // 🔐 SMART LOCK SYSTEM (KYC STATE MACHINE)
   // ------------------------------------------
   const checkKycLock = (actionType) => {
-    // 1. CLIENT BYPASS
     if (isClient) return true;
 
-    // 2. FREELANCER CHECKS
+    const status = user.kyc_status || 'unverified';
+
+    // 1. APPLYING FOR JOBS (Requires Identity Phase)
     if (actionType === 'apply_paid') {
-        if (user.kyc_status !== 'verified') {
-            showToast("🔒 Identity Verification Required to apply.", "info");
+        if (status === 'unverified') {
+            showToast("🔒 Step 1: Age Verification Required via DigiLocker.", "info");
+            setModal('kyc_verification');
+            return false;
+        }
+        if (status === 'age_verified') {
+            showToast("🔒 Step 2: PAN Verification Required.", "info");
             setModal('kyc_verification');
             return false;
         }
     }
 
-    if (actionType === 'withdraw_funds') {
+    // 2. WITHDRAWING FUNDS (Requires Banking Phase)
+    if (actionType === 'withdraw_funds' || actionType === 'release_escrow') {
+        if (status === 'unverified' || status === 'age_verified') {
+            showToast("🔒 Full Identity Verification required before linking a bank.", "error");
+            setModal('kyc_verification');
+            return false;
+        }
         if (!user.is_bank_linked) { 
+            showToast("🏦 Please link your bank account to receive funds.", "info");
             setModal('bank_linkage'); 
             return false;
         }
-        showToast("Bank account already active.", "success");
         return true;
     }
 
-    return true;
+    return true; 
   };
-
-  // ✅ FIXED: Report Handler moved outside checkKycLock
-  // Inside useDashboardLogic.jsx
 
   const handleReportSubmit = async (e) => {
     e.preventDefault();
     if (!reportModal) return;
 
-    // 🔍 DEBUG: See exactly what data we have
-    console.log("📝 Submitting Report with State:", reportModal);
-
     const formData = new FormData(e.target);
-
-    // 1. ROBUST ID FINDER
-    // Checks all possible places the ID might be hiding
-    const resolvedTargetId = 
-        reportModal.target_id || 
-        reportModal.id || 
-        reportModal.job_id;
-
-    // 2. ROBUST TYPE FINDER
+    const resolvedTargetId = reportModal.target_id || reportModal.id || reportModal.job_id;
     let resolvedType = reportModal.target_type || reportModal.type;
-    // Auto-detect type if missing
+    
     if (!resolvedType) {
         resolvedType = reportModal.bid_amount ? 'application' : 'job';
     }
 
-    // 3. ROBUST USER FINDER
-    const resolvedReportedUser = 
-        reportModal.reported_user_id || 
-        reportModal.reportedId || 
-        reportModal.freelancer_id || 
-        reportModal.client_id;
+    const resolvedReportedUser = reportModal.reported_user_id || reportModal.reportedId || reportModal.freelancer_id || reportModal.client_id;
 
-    // 🛑 STOP if ID is missing (Prevents the DB Crash)
     if (!resolvedTargetId) {
         showToast("Error: Content ID is missing. Cannot submit.", "error");
-        console.error("❌ Failed to find target_id in:", reportModal);
         return;
     }
 
     const reportData = {
         target_type: resolvedType,
-        target_id: String(resolvedTargetId), // Convert to string to be safe
+        target_id: String(resolvedTargetId), 
         reported_user_id: resolvedReportedUser,
         reason: formData.get('reason'),
         description: formData.get('description')
@@ -287,34 +291,29 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const { error } = await api.submitReport(reportData);
 
     if (error) {
-        console.error("API Error:", error);
         showToast(error.message, "error");
     } else {
         showToast("Report submitted successfully.", "success");
         setReportModal(null);
     }
   };
-  // ------------------------------------------
-  // ⚡ ACTION: IDENTITY VERIFICATION
-  // ------------------------------------------
-  const handleIdentitySubmit = async ({ ageGroup, panNumber, kycFile, guardianConsent }) => {
-    if (!kycFile) return showToast("Please select an ID file.", "error");
-    if (!panNumber) return showToast("PAN Number is required.", "error");
 
-    showToast("Verifying Identity...", "info");
+  // ------------------------------------------
+  // ⚡ ACTION: IDENTITY VERIFICATION (V2)
+  // ------------------------------------------
+  const handleIdentitySubmit = async ({ ageGroup, panNumber, digilocker_verified, dob, guardianConsent }) => {
+    showToast("Finalizing Identity Verification...", "info");
 
     try {
-        const fileName = `${user.id}/${Date.now()}_kyc`;
-        const { error: uploadError } = await supabase.storage.from('id_proofs').upload(fileName, kycFile);
-        if (uploadError) throw uploadError;
-
-        const { data, error: fnError } = await supabase.functions.invoke('kyc-handler', {
+        // Calling the new PAN edge function that handles the final DB save
+        const { data, error: fnError } = await supabase.functions.invoke('pan', {
             body: { 
-                action: 'VERIFY_IDENTITY', 
+                action: 'SAVE_KYC_DATA', 
                 user_id: user.id, 
                 age_group: ageGroup,
+                dob: dob,
                 pan_number: panNumber, 
-                file_path: fileName,
+                digilocker_verified: digilocker_verified,
                 guardian_consent: guardianConsent 
             }
         });
@@ -322,14 +321,15 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         if (fnError) throw new Error(fnError.message || "Verification Service Unreachable");
         if (!data.success) throw new Error(data.error || "Identity Verification Failed");
 
-        await logAction('IDENTITY_VERIFIED', { mode: KYC_MODE });
-        showToast("✅ Identity Verified! You can now apply.", "success");
+        await logAction('IDENTITY_VERIFIED', { mode: KYC_MODE, age_group: ageGroup });
+        showToast("✅ Identity Fully Verified! You can now apply for gigs.", "success");
         
         setUser(prev => ({ 
             ...prev, 
             kyc_status: 'verified', 
             kyc_type: ageGroup,
-            id_proof_url: fileName
+            dob: dob,
+            digilocker_verified: true
         }));
         setModal(null);
         return true; 
@@ -370,16 +370,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         
         setModal(null);
 
-        if (KYC_MODE === 'sandbox') {
-             setBadges(prev => [...prev, { name: 'Verified', icon: 'ShieldCheck' }]);
-        }
-
     } catch (err) {
         console.error(err);
         showToast("Banking linkage failed: " + err.message, "error");
     }
   };
 
+  // --- JOB & SERVICE ACTIONS ---
   const handlePostJob = async (e) => {
     e.preventDefault();
     if (!checkKycLock('post_job')) return;
@@ -387,12 +384,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const budget = parseFloat(formData.get('budget'));
     const title = formData.get('title');
     
-    if (budget < 1) { 
-        showToast("Minimum budget is ₹1", "error"); 
-        return; 
-    }
-    
-    if (title.length < 5) { showToast("Job title is too short", "error"); return; }
+    if (budget < 1) return showToast("Minimum budget is ₹1", "error"); 
+    if (title.length < 5) return showToast("Job title is too short", "error"); 
     
     const jobData = { 
         client_id: user.id, client_name: user.name, title: title, budget: budget, 
@@ -444,9 +437,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const handleApplyJob = async (e, energyCost, educationConsent) => {
     e.preventDefault();
     if (parentMode) { showToast("Parent Mode Active", "error"); return; }
-    if (!checkKycLock('apply_paid')) return;
+    if (!checkKycLock('apply_paid')) return; // Uses the new State Machine
     
-    // --- SKILL VERIFICATION LOGIC ---
     if (!isClient && selectedJob) {
       const jobCategory = selectedJob.category || 'dev';
       if (!unlockedSkills.includes(jobCategory)) {
@@ -700,19 +692,15 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         return;
     }
 
-    // ✅ FIXED: Report Action triggers Modal
-if (action === 'report') {
-    // If payload/app contains the data, set it to state
-    const reportData = app || payload; 
-    console.log("🚩 Report Action Triggered with:", reportData);
-    
-    setReportModal({
-        target_type: reportData.target_type || 'job',
-        target_id: reportData.id || reportData.target_id, // Store it safely
-        reported_user_id: reportData.reported_user_id
-    });
-    return;
-}
+    if (action === 'report') {
+        const reportData = app || payload; 
+        setReportModal({
+            target_type: reportData.target_type || 'job',
+            target_id: reportData.id || reportData.target_id, 
+            reported_user_id: reportData.reported_user_id
+        });
+        return;
+    }
 
     const RESTRICTED = ['approve', 'pay', 'release_escrow'];
     if (parentMode && RESTRICTED.includes(action)) { showToast("Parent Mode Active: Action Locked", "error"); return; }
@@ -902,14 +890,14 @@ if (action === 'report') {
         isAiLoading, SAFE_QUIZZES, profileCardRef, currentXP, nextLevelXP, progressPercent,
         userLevel, filteredJobs,
         isQuizLoading, 
-        reportModal // ✅ ADDED TO STATE
+        reportModal 
     },
     setters: {
         setTab, setMenuOpen, setZenMode, setModal, setSelectedJob, setShowRewardModal,
         setKycFile, setScore, setCurrentQuestionIndex, setTimelineApp, setViewWorkApp,
         setSearchTerm, setProfileForm, setPaymentModal, setParentMode, setRawPortfolioText,
         setEditProfileModal, setViewProfileId, setPublicProfileData, setShowNotifications, setApplications,
-        setReportModal // ✅ ADDED TO SETTERS
+        setReportModal 
     },
     actions: {
         handlePostJob, 
@@ -921,7 +909,7 @@ if (action === 'report') {
         handleIdentitySubmit, 
         handleBankSubmit,
         startAiQuiz,
-        handleReportSubmit // ✅ ADDED TO ACTIONS
+        handleReportSubmit 
     }
   };
 };

@@ -59,8 +59,6 @@ const DashboardModals = ({ user, logic, showToast }) => {
         />
       )}
 
-      
-
         {/* JOBS & SERVICES */}
         {modal === 'post-job' && <PostJobModal onClose={() => setModal(null)} onSubmit={actions.handlePostJob} />}
         {modal === 'create-service' && <CreateServiceModal onClose={() => setModal(null)} onSubmit={actions.handleCreateService} />}
@@ -222,6 +220,8 @@ const DashboardModals = ({ user, logic, showToast }) => {
               </form>
           </Modal>
         )}
+
+        
 
         {/* PAYMENT */}
         {paymentModal && <PaymentModal onClose={() => setPaymentModal(null)} onConfirm={actions.processPayment} paymentData={paymentModal} />}
