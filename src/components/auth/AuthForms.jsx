@@ -191,6 +191,7 @@ export const SignupView = ({ state, actions, refs }) => {
                     {formData.role === 'freelancer' ? (
                         <div className="space-y-4">
                             <div className="bg-white dark:bg-white/5 p-5 rounded-3xl border border-slate-200 dark:border-white/10 shadow-sm dark:shadow-none space-y-4">
+                                {/* RESTORED DOB FIELD AND BADGE */}
                                 <div className="flex justify-between items-center">
                                     <label className="text-[10px] font-bold text-slate-500 dark:text-gray-500 uppercase tracking-widest">Date of Birth</label>
                                     {state.age && (
@@ -201,32 +202,10 @@ export const SignupView = ({ state, actions, refs }) => {
                                 </div>
                                 <input 
                                     type="date" 
-                                    value={formData.dob} 
+                                    value={formData.dob || ''} 
                                     onChange={(e) => actions.updateField('dob', e.target.value)} 
                                     className="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-gray-600 rounded-xl p-4 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none font-mono transition-colors"
                                 />
-
-                                {/* INSTANT GUARDIAN FIELD */}
-                                {state.isMinor && (
-                                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="overflow-hidden">
-                                        <div className="mt-2 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 p-5 rounded-2xl">
-                                            <div className="flex gap-2 items-center mb-3 text-orange-600 dark:text-orange-400">
-                                                <ShieldAlert size={18}/>
-                                                <span className="text-xs font-black uppercase tracking-widest">Guardian Authorization Required</span>
-                                            </div>
-                                            <input 
-                                                type="email" 
-                                                placeholder="Guardian's Email Address" 
-                                                value={formData.parentEmail} 
-                                                onChange={(e) => actions.updateField('parentEmail', e.target.value)} 
-                                                className="w-full bg-white dark:bg-black/50 border border-orange-200 dark:border-gray-700 rounded-xl p-4 text-slate-900 dark:text-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none placeholder-slate-400 dark:placeholder-gray-600 transition-all font-mono shadow-sm dark:shadow-none"
-                                            />
-                                            <p className="text-[10px] text-orange-600/70 dark:text-orange-500/70 mt-3 leading-tight uppercase font-bold tracking-wide">
-                                                As you are under 18, a secure verification link will be dispatched to your guardian.
-                                            </p>
-                                        </div>
-                                    </motion.div>
-                                )}
                             </div>
                             
                             <div className="grid grid-cols-3 gap-3">

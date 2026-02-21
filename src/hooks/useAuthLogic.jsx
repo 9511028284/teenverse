@@ -2,8 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase'; // Ensure this path matches your project
 import { initRecaptcha, sendPhoneOtp, verifyPhoneOtp } from '../utils/phoneAuth';
 
-// LEGAL: Version control
-const CONSENT_VERSION = "v1.0_TEENVERSE_PARENT_AGREEMENT_2025";
 const CLOUDFLARE_SITE_KEY = import.meta.env.VITE_CLOUDFLARE_SITE_KEY;
 
 export const useAuthLogic = (onLogin, onSignUpSuccess) => {
@@ -14,9 +12,8 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   const [toast, setToast] = useState(null);
    
   // Verification
-  const [showVerify, setShowVerify] = useState(false);
-  const [verificationSent, setVerificationSent] = useState(false);
   const [otp, setOtp] = useState('');
+  const [verificationSent, setVerificationSent] = useState(false); 
    
   // Password Reset
   const [showResetVerify, setShowResetVerify] = useState(false);
@@ -25,7 +22,6 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
 
   // Agreements & Security
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [parentAgreed, setParentAgreed] = useState(false);
   const [captchaToken, setCaptchaToken] = useState(null);
   const turnstileRef = useRef();
 
@@ -39,12 +35,11 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   const [formData, setFormData] = useState({
     role: 'freelancer', email: '', password: '', name: '', phone: '', 
     nationality: '', dob: '', gender: 'Male', org: '', 
-    parentEmail: '', referralCode: ''
+    referralCode: ''
   });
   
   // Age Logic State
   const [age, setAge] = useState(null);
-  const [isMinor, setIsMinor] = useState(false);
 
   // --- HELPERS ---
   const showToast = (msg, type = 'error') => {
@@ -60,7 +55,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     platform: navigator.platform 
   });
 
-  // --- CORE UPDATE LOGIC (Fixed Buffer Issue) ---
+  // --- CORE UPDATE LOGIC ---
   const updateField = (field, value) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
@@ -69,7 +64,6 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
       if (field === 'dob') {
         if (!value) {
             setAge(null);
-            setIsMinor(false);
             return newData;
         }
 
@@ -82,22 +76,14 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
           calculatedAge--;
         }
 
-        // 1. STRICT PLATFORM LIMIT: 14 to 19 ONLY
+        // STRICT PLATFORM LIMIT: 14 to 19 ONLY
         if (calculatedAge < 14 || calculatedAge > 19) {
           showToast("Platform is exclusive to ages 14 to 19 only.");
           setAge(null);
-          setIsMinor(false);
           return { ...newData, dob: '' }; // Clear the invalid date
         }
 
-        // 2. MINOR LOGIC (Under 18)
         setAge(calculatedAge);
-        setIsMinor(calculatedAge < 18);
-        
-        // If they turn 18+, clear parent email requirement automatically
-        if (calculatedAge >= 18) {
-            newData.parentEmail = '';
-        }
       }
       
       return newData;
@@ -128,8 +114,6 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
       }, 1000);
     }
   }, [viewMode]);
-
-  // NOTE: REMOVED formData.dob useEffect to prevent render loop/buffer
 
   // --- HANDLERS ---
   const handleAuthRedirect = async (user) => {
@@ -185,15 +169,6 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
         });
         if (error) throw error;
       } else {
-        if (formData.role === 'freelancer' && isMinor) {
-           if (!formData.parentEmail) throw new Error("Parent email required for minors.");
-           const { error } = await supabase.functions.invoke('send-parent-otp', {
-              body: { parentEmail: formData.parentEmail, childName: formData.name }
-           });
-           if (error) throw new Error("Failed to send parent code.");
-           setShowVerify(true);
-           return; // Stop here, wait for OTP
-        }
         await completeSignup();
       }
     } catch (err) {
@@ -211,37 +186,38 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     let uid = socialUser?.id;
 
     try {
+        const profileData = { 
+            name: formData.name, email: formData.email, phone: formData.phone, 
+            phone_verified: true, nationality: formData.nationality, referral_code: myRefCode,
+            ...(formData.role === 'client' ? { is_organisation: formData.org } : { dob: formData.dob, age, gender: formData.gender })
+        };
+
         if (!uid) {
-            const { data, error } = await supabase.auth.signUp({
+            // NEW EMAIL SIGNUP: Wait for email verification. 
+            // We pass ALL form data into user_metadata so the DB trigger can grab it.
+            const { error } = await supabase.auth.signUp({
                 email: formData.email, password: formData.password,
                 options: { 
-                    data: { full_name: formData.name, role: formData.role, device_fingerprint: deviceMeta },
+                    data: { full_name: formData.name, role: formData.role, device_fingerprint: deviceMeta, ...profileData },
                     captchaToken, emailRedirectTo: window.location.origin
                 } 
             });
             if (error) throw error;
-            uid = data.user.id;
-        }
+            
+            // Show "Email Sent" screen. The database trigger will handle the inserts securely!
+            setVerificationSent(true);
 
-        // Create Profile
-        const table = formData.role === 'client' ? 'clients' : 'freelancers';
-        const dbData = { 
-            id: uid, name: formData.name, email: formData.email, phone: formData.phone, 
-            phone_verified: true, nationality: formData.nationality, referral_code: myRefCode,
-            ...(formData.role === 'client' ? { is_organisation: formData.org } : { dob: formData.dob, age, gender: formData.gender, is_parent_verified: isMinor })
-        };
-        
-        await supabase.from('users').upsert({ id: uid, email: formData.email, full_name: formData.name });
-        const { error: dbError } = await supabase.from(table).upsert(dbData);
-        if (dbError) throw dbError;
+        } else {
+            // SOCIAL SIGNUP: User is already authenticated! We CAN use .upsert() here safely.
+            const table = formData.role === 'client' ? 'clients' : 'freelancers';
+            
+            await supabase.from('users').upsert({ id: uid, email: formData.email, full_name: formData.name });
+            const { error: dbError } = await supabase.from(table).upsert({ id: uid, ...profileData });
+            if (dbError) throw dbError;
 
-        if (isMinor) {
-            await supabase.functions.invoke('log-parent-consent', {
-                body: { user_id: uid, parent_email: formData.parentEmail, consent_version: CONSENT_VERSION, otp }
-            });
+            // Instantly redirect them
+            window.location.href = '/termsagreement';
         }
-        
-        socialUser ? onSignUpSuccess() : setVerificationSent(true);
 
     } catch (error) {
         throw error; 
@@ -358,15 +334,15 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   // Return everything needed by UI
   return {
     state: {
-      viewMode, step, loading, toast, showVerify, verificationSent, otp,
-      showResetVerify, resetOtp, newPassword, agreedToTerms, parentAgreed,
+      viewMode, step, loading, toast, otp, verificationSent,
+      showResetVerify, resetOtp, newPassword, agreedToTerms,
       captchaToken, socialUser, isPhoneVerified, phoneVerificationId, phoneOtp,
-      otpLoading, formData, age, isMinor, CLOUDFLARE_SITE_KEY
+      otpLoading, formData, age, CLOUDFLARE_SITE_KEY
     },
     refs: { turnstileRef },
     actions: {
       setViewMode, setStep, setOtp, setResetOtp, setNewPassword, setAgreedToTerms,
-      setParentAgreed, setCaptchaToken, setPhoneOtp, updateField, showToast, setIsPhoneVerified,
+      setCaptchaToken, setPhoneOtp, updateField, showToast, setIsPhoneVerified, setVerificationSent,
       handleNext, handleBack: () => setStep(s => s - 1), 
       handleFinalSubmit, handlePhoneVerify, handleSendPhoneOtp,
        
@@ -375,16 +351,6 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
       handleVerifyResetOTP,
       handleUpdatePassword,
 
-      handleVerifyParentOtp: async (e) => {
-          e.preventDefault(); 
-          if (!parentAgreed) return showToast("Guardian must consent.");
-          setLoading(true);
-          const { data, error } = await supabase.functions.invoke('verify-parent-otp', {
-              body: { parentEmail: formData.parentEmail, otp }
-          });
-          if (error || !data?.success) { setLoading(false); return showToast("Invalid Code"); }
-          try { await completeSignup(); } catch (err) { showToast(err.message); setLoading(false); }
-      },
       handleSocialLogin: async (provider) => {
           setLoading(true);
           const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });
