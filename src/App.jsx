@@ -79,10 +79,9 @@ export default function App() {
 
   const handleSession = async (session, attempts = 0) => {
     const currentPath = location.pathname;
-    // FIXED: Updated to match the no-dash terms route
     const isPublic = ['/', '/auth', '/legal', '/termsagreement', '/parent-approval', '/parent-login'].some(path => currentPath.startsWith(path));
     
-    // NEW: Variable to check if they are currently trying to view the terms page
+    // Variable to check if they are currently trying to view the terms page
     const isTermsPage = currentPath.startsWith('/termsagreement');
 
     if (!session) {
@@ -108,7 +107,6 @@ export default function App() {
       let { data: c } = await supabase.from('clients').select('*').eq('id', u.id).maybeSingle();
       if (c) { 
           setUser({ ...c, type: 'client' }); 
-          // FIXED: Do not force redirect if they are on the Terms page!
           if (!currentPath.startsWith('/dashboard') && !isTermsPage) navigate('/dashboard');
           setLoading(false);
           return;
@@ -118,7 +116,6 @@ export default function App() {
       let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
       if (f) { 
           setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] });
-          // FIXED: Do not force redirect if they are on the Terms page!
           if (!currentPath.startsWith('/dashboard') && !isTermsPage) navigate('/dashboard');
           setLoading(false);
           return;
@@ -214,8 +211,8 @@ export default function App() {
 
         <Route path="/legal" element={<LegalWrapper />} />
         
-        {/* FIXED: Removed the dash so it matches your Auth redirect */}
-        <Route path="/termsagreement" element={<TermsAgreement onAgree={() => window.location.reload()} />} />
+        {/* FIX: Replaced window.location.reload() with navigate('/dashboard') */}
+        <Route path="/termsagreement" element={<TermsAgreement onAgree={() => navigate('/dashboard')} />} />
         
         <Route path="/parent-approval" element={<ParentApprovalWrapper />} />
         
