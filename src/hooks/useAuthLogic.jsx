@@ -117,24 +117,28 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
 
   // --- HANDLERS ---
   const handleAuthRedirect = async (user) => {
-    const { data: freelancerData } = await supabase.from('freelancers').select('phone').eq('id', user.id).maybeSingle();
-    const { data: clientData } = await supabase.from('clients').select('phone').eq('id', user.id).maybeSingle();
+    // 500ms delay prevents Database Trigger race conditions during social logins
+    setTimeout(async () => {
+        const { data: freelancerData } = await supabase.from('freelancers').select('phone').eq('id', user.id).maybeSingle();
+        const { data: clientData } = await supabase.from('clients').select('phone').eq('id', user.id).maybeSingle();
 
-    if ((freelancerData?.phone && freelancerData.phone.length > 5) || (clientData?.phone && clientData.phone.length > 5)) {
-       onLogin(`Welcome back!`);
-    } else {
-       setSocialUser(user);
-       setFormData(prev => ({ 
-         ...prev, 
-         email: user.email, 
-         name: user.user_metadata?.full_name || user.email?.split('@')[0], 
-         role: clientData ? 'client' : 'freelancer' 
-       }));
-       setViewMode('signup');
-       setStep(1); 
-    }
+        // Check if they ACTUALLY have a completed profile (Phone is our anchor)
+        if ((freelancerData?.phone && freelancerData.phone.length > 5) || (clientData?.phone && clientData.phone.length > 5)) {
+           onLogin(`Welcome back!`);
+        } else {
+           // They don't have a profile yet! Force them to Step 1 to collect details.
+           setSocialUser(user);
+           setFormData(prev => ({ 
+             ...prev, 
+             email: user.email, 
+             name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0], 
+             role: 'freelancer' // Default to freelancer for the UI starting point
+           }));
+           setViewMode('signup');
+           setStep(1); 
+        }
+    }, 500);
   };
-
   const handleNext = async () => {
     if (step === 1) return socialUser ? setStep(3) : setStep(2);
     if (step === 2) {
