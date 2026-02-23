@@ -38,7 +38,7 @@ const TermsAgreement = ({ onAgree }) => {
 
           <section>
             <h3 className="font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2"><FileText size={16}/> 3. Payments & Fees</h3>
-            <p>TeenVerseHub charges a <strong>3% platform fee</strong> on completed transactions. Payments for minors may need to be processed through a parent's account.</p>
+            <p>TeenVerseHub charges a <strong>5% platform facilitation fees</strong> on completed transactions. Payments for minors may need to be processed through a parent's account.</p>
           </section>
 
           <section>

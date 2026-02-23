@@ -316,14 +316,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
   };
 
-  // ------------------------------------------
+ // ------------------------------------------
   // ⚡ ACTION: IDENTITY VERIFICATION (V2)
   // ------------------------------------------
   const handleIdentitySubmit = async ({ ageGroup, panNumber, digilocker_verified, dob, guardianConsent }) => {
     showToast("Finalizing Identity Verification...", "info");
 
     try {
-        // Calling the new PAN edge function that handles the final DB save
         const { data, error: fnError } = await supabase.functions.invoke('pan', {
             body: { 
                 action: 'SAVE_KYC_DATA', 
@@ -342,13 +341,33 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         await logAction('IDENTITY_VERIFIED', { mode: KYC_MODE, age_group: ageGroup });
         showToast("✅ Identity Fully Verified! You can now apply for gigs.", "success");
         
+        // 1. Update the local user state
         setUser(prev => ({ 
             ...prev, 
             kyc_status: 'verified', 
+            is_kyc_verified: true,
             kyc_type: ageGroup,
             dob: dob,
             digilocker_verified: true
         }));
+        
+        // 2. 🏆 AWARD THE VERIFIED BADGE
+        if (!badges.some(b => b.name === 'Verified')) {
+            // Update local state instantly for UI
+            setBadges(prev => [...prev, { name: 'Verified', icon: 'ShieldCheck' }]);
+            
+            // Save to database
+            await supabase.from('user_badges').insert({ 
+                user_id: user.id, 
+                badge_name: 'Verified' 
+            });
+            
+            // Extra toast for the gamification pop!
+            setTimeout(() => {
+                showToast("🏆 BADGE UNLOCKED: Verified Identity!", "success");
+            }, 1000);
+        }
+
         setModal(null);
         return true; 
 
@@ -358,7 +377,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         return false;
     }
   };
-
   // ------------------------------------------
   // 🏦 ACTION: BANK ACCOUNT
   // ------------------------------------------
