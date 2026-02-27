@@ -221,31 +221,33 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   };
 
   // --- NEW WIDGET HANDLER ---
+  // --- NEW WIDGET HANDLER ---
   const handlePhoneVerification = async () => {
     if (formData.phone.length < 10) return showToast("Enter valid mobile number");
-    if (!MSG91_WIDGET_ID) return showToast("Widget ID is missing from environment variables.");
+    if (!MSG91_WIDGET_ID) return showToast("Widget ID missing.");
 
     setOtpLoading(true);
     try {
-        // Standardize to +91 if prefix is missing
         const formattedPhone = formData.phone.startsWith('+') 
           ? formData.phone 
           : `+91${formData.phone.replace(/^0+/, '')}`;
 
-        // This single call opens the widget, waits for the user to enter the OTP, and resolves on success
-        await openMsg91Widget(formattedPhone, MSG91_WIDGET_ID, MSG91_TOKEN_AUTH);
+        // 1. Open widget and get the JWT token back
+        const jwtToken = await openMsg91Widget(formattedPhone, MSG91_WIDGET_ID, MSG91_TOKEN_AUTH);
 
+        // 2. Send the token to Supabase to verify it's authentic
+        await verifyMsg91Token(jwtToken);
+
+        // 3. Success!
         setIsPhoneVerified(true);
         updateField('phone', formattedPhone);
         showToast("Phone Verified Successfully!", "success");
     } catch (err) {
-        // Triggers if the user closes the modal or validation fails
         showToast(err.message || "Phone verification failed.");
     } finally {
         setOtpLoading(false);
     }
   };
-
   // --- PASSWORD RESET HANDLERS ---
   const handleForgotPassword = async (e) => {
     e.preventDefault();
