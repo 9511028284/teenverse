@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase'; // Ensure this path matches your project
-import { initRecaptcha, sendPhoneOtp, verifyPhoneOtp } from '../utils/phoneAuth';
+import { sendPhoneOtp, verifyPhoneOtp } from '../utils/phoneAuth'; // Removed initRecaptcha
 
 const CLOUDFLARE_SITE_KEY = import.meta.env.VITE_CLOUDFLARE_SITE_KEY;
 
@@ -106,14 +106,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     return () => subscription.unsubscribe();
   }, [viewMode]);
 
-  useEffect(() => {
-    if (viewMode === 'signup') {
-      setTimeout(() => {
-          try { initRecaptcha('recaptcha-container'); } 
-          catch (e) { console.warn("Recaptcha Init:", e); }
-      }, 1000);
-    }
-  }, [viewMode]);
+  // Removed Firebase reCAPTCHA initialization useEffect
 
   // --- HANDLERS ---
   const handleAuthRedirect = async (user) => {
@@ -139,6 +132,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
         }
     }, 500);
   };
+
   const handleNext = async () => {
     if (step === 1) return socialUser ? setStep(3) : setStep(2);
     if (step === 2) {
@@ -247,12 +241,13 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
       if (formData.phone.length < 10) return showToast("Enter valid mobile number");
       setOtpLoading(true);
       try {
-          const confirmation = await sendPhoneOtp(formData.phone);
-          setPhoneVerificationId(confirmation);
+          // sendPhoneOtp now returns the formatted phone number string directly from MSG91
+          const formattedPhone = await sendPhoneOtp(formData.phone);
+          setPhoneVerificationId(formattedPhone);
           showToast("OTP sent to mobile", "success");
       } catch (err) {
           showToast(err.message || "Failed to send OTP");
-          initRecaptcha('recaptcha-container');
+          // Removed reCAPTCHA fallback 
       } finally {
           setOtpLoading(false);
       }

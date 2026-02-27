@@ -259,9 +259,6 @@ export const SignupView = ({ state, actions, refs }) => {
               </button>
             }
         </div>
-        
-        {/* RECAPTCHA CONTAINER */}
-        <div id="recaptcha-container"></div>
     </motion.div>
   );
 };

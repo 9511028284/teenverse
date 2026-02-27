@@ -1,72 +1,59 @@
 // src/utils/phoneAuth.js
-import { RecaptchaVerifier, signInWithPhoneNumber, signOut } from 'firebase/auth';
-import { auth } from '../firebase';
+import { supabase } from '../supabase';
 
 /**
- * Initialize Invisible reCAPTCHA
- * @param {string} elementId - DOM ID of the container (e.g., "recaptcha-container")
- */
-export const initRecaptcha = (elementId) => {
-  if (!window.recaptchaVerifier) {
-    window.recaptchaVerifier = new RecaptchaVerifier(auth, elementId, {
-      'size': 'invisible',
-      'callback': () => {
-        // reCAPTCHA solved - allow signInWithPhoneNumber.
-      },
-      'expired-callback': () => {
-        // Response expired. Ask user to solve reCAPTCHA again.
-        window.recaptchaVerifier.clear();
-        window.recaptchaVerifier = null;
-      }
-    });
-  }
-  return window.recaptchaVerifier;
-};
-
-/**
- * Send SMS OTP
+ * Send SMS OTP via MSG91 (Routed through Supabase Edge Function)
  * @param {string} phoneNumber - Raw input (e.g., "9876543210")
- * @returns {Promise<ConfirmationResult>}
+ * @returns {Promise<string>} - The formatted phone number used for verification
  */
 export const sendPhoneOtp = async (phoneNumber) => {
-  const verifier = window.recaptchaVerifier;
-  if (!verifier) throw new Error("Recaptcha not initialized.");
+  if (!phoneNumber) throw new Error("Phone number is required.");
 
-  // Force India prefix if missing (Standardizes +91)
+  // Force India prefix if missing (Standardizes to +91)
+  // Adjust this logic if you plan to support international numbers
   const formattedNumber = phoneNumber.startsWith('+') 
     ? phoneNumber 
-    : `+91${phoneNumber.replace(/^0+/, '')}`; // Remove leading zeros
+    : `+91${phoneNumber.replace(/^0+/, '')}`; // Removes any accidental leading zeros
 
-  try {
-    const confirmationResult = await signInWithPhoneNumber(auth, formattedNumber, verifier);
-    return confirmationResult;
-  } catch (error) {
-    // Clean up verifier if sending fails so user can try again
-    if (window.recaptchaVerifier) {
-      window.recaptchaVerifier.clear();
-      window.recaptchaVerifier = null;
-    }
-    throw error;
+  // Invoke the secure Edge Function
+  const { data, error } = await supabase.functions.invoke('msg91-auth', {
+    body: { action: 'send', phone: formattedNumber }
+  });
+
+  // Handle network or function execution errors
+  if (error) {
+    throw new Error(error.message || "Network error while contacting the OTP service.");
   }
+
+  // Handle MSG91 API errors returned by the function
+  if (!data?.success) {
+    throw new Error(data?.error || "Failed to send OTP.");
+  }
+
+  // Return the formatted number so the UI state can hold onto it for the verification step
+  return formattedNumber; 
 };
 
 /**
- * Verify OTP Code
- * @param {ConfirmationResult} confirmationResult - From sendPhoneOtp
- * @param {string} otp - User input
- * @returns {Promise<string>} - The verified phone number
+ * Verify OTP Code via MSG91
+ * @param {string} phoneNumber - The formatted number returned from sendPhoneOtp
+ * @param {string} otp - User input (usually 4 to 6 digits)
+ * @returns {Promise<string>} - The successfully verified phone number
  */
-export const verifyPhoneOtp = async (confirmationResult, otp) => {
-  try {
-    const result = await confirmationResult.confirm(otp);
-    const verifiedNumber = result.user.phoneNumber;
-    
-    // IMPORTANT: Sign out of Firebase immediately. 
-    // We only needed it for verification, not for session management.
-    await signOut(auth);
-    
-    return verifiedNumber;
-  } catch (error) {
-    throw error;
+export const verifyPhoneOtp = async (phoneNumber, otp) => {
+  if (!otp) throw new Error("OTP code is required.");
+
+  const { data, error } = await supabase.functions.invoke('msg91-auth', {
+    body: { action: 'verify', phone: phoneNumber, otp: otp.trim() }
+  });
+
+  if (error) {
+    throw new Error(error.message || "Network error during verification.");
   }
+
+  if (!data?.success) {
+    throw new Error(data?.error || "Invalid or Expired OTP code.");
+  }
+
+  return phoneNumber;
 };
