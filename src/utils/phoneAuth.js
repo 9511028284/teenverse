@@ -1,59 +1,71 @@
 // src/utils/phoneAuth.js
-import { supabase } from '../supabase';
 
 /**
- * Send SMS OTP via MSG91 (Routed through Supabase Edge Function)
- * @param {string} phoneNumber - Raw input (e.g., "9876543210")
- * @returns {Promise<string>} - The formatted phone number used for verification
+ * Dynamically loads the MSG91 script with fallbacks and opens the OTP Widget
+ * @param {string} phone - The formatted phone number to pre-fill
+ * @param {string} widgetId - Your MSG91 Widget ID (e.g., "3662416d3163393332393134")
+ * @param {string} tokenAuth - Your MSG91 Token Auth (optional, if your widget requires it)
+ * @returns {Promise<any>} - Resolves with verification data, rejects on failure
  */
-export const sendPhoneOtp = async (phoneNumber) => {
-  if (!phoneNumber) throw new Error("Phone number is required.");
+export const openMsg91Widget = (phone, widgetId, tokenAuth) => {
+  return new Promise((resolve, reject) => {
+    
+    // 1. Define the exact configuration object from your snippet
+    const configuration = {
+      widgetId: widgetId,
+      tokenAuth: tokenAuth || "", // Pass empty string if not using a token
+      identifier: phone, // Pre-fills the user's mobile number
+      exposeMethods: false, 
+      success: (data) => {
+          // get verified token in response
+          resolve(data);
+      },
+      failure: (error) => {
+          // handle error (e.g., user closes the modal or verification fails)
+          reject(new Error(error?.message || 'OTP Verification Failed or Cancelled.'));
+      },
+    };
 
-  // Force India prefix if missing (Standardizes to +91)
-  // Adjust this logic if you plan to support international numbers
-  const formattedNumber = phoneNumber.startsWith('+') 
-    ? phoneNumber 
-    : `+91${phoneNumber.replace(/^0+/, '')}`; // Removes any accidental leading zeros
+    // 2. If the script was already loaded in a previous step, just trigger it immediately
+    if (typeof window.initSendOTP === 'function') {
+        window.initSendOTP(configuration);
+        return;
+    }
 
-  // Invoke the secure Edge Function
-  const { data, error } = await supabase.functions.invoke('msg91-auth', {
-    body: { action: 'send', phone: formattedNumber }
+    // 3. Fallback Script Loader (Adapted directly from your snippet)
+    const urls = [
+        'https://verify.msg91.com/otp-provider.js',
+        'https://verify.phone91.com/otp-provider.js'
+    ];
+    let i = 0;
+
+    function attemptLoad() {
+        const s = document.createElement('script');
+        s.src = urls[i];
+        s.async = true;
+        
+        s.onload = () => {
+            if (typeof window.initSendOTP === 'function') {
+                window.initSendOTP(configuration);
+            } else {
+                reject(new Error('Widget loaded but initSendOTP function was not found.'));
+            }
+        };
+        
+        s.onerror = () => {
+            i++;
+            if (i < urls.length) {
+                // Try the next fallback URL
+                attemptLoad();
+            } else {
+                reject(new Error('Failed to load MSG91 widget scripts from all fallback sources. Check your network.'));
+            }
+        };
+        
+        document.head.appendChild(s);
+    }
+
+    // Start the loading process
+    attemptLoad();
   });
-
-  // Handle network or function execution errors
-  if (error) {
-    throw new Error(error.message || "Network error while contacting the OTP service.");
-  }
-
-  // Handle MSG91 API errors returned by the function
-  if (!data?.success) {
-    throw new Error(data?.error || "Failed to send OTP.");
-  }
-
-  // Return the formatted number so the UI state can hold onto it for the verification step
-  return formattedNumber; 
-};
-
-/**
- * Verify OTP Code via MSG91
- * @param {string} phoneNumber - The formatted number returned from sendPhoneOtp
- * @param {string} otp - User input (usually 4 to 6 digits)
- * @returns {Promise<string>} - The successfully verified phone number
- */
-export const verifyPhoneOtp = async (phoneNumber, otp) => {
-  if (!otp) throw new Error("OTP code is required.");
-
-  const { data, error } = await supabase.functions.invoke('msg91-auth', {
-    body: { action: 'verify', phone: phoneNumber, otp: otp.trim() }
-  });
-
-  if (error) {
-    throw new Error(error.message || "Network error during verification.");
-  }
-
-  if (!data?.success) {
-    throw new Error(data?.error || "Invalid or Expired OTP code.");
-  }
-
-  return phoneNumber;
 };

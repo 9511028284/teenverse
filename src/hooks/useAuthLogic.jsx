@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase'; // Ensure this path matches your project
-import { sendPhoneOtp, verifyPhoneOtp } from '../utils/phoneAuth'; // Removed initRecaptcha
+import { openMsg91Widget } from '../utils/phoneAuth'; // Updated to use the Widget
 
 const CLOUDFLARE_SITE_KEY = import.meta.env.VITE_CLOUDFLARE_SITE_KEY;
+// Added ENV variables for the MSG91 Widget
+const MSG91_WIDGET_ID = import.meta.env.VITE_MSG91_WIDGET_ID;
+const MSG91_TOKEN_AUTH = import.meta.env.VITE_MSG91_TOKEN_AUTH; 
 
 export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   // --- STATE ---
@@ -12,7 +15,6 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   const [toast, setToast] = useState(null);
    
   // Verification
-  const [otp, setOtp] = useState('');
   const [verificationSent, setVerificationSent] = useState(false); 
    
   // Password Reset
@@ -28,8 +30,6 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   // Social & Phone
   const [socialUser, setSocialUser] = useState(null);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
-  const [phoneVerificationId, setPhoneVerificationId] = useState(null);
-  const [phoneOtp, setPhoneOtp] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -105,8 +105,6 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     });
     return () => subscription.unsubscribe();
   }, [viewMode]);
-
-  // Removed Firebase reCAPTCHA initialization useEffect
 
   // --- HANDLERS ---
   const handleAuthRedirect = async (user) => {
@@ -222,35 +220,30 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     }
   };
 
-  const handlePhoneVerify = async () => {
-      setOtpLoading(true);
-      try {
-          const verifiedNumber = await verifyPhoneOtp(phoneVerificationId, phoneOtp);
-          setIsPhoneVerified(true);
-          updateField('phone', verifiedNumber); 
-          setPhoneVerificationId(null); 
-          showToast("Phone Verified Successfully!", "success");
-      } catch (err) {
-          showToast("Invalid OTP code");
-      } finally {
-          setOtpLoading(false);
-      }
-  };
+  // --- NEW WIDGET HANDLER ---
+  const handlePhoneVerification = async () => {
+    if (formData.phone.length < 10) return showToast("Enter valid mobile number");
+    if (!MSG91_WIDGET_ID) return showToast("Widget ID is missing from environment variables.");
 
-  const handleSendPhoneOtp = async () => {
-      if (formData.phone.length < 10) return showToast("Enter valid mobile number");
-      setOtpLoading(true);
-      try {
-          // sendPhoneOtp now returns the formatted phone number string directly from MSG91
-          const formattedPhone = await sendPhoneOtp(formData.phone);
-          setPhoneVerificationId(formattedPhone);
-          showToast("OTP sent to mobile", "success");
-      } catch (err) {
-          showToast(err.message || "Failed to send OTP");
-          // Removed reCAPTCHA fallback 
-      } finally {
-          setOtpLoading(false);
-      }
+    setOtpLoading(true);
+    try {
+        // Standardize to +91 if prefix is missing
+        const formattedPhone = formData.phone.startsWith('+') 
+          ? formData.phone 
+          : `+91${formData.phone.replace(/^0+/, '')}`;
+
+        // This single call opens the widget, waits for the user to enter the OTP, and resolves on success
+        await openMsg91Widget(formattedPhone, MSG91_WIDGET_ID, MSG91_TOKEN_AUTH);
+
+        setIsPhoneVerified(true);
+        updateField('phone', formattedPhone);
+        showToast("Phone Verified Successfully!", "success");
+    } catch (err) {
+        // Triggers if the user closes the modal or validation fails
+        showToast(err.message || "Phone verification failed.");
+    } finally {
+        setOtpLoading(false);
+    }
   };
 
   // --- PASSWORD RESET HANDLERS ---
@@ -333,17 +326,17 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   // Return everything needed by UI
   return {
     state: {
-      viewMode, step, loading, toast, otp, verificationSent,
+      viewMode, step, loading, toast, verificationSent,
       showResetVerify, resetOtp, newPassword, agreedToTerms,
-      captchaToken, socialUser, isPhoneVerified, phoneVerificationId, phoneOtp,
+      captchaToken, socialUser, isPhoneVerified,
       otpLoading, formData, age, CLOUDFLARE_SITE_KEY
     },
     refs: { turnstileRef },
     actions: {
-      setViewMode, setStep, setOtp, setResetOtp, setNewPassword, setAgreedToTerms,
-      setCaptchaToken, setPhoneOtp, updateField, showToast, setIsPhoneVerified, setVerificationSent,
+      setViewMode, setStep, setResetOtp, setNewPassword, setAgreedToTerms,
+      setCaptchaToken, updateField, showToast, setIsPhoneVerified, setVerificationSent,
       handleNext, handleBack: () => setStep(s => s - 1), 
-      handleFinalSubmit, handlePhoneVerify, handleSendPhoneOtp,
+      handleFinalSubmit, handlePhoneVerification, 
        
       // Forgot Password Actions
       handleForgotPassword,

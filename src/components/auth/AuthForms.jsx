@@ -84,7 +84,8 @@ export const LoginView = ({ state, actions }) => {
 
 // --- SIGNUP VIEW ---
 export const SignupView = ({ state, actions, refs }) => {
-  const { step, formData, isPhoneVerified, phoneVerificationId, otpLoading, phoneOtp, socialUser, agreedToTerms } = state;
+  // Destructured variables updated: removed phoneVerificationId and phoneOtp
+  const { step, formData, isPhoneVerified, otpLoading, socialUser, agreedToTerms } = state;
 
   return (
     <motion.div key="signup" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="h-full flex flex-col relative">
@@ -137,7 +138,7 @@ export const SignupView = ({ state, actions, refs }) => {
                 <div className="grid md:grid-cols-2 gap-4">
                     <input value={formData.name} onChange={(e) => actions.updateField('name', e.target.value)} className="w-full bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-4 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 outline-none transition-all placeholder-slate-400 dark:placeholder-gray-600 shadow-sm dark:shadow-none" placeholder="Full Name"/>
                      
-                    {/* Phone Verification Block */}
+                    {/* Phone Verification Block via MSG91 Widget */}
                     <div className="relative">
                         <div className="flex gap-2">
                             <input 
@@ -147,25 +148,17 @@ export const SignupView = ({ state, actions, refs }) => {
                                     if(isPhoneVerified) actions.setIsPhoneVerified(false); 
                                     actions.updateField('phone', e.target.value); 
                                 }} 
-                                disabled={isPhoneVerified || phoneVerificationId}
+                                disabled={isPhoneVerified}
                                 className={`flex-1 bg-white dark:bg-white/5 border ${isPhoneVerified ? 'border-green-500 text-green-600 dark:text-green-400' : 'border-slate-200 dark:border-white/10 text-slate-900 dark:text-white'} rounded-2xl p-4 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 outline-none transition-all placeholder-slate-400 dark:placeholder-gray-600 font-mono shadow-sm dark:shadow-none`} 
                                 placeholder="9876543210"
                             />
-                            {!isPhoneVerified && !phoneVerificationId && (
-                                <button type="button" onClick={actions.handleSendPhoneOtp} disabled={otpLoading} className="bg-slate-900 dark:bg-indigo-600 text-white px-5 rounded-2xl font-bold text-xs uppercase tracking-wider disabled:opacity-50 hover:bg-slate-800 dark:hover:bg-indigo-500 transition-colors shadow-md">
+                            {!isPhoneVerified && (
+                                <button type="button" onClick={actions.handlePhoneVerification} disabled={otpLoading} className="bg-slate-900 dark:bg-indigo-600 text-white px-5 rounded-2xl font-bold text-xs uppercase tracking-wider disabled:opacity-50 hover:bg-slate-800 dark:hover:bg-indigo-500 transition-colors shadow-md">
                                     {otpLoading ? <Loader2 className="animate-spin" size={16}/> : 'Verify'}
                                 </button>
                             )}
                             {isPhoneVerified && <div className="bg-green-100 dark:bg-green-500/20 border border-green-300 dark:border-green-500/50 text-green-600 dark:text-green-400 px-5 rounded-2xl flex items-center justify-center"><Check size={20} /></div>}
                         </div>
-                        {phoneVerificationId && !isPhoneVerified && (
-                            <div className="mt-2 p-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl animate-in fade-in slide-in-from-top-2">
-                                <div className="flex gap-2">
-                                    <input value={phoneOtp} onChange={(e) => actions.setPhoneOtp(e.target.value)} className="flex-1 bg-white dark:bg-black/40 border border-indigo-300 dark:border-indigo-500/50 rounded-xl p-3 text-slate-900 dark:text-white font-mono text-center tracking-widest text-lg focus:border-indigo-500 outline-none" placeholder="123456" maxLength={6}/>
-                                    <button type="button" onClick={actions.handlePhoneVerify} disabled={otpLoading} className="bg-green-500 hover:bg-green-600 text-white px-5 rounded-xl font-bold shadow-md">{otpLoading ? <Loader2 className="animate-spin" size={16}/> : <Check size={18}/>}</button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
                 
