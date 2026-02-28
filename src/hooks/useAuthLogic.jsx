@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase'; // Ensure this path matches your project
-import { openMsg91Widget } from '../utils/phoneAuth'; // Updated to use the Widget
+import { openMsg91Widget, verifyMsg91Token } from '../utils/phoneAuth'; // Updated to use the Widget
 
 const CLOUDFLARE_SITE_KEY = import.meta.env.VITE_CLOUDFLARE_SITE_KEY;
 // Added ENV variables for the MSG91 Widget
@@ -224,25 +224,28 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   // --- NEW WIDGET HANDLER ---
   const handlePhoneVerification = async () => {
     if (formData.phone.length < 10) return showToast("Enter valid mobile number");
-    if (!MSG91_WIDGET_ID) return showToast("Widget ID missing.");
+    if (!MSG91_WIDGET_ID) return showToast("Widget ID is missing from environment variables.");
 
     setOtpLoading(true);
     try {
+        // Standardize to +91 if prefix is missing
         const formattedPhone = formData.phone.startsWith('+') 
           ? formData.phone 
           : `+91${formData.phone.replace(/^0+/, '')}`;
 
-        // 1. Open widget and get the JWT token back
+        // 1. Open widget and get the JWT token back (saving it to a variable named 'jwtToken')
         const jwtToken = await openMsg91Widget(formattedPhone, MSG91_WIDGET_ID, MSG91_TOKEN_AUTH);
 
-        // 2. Send the token to Supabase to verify it's authentic
+        // 2. Send the exact same 'jwtToken' variable to Supabase
+        // (If you previously typed verifyMsg91Token(token) here, it would cause the exact error you are seeing!)
         await verifyMsg91Token(jwtToken);
 
-        // 3. Success!
+        // 3. Success! Update UI
         setIsPhoneVerified(true);
         updateField('phone', formattedPhone);
         showToast("Phone Verified Successfully!", "success");
     } catch (err) {
+        // Triggers if the user closes the modal, validation fails, or if token is rejected
         showToast(err.message || "Phone verification failed.");
     } finally {
         setOtpLoading(false);
