@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { 
   Search, MapPin, ArrowUpRight, Sparkles, Filter, Briefcase, 
-  ChevronDown, ChevronUp, Clock, Calendar, DollarSign, Flag, AlertTriangle 
+  ChevronDown, ChevronUp, Clock, Calendar, DollarSign, Flag, 
+  AlertTriangle, Paperclip, FileText, Download // ✅ Added new icons for attachments
 } from 'lucide-react';
 import Button from '../ui/Button';
-import Modal from '../ui/Modal'; // Ensure this matches your file structure
+import Modal from '../ui/Modal'; 
 
 // --- HELPER: TIME AGO ---
 const getTimeAgo = (dateString) => {
@@ -22,10 +23,8 @@ const getTimeAgo = (dateString) => {
     return 'Just now';
 };
 
-// Added 'onAction' to props to handle reporting
 const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, setModal, setActiveChat, setTab, setSelectedJob, onAction }) => {
   
-  // --- LOCAL STATE FOR REPORTING ---
   const [reportModal, setReportModal] = useState(null);
 
   const handleReportSubmit = (e) => {
@@ -36,7 +35,6 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
     const reason = formData.get('reason');
     const description = formData.get('description');
 
-    // Trigger the action if passed from parent, or log it
     if (onAction) {
         onAction('report', reportModal, { reason, description });
     } else {
@@ -47,10 +45,8 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
   };
 
   const JobCard = ({ data, type }) => {
-    // State to handle Read More / Read Less toggle
     const [isExpanded, setIsExpanded] = useState(false);
 
-    // Dynamic Gradients based on ID for visual variety
     const gradients = [
         "from-pink-500/80 via-rose-500/80 to-yellow-500/80", 
         "from-blue-400/80 via-indigo-500/80 to-purple-500/80", 
@@ -58,7 +54,6 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
     ];
     const gradient = gradients[(data.id || 0) % gradients.length];
 
-    // Description Logic
     const description = data.description || "No description provided for this mission.";
     const isLongText = description.length > 120;
 
@@ -67,12 +62,9 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
         
         {/* --- 1. COVER IMAGE AREA --- */}
         <div className={`h-28 w-full relative overflow-hidden bg-gradient-to-br ${gradient}`}>
-            {/* Texture Overlay */}
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-30 mix-blend-overlay"></div>
-            {/* Fade to Content */}
             <div className="absolute bottom-0 left-0 w-full h-2/3 bg-gradient-to-t from-white dark:from-[#09090b] to-transparent"></div>
             
-            {/* Type Badge */}
             <div className="absolute top-4 right-4 bg-white/90 dark:bg-black/40 backdrop-blur-md border border-gray-200 dark:border-white/10 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                 <span className="text-[10px] font-bold text-gray-800 dark:text-white uppercase tracking-wider">{type}</span>
@@ -82,20 +74,19 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
         {/* --- 2. CARD CONTENT --- */}
         <div className="p-6 pt-0 flex flex-col flex-grow relative z-10 -mt-2">
            
-           {/* Title & Author */}
            <div className="mb-4">
               <h3 className="text-xl font-bold text-gray-900 dark:text-white leading-tight mb-2 line-clamp-2 group-hover:text-indigo-600 dark:group-hover:text-transparent dark:group-hover:bg-clip-text dark:group-hover:bg-gradient-to-r dark:group-hover:from-white dark:group-hover:to-indigo-400 transition-all">
                   {data.title}
               </h3>
               <p className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center text-[10px] text-gray-600 dark:text-gray-300">
-                    {isClient ? '👤' : '🏢'}
+                    {isClient ? '💼' : '🧑‍💻'}
                   </span>
                   {isClient ? `Freelancer: ${data.freelancer_name}` : `Client: ${data.client_name}`}
               </p>
            </div>
 
-           {/* --- METADATA GRID (Adequate Details) --- */}
+           {/* --- METADATA GRID --- */}
            <div className="grid grid-cols-2 gap-2 mb-5">
                <div className="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl p-2.5 flex items-center gap-2">
                    <Clock size={14} className="text-indigo-500 dark:text-indigo-400"/>
@@ -111,7 +102,6 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                        <p className="text-xs font-bold text-gray-700 dark:text-gray-200">{data.job_type || "Fixed Price"}</p>
                    </div>
                </div>
-               {/* Full Width Row for Date */}
                <div className="col-span-2 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl p-2 flex items-center gap-2 justify-center">
                    <Calendar size={12} className="text-gray-400"/>
                    <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">Posted {getTimeAgo(data.created_at)}</span>
@@ -119,27 +109,55 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
            </div>
 
            {/* Description with Expand */}
-           <div className="mb-6 relative">
+           <div className="mb-4 relative">
                <p className={`text-sm text-gray-600 dark:text-gray-300 leading-relaxed transition-all duration-300 ${isExpanded ? '' : 'line-clamp-3'}`}>
                    {description}
                </p>
                
                {isLongText && (
                    <button 
-                       onClick={(e) => {
-                           e.stopPropagation();
-                           setIsExpanded(!isExpanded);
-                       }}
+                       onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
                        className="mt-2 text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 transition-colors"
                    >
-                       {isExpanded ? (
-                           <>Collapse Details <ChevronUp size={12} /></>
-                       ) : (
-                           <>Read Full Details <ChevronDown size={12} /></>
-                       )}
+                       {isExpanded ? <>Collapse Details <ChevronUp size={12} /></> : <>Read Full Details <ChevronDown size={12} /></>}
                    </button>
                )}
            </div>
+
+           {/* 🚀 NEW: ATTACHMENTS SECTION */}
+           {data.attachments && data.attachments.length > 0 && (
+               <div className="mb-6">
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+                       <Paperclip size={10} /> Reference Files
+                   </p>
+                   <div className="flex flex-wrap gap-2">
+                       {data.attachments.map((url, i) => {
+                           // Extract filename and remove the Date timestamp we added during upload
+                           const rawName = url.split('/').pop().split('?')[0];
+                           const cleanName = decodeURIComponent(rawName).replace(/^\d+_/, '') || `Attachment ${i + 1}`;
+                           
+                           return (
+                               <a 
+                                   key={i} 
+                                   href={url} 
+                                   target="_blank" 
+                                   rel="noopener noreferrer"
+                                   download
+                                   onClick={(e) => e.stopPropagation()}
+                                   className="group/file flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/30 transition-all"
+                                   title={cleanName}
+                               >
+                                   <FileText size={12} className="text-indigo-500 dark:text-indigo-400" />
+                                   <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 truncate max-w-[120px]">
+                                       {cleanName}
+                                   </span>
+                                   <Download size={10} className="text-indigo-400 opacity-0 group-hover/file:opacity-100 transition-opacity" />
+                               </a>
+                           );
+                       })}
+                   </div>
+               </div>
+           )}
 
            {/* Tags */}
            <div className="flex flex-wrap gap-2 mb-6 mt-auto">
@@ -158,34 +176,18 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                        <span className="text-sm text-gray-400 font-medium mr-0.5">₹</span>{data.price || data.budget}
                    </div>
                    
-                   {/* 🚩 NEW: REPORT BUTTON */}
-                   {/* 🚩 REPORT BUTTON */}
-<button 
-  onClick={(e) => {
-     e.stopPropagation();
-     
-     // 1. Prepare the payload explicitly
-     const reportPayload = { 
-        target_type: 'job', 
-        target_id: data.id, // <--- Force this key to be 'target_id'
-        reported_user_id: isClient ? data.freelancer_id : data.client_id 
-     };
-
-     // 2. Send it via onAction (Preferred)
-     if (onAction) {
-         console.log("🚀 Sending Report from Jobs:", reportPayload);
-         onAction('report', reportPayload);
-     } 
-     // 3. Fallback for local state (Safety net)
-     else if (setModal) {
-         setModal(reportPayload); 
-     }
-  }}
-  className="text-[10px] text-gray-300 hover:text-red-500 flex items-center gap-1 mt-1 transition-colors"
-  title="Report this post"
->
-  <Flag size={10} /> Report
-</button>
+                   <button 
+                     onClick={(e) => {
+                        e.stopPropagation();
+                        const reportPayload = { target_type: 'job', target_id: data.id, reported_user_id: isClient ? data.freelancer_id : data.client_id };
+                        if (onAction) onAction('report', reportPayload);
+                        else if (setModal) setModal(reportPayload); 
+                     }}
+                     className="text-[10px] text-gray-300 hover:text-red-500 flex items-center gap-1 mt-1 transition-colors"
+                     title="Report this post"
+                   >
+                     <Flag size={10} /> Report
+                   </button>
                </div>
                
                <button 
@@ -207,7 +209,7 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
   return (
     <div className="min-h-screen space-y-8 animate-fade-in pb-20">
       
-      {/* --- FLOATING COMMAND BAR (Light/Dark Mode Friendly) --- */}
+      {/* --- FLOATING COMMAND BAR --- */}
       <div className="sticky top-6 z-40 mx-auto max-w-2xl px-4">
         <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
@@ -242,7 +244,7 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                  {filteredJobs.length + services.length} ACTIVE SIGNALS DETECTED
               </p>
           </div>
-          <div className="flex gap-2 items-center bg-green-500/10 dark:bg-green-500/10 px-3 py-1 rounded-full border border-green-500/20">
+          <div className="flex gap-2 items-center bg-green-500/10 px-3 py-1 rounded-full border border-green-500/20">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-ping"></span>
               <span className="text-green-600 dark:text-green-500 text-xs font-bold uppercase tracking-widest">Live Feed</span>
           </div>
@@ -267,7 +269,7 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
         </div>
       )}
 
-      {/* --- 🆕 REPORT MODAL --- */}
+      {/* --- REPORT MODAL --- */}
       {reportModal && (
         <Modal title="Report Post" onClose={() => setReportModal(null)}>
             <form onSubmit={handleReportSubmit} className="space-y-4">

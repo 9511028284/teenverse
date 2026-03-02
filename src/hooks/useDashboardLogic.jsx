@@ -242,28 +242,21 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // 🔐 SMART LOCK SYSTEM (KYC STATE MACHINE)
   // ------------------------------------------
   const checkKycLock = (actionType) => {
-    if (isClient) return true;
+    if (isClient) return true; // Clients don't need freelancer KYC
 
-    const status = user.kyc_status || 'unverified';
-
-    // 1. APPLYING FOR JOBS (Requires Identity Phase)
+    // 1. Block Applying for Jobs
     if (actionType === 'apply_paid') {
-        if (status === 'unverified') {
-            showToast("🔒 Step 1: Age Verification Required via DigiLocker.", "info");
-            setModal('kyc_verification');
-            return false;
-        }
-        if (status === 'age_verified') {
-            showToast("🔒 Step 2: PAN Verification Required.", "info");
+        if (!user.is_kyc_verified) {
+            showToast("🔒 Identity verification required to apply for jobs.", "info");
             setModal('kyc_verification');
             return false;
         }
     }
 
-    // 2. WITHDRAWING FUNDS (Requires Banking Phase)
+    // 2. Block Receiving Payments/Withdrawals
     if (actionType === 'withdraw_funds' || actionType === 'release_escrow') {
-        if (status === 'unverified' || status === 'age_verified') {
-            showToast("🔒 Full Identity Verification required before linking a bank.", "error");
+        if (!user.is_kyc_verified) {
+            showToast("🔒 Identity verification required to receive funds.", "error");
             setModal('kyc_verification');
             return false;
         }
@@ -272,11 +265,10 @@ export const useDashboardLogic = (user, setUser, showToast) => {
             setModal('bank_linkage'); 
             return false;
         }
-        return true;
     }
 
     return true; 
-  };
+};
 
   const handleReportSubmit = async (e) => {
     e.preventDefault();
@@ -416,29 +408,59 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const handlePostJob = async (e) => {
     e.preventDefault();
     if (!checkKycLock('post_job')) return;
+    
     const formData = new FormData(e.target);
     const budget = parseFloat(formData.get('budget'));
     const title = formData.get('title');
+    const files = e.target.attachments?.files; // Grab the uploaded files
     
     if (budget < 1) return showToast("Minimum budget is ₹1", "error"); 
     if (title.length < 5) return showToast("Job title is too short", "error"); 
     
+    // --- 🚀 NEW: UPLOAD FILES TO SUPABASE STORAGE ---
+    let uploadedUrls = [];
+    if (files && files.length > 0) {
+      showToast("Uploading attachments...", "info");
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const filePath = `jobs/${user.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+        
+        // Using 'project-files' bucket since it already exists for work submissions
+        const { error: uploadError } = await supabase.storage.from('project-files').upload(filePath, file);
+        
+        if (!uploadError) {
+          const { data: publicUrl } = supabase.storage.from('project-files').getPublicUrl(filePath);
+          uploadedUrls.push(publicUrl.publicUrl);
+        } else {
+          console.error("Upload error:", uploadError);
+          showToast(`Failed to upload: ${file.name}`, "error");
+        }
+      }
+    }
+
     const jobData = { 
-        client_id: user.id, client_name: user.name, title: title, budget: budget, 
-        job_type: 'Fixed', duration: formData.get('duration'), tags: formData.get('tags'), 
-        description: formData.get('description'), category: formData.get('category') || 'dev' 
+        client_id: user.id, 
+        client_name: user.name, 
+        title: title, 
+        budget: budget, 
+        job_type: 'Fixed', 
+        duration: formData.get('duration'), 
+        tags: formData.get('tags'), 
+        description: formData.get('description'), 
+        category: formData.get('category') || 'dev',
+        attachments: uploadedUrls // ✅ Attach the URLs to the database payload
     };
     
     const { error } = await api.createJob(jobData);
-    if (error) { showToast(error.message, 'error'); } 
-    else { 
-        await logAction('JOB_POSTED', { title: title, budget: budget });
-        showToast('Job Posted!'); 
+    if (error) { 
+        showToast(error.message, 'error'); 
+    } else { 
+        await logAction('JOB_POSTED', { title: title, budget: budget, has_attachments: uploadedUrls.length > 0 });
+        showToast('Mission Launched Successfully!', 'success'); 
         setModal(null); 
         setJobs([jobData, ...jobs]); 
     }
   };
-
   const handleDeleteJob = async (id) => {
     if(!window.confirm("Are you sure you want to delete this job?")) return;
     const { error } = await api.deleteJob(id);
@@ -547,26 +569,50 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     if (!selectedApp) { showToast("Error: No active application selected.", "error"); return; }
     setModal(null);
     showToast("Uploading work...", "info");
+    
     const formData = new FormData(e.target);
     const workLink = formData.get('work_link');
     const message = formData.get('message');
-    const files = e.target.files; 
+    
+    // ✅ FIX: Correctly grab the files from the specific input
+    const fileInput = e.target.querySelector('input[type="file"]');
+    const files = fileInput ? fileInput.files : []; 
+    
     let uploadedUrls = [];
     
+    // Now this loop will actually run!
     if (files.length > 0) {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const filePath = `${user.id}/${Date.now()}_${file.name}`;
+        
+        // Skip empty files
+        if (file.size === 0) continue; 
+
+        // Sanitize the file name to prevent upload errors
+        const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+        const filePath = `${user.id}/${Date.now()}_${safeName}`;
+        
         const { error } = await supabase.storage.from('project-files').upload(filePath, file);
         if (!error) {
           const { data: publicUrl } = supabase.storage.from('project-files').getPublicUrl(filePath);
           uploadedUrls.push(publicUrl.publicUrl);
+        } else {
+          console.error("Upload Error:", error);
+          showToast(`Failed to upload ${file.name}`, "error");
         }
       }
     }
+    
     const timestamp = new Date().toISOString();
+    
+    // Send the generated URLs to your Edge Function
     const { error } = await supabase.functions.invoke('order-manager', {
-      body: { action: 'SUBMIT_WORK', appId: selectedApp.id, userId: user.id, payload: { work_link: workLink, message: message, files: uploadedUrls } }
+      body: { 
+        action: 'SUBMIT_WORK', 
+        appId: selectedApp.id, 
+        userId: user.id, 
+        payload: { work_link: workLink, message: message, files: uploadedUrls } // ✅ URLs are now properly sent
+      }
     });
     
     if (error) { showToast("Submission failed: " + error.message, "error"); } 

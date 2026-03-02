@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../ui/Modal';
 import { 
   ChevronRight, Sparkles, Briefcase, Clock, 
-  DollarSign, AlignLeft, Tags 
+  DollarSign, AlignLeft, Tags, Paperclip // ✅ Added Paperclip icon
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -127,12 +127,30 @@ const PostJobModal = ({ onClose, onSubmit }) => {
            </div>
         </div>
 
+        {/* 5. NEW: File Uploads */}
+        <div className="space-y-2">
+           <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Reference Files (Optional)</label>
+           <div className="relative group cursor-pointer">
+             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-gray-400 group-hover:text-indigo-500 transition-colors">
+               <Paperclip size={18} />
+             </div>
+             <input
+               type="file"
+               name="attachments"
+               multiple
+               accept="image/*,.pdf,.doc,.docx"
+               className="w-full pl-12 pr-4 py-3 bg-gray-50/50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-2xl outline-none transition-all duration-300 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 dark:file:bg-indigo-500/20 dark:file:text-indigo-300 dark:hover:file:bg-indigo-500/30 text-gray-600 dark:text-gray-300 cursor-pointer"
+             />
+           </div>
+           <p className="text-[10px] text-gray-500 px-1">Upload images, PDFs, or docs to explain your requirements better.</p>
+        </div>
+
         {/* IP Transfer Disclaimer */}
         <div className="text-[10px] text-gray-400 text-center px-4 leading-tight">
           By launching, you agree that Intellectual Property (IP) rights only transfer to you upon full payment completion.
         </div>
 
-        {/* 5. Action Button */}
+        {/* Action Button */}
         <button className="relative w-full group overflow-hidden rounded-2xl bg-indigo-600 p-4 transition-all hover:scale-[1.02] active:scale-95 shadow-xl shadow-indigo-500/30">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-[150%] group-hover:animate-[shimmer_1.5s_infinite]" />
           <div className="relative z-10 flex items-center justify-center gap-2 font-black text-white uppercase tracking-wider text-sm">
