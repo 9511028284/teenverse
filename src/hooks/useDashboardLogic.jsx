@@ -412,28 +412,51 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const formData = new FormData(e.target);
     const budget = parseFloat(formData.get('budget'));
     const title = formData.get('title');
-    const files = e.target.attachments?.files; // Grab the uploaded files
+    
+    // Grab the files from the 'attachments' input in PostJobModal
+    const fileInput = e.target.querySelector('input[name="attachments"]');
+    const files = fileInput ? fileInput.files : []; 
     
     if (budget < 1) return showToast("Minimum budget is ₹1", "error"); 
     if (title.length < 5) return showToast("Job title is too short", "error"); 
     
-    // --- 🚀 NEW: UPLOAD FILES TO SUPABASE STORAGE ---
     let uploadedUrls = [];
+
+    // --- 🚀 CLOUDFLARE R2 UPLOAD LOGIC ---
     if (files && files.length > 0) {
-      showToast("Uploading attachments...", "info");
+      showToast("Uploading attachments to secure vault...", "info");
+      
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const filePath = `jobs/${user.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
-        
-        // Using 'project-files' bucket since it already exists for work submissions
-        const { error: uploadError } = await supabase.storage.from('project-files').upload(filePath, file);
-        
-        if (!uploadError) {
-          const { data: publicUrl } = supabase.storage.from('project-files').getPublicUrl(filePath);
-          uploadedUrls.push(publicUrl.publicUrl);
-        } else {
-          console.error("Upload error:", uploadError);
-          showToast(`Failed to upload: ${file.name}`, "error");
+        if (file.size === 0) continue;
+
+        const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+        // We use a 'jobs/' prefix to keep these organized separately from submissions
+        const filePath = `jobs/${user.id}/${Date.now()}_${safeName}`; 
+
+        try {
+          // 1️⃣ Ask our Edge Function for a secure Cloudflare R2 URL
+          const { data: presignData, error: presignError } = await supabase.functions.invoke('generate-r2-url', {
+             body: { fileName: filePath, fileType: file.type }
+          });
+
+          if (presignError || !presignData?.signedUrl) throw new Error("Could not get secure upload link.");
+
+          // 2️⃣ Upload the file directly to Cloudflare R2
+          const uploadRes = await fetch(presignData.signedUrl, {
+            method: 'PUT',
+            body: file,
+            headers: { 'Content-Type': file.type }
+          });
+
+          if (!uploadRes.ok) throw new Error("R2 Upload failed");
+
+          // 3️⃣ Save the resulting public Cloudflare URL
+          uploadedUrls.push(presignData.publicUrl);
+          
+        } catch (err) {
+           console.error("Upload Error:", err);
+           showToast(`Failed to upload ${file.name}`, "error");
         }
       }
     }
@@ -448,7 +471,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         tags: formData.get('tags'), 
         description: formData.get('description'), 
         category: formData.get('category') || 'dev',
-        attachments: uploadedUrls // ✅ Attach the URLs to the database payload
+        attachments: uploadedUrls // ✅ Cloudflare R2 URLs attached to the database payload
     };
     
     const { error } = await api.createJob(jobData);
@@ -461,6 +484,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         setJobs([jobData, ...jobs]); 
     }
   };
+
+  
   const handleDeleteJob = async (id) => {
     if(!window.confirm("Are you sure you want to delete this job?")) return;
     const { error } = await api.deleteJob(id);
@@ -568,50 +593,62 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     e.preventDefault();
     if (!selectedApp) { showToast("Error: No active application selected.", "error"); return; }
     setModal(null);
-    showToast("Uploading work...", "info");
+    showToast("Uploading work to secure vault...", "info");
     
     const formData = new FormData(e.target);
     const workLink = formData.get('work_link');
     const message = formData.get('message');
     
-    // ✅ FIX: Correctly grab the files from the specific input
+    // Grab the files from the specific input
     const fileInput = e.target.querySelector('input[type="file"]');
     const files = fileInput ? fileInput.files : []; 
     
     let uploadedUrls = [];
     
-    // Now this loop will actually run!
     if (files.length > 0) {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        
-        // Skip empty files
         if (file.size === 0) continue; 
 
-        // Sanitize the file name to prevent upload errors
         const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
         const filePath = `${user.id}/${Date.now()}_${safeName}`;
         
-        const { error } = await supabase.storage.from('project-files').upload(filePath, file);
-        if (!error) {
-          const { data: publicUrl } = supabase.storage.from('project-files').getPublicUrl(filePath);
-          uploadedUrls.push(publicUrl.publicUrl);
-        } else {
-          console.error("Upload Error:", error);
-          showToast(`Failed to upload ${file.name}`, "error");
+        try {
+          // 1️⃣ Ask our Edge Function for a secure Cloudflare R2 URL
+          const { data: presignData, error: presignError } = await supabase.functions.invoke('generate-r2-url', {
+             body: { fileName: filePath, fileType: file.type }
+          });
+
+          if (presignError || !presignData?.signedUrl) throw new Error("Could not get secure upload link.");
+
+          // 2️⃣ Upload the file directly to Cloudflare R2
+          const uploadRes = await fetch(presignData.signedUrl, {
+            method: 'PUT',
+            body: file,
+            headers: { 'Content-Type': file.type }
+          });
+
+          if (!uploadRes.ok) throw new Error("R2 Upload failed");
+
+          // 3️⃣ Save the resulting public Cloudflare URL
+          uploadedUrls.push(presignData.publicUrl);
+          
+        } catch (err) {
+           console.error("Upload Error:", err);
+           showToast(`Failed to upload ${file.name}`, "error");
         }
       }
     }
     
     const timestamp = new Date().toISOString();
     
-    // Send the generated URLs to your Edge Function
+    // Send the Cloudflare R2 URLs to your existing order-manager
     const { error } = await supabase.functions.invoke('order-manager', {
       body: { 
         action: 'SUBMIT_WORK', 
         appId: selectedApp.id, 
         userId: user.id, 
-        payload: { work_link: workLink, message: message, files: uploadedUrls } // ✅ URLs are now properly sent
+        payload: { work_link: workLink, message: message, files: uploadedUrls } 
       }
     });
     
@@ -623,6 +660,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       setSelectedApp(null);
     }
   };
+
 
   const handleApproveWork = async (app) => {
     const prevApps = [...applications];
