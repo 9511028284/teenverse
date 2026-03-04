@@ -87,7 +87,7 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
            </div>
 
            {/* --- METADATA GRID --- */}
-           <div className="grid grid-cols-2 gap-2 mb-5">
+           <div key={job.id} className="grid grid-cols-2 gap-2 mb-5">
                <div className="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl p-2.5 flex items-center gap-2">
                    <Clock size={14} className="text-indigo-500 dark:text-indigo-400"/>
                    <div>

@@ -426,9 +426,17 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     if (files && files.length > 0) {
       showToast("Uploading attachments to secure vault...", "info");
       
+      // Define 10MB limit in bytes
+      const MAX_SIZE_BYTES = 10 * 1024 * 1024; 
+
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (file.size === 0) continue;
+
+        // 🛑 NEW: 10MB Size Limit Check
+        if (file.size > MAX_SIZE_BYTES) {
+            return showToast(`"${file.name}" exceeds the 10MB limit. Please choose a smaller file.`, "error");
+        }
 
         const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
         // We use a 'jobs/' prefix to keep these organized separately from submissions
@@ -592,8 +600,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const handleSubmitWork = async (e) => {
     e.preventDefault();
     if (!selectedApp) { showToast("Error: No active application selected.", "error"); return; }
-    setModal(null);
-    showToast("Uploading work to secure vault...", "info");
     
     const formData = new FormData(e.target);
     const workLink = formData.get('work_link');
@@ -601,7 +607,24 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     
     // Grab the files from the specific input
     const fileInput = e.target.querySelector('input[type="file"]');
-    const files = fileInput ? fileInput.files : []; 
+    const files = fileInput && fileInput.files ? Array.from(fileInput.files) : []; 
+    
+    // 🛑 1. LIMIT: Maximum 5 files
+    if (files.length > 5) {
+        return showToast("You can only upload a maximum of 5 files.", "error");
+    }
+
+    // 🛑 2. LIMIT: Maximum 15MB per file
+    const MAX_SIZE_BYTES = 15 * 1024 * 1024; // 15MB in bytes
+    for (let i = 0; i < files.length; i++) {
+        if (files[i].size > MAX_SIZE_BYTES) {
+            return showToast(`"${files[i].name}" exceeds the 15MB limit. Please choose a smaller file.`, "error");
+        }
+    }
+
+    // Validations passed! Now close the modal and start uploading
+    setModal(null);
+    showToast("Uploading work to secure vault...", "info");
     
     let uploadedUrls = [];
     
@@ -631,7 +654,10 @@ export const useDashboardLogic = (user, setUser, showToast) => {
           if (!uploadRes.ok) throw new Error("R2 Upload failed");
 
           // 3️⃣ Save the resulting public Cloudflare URL
-          uploadedUrls.push(presignData.publicUrl);
+          // Make sure this uses your clean, public VITE_R2_PUBLIC_URL instead of the raw presign URL
+          const baseUrl = import.meta.env.VITE_R2_PUBLIC_URL.replace(/\/$/, "");
+          const cleanPath = filePath.replace(/^\//, "");
+          uploadedUrls.push(`${baseUrl}/${cleanPath}`);
           
         } catch (err) {
            console.error("Upload Error:", err);
@@ -660,7 +686,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       setSelectedApp(null);
     }
   };
-
 
   const handleApproveWork = async (app) => {
     const prevApps = [...applications];

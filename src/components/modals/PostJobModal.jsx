@@ -128,22 +128,27 @@ const PostJobModal = ({ onClose, onSubmit }) => {
         </div>
 
         {/* 5. NEW: File Uploads */}
-        <div className="space-y-2">
-           <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Reference Files (Optional)</label>
-           <div className="relative group cursor-pointer">
-             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-gray-400 group-hover:text-indigo-500 transition-colors">
-               <Paperclip size={18} />
-             </div>
-             <input
-               type="file"
-               name="attachments"
-               multiple
-               accept="image/*,.pdf,.doc,.docx"
-               className="w-full pl-12 pr-4 py-3 bg-gray-50/50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-2xl outline-none transition-all duration-300 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 dark:file:bg-indigo-500/20 dark:file:text-indigo-300 dark:hover:file:bg-indigo-500/30 text-gray-600 dark:text-gray-300 cursor-pointer"
-             />
-           </div>
-           <p className="text-[10px] text-gray-500 px-1">Upload images, PDFs, or docs to explain your requirements better.</p>
-        </div>
+<div className="space-y-2">
+   <div className="flex justify-between items-end">
+     <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Reference Files (Optional)</label>
+     <span className="text-[10px] text-gray-500 font-bold">Max 5 Files (10MB each)</span>
+   </div>
+   <div className="relative group cursor-pointer">
+     <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-gray-400 group-hover:text-indigo-500 transition-colors">
+       <Paperclip size={18} />
+     </div>
+     <input
+       type="file"
+       name="attachments"
+       multiple
+       accept="image/*,.pdf,.doc,.docx"
+       className="w-full pl-12 pr-4 py-3 bg-gray-50/50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-2xl outline-none transition-all duration-300 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 dark:file:bg-indigo-500/20 dark:file:text-indigo-300 dark:hover:file:bg-indigo-500/30 text-gray-600 dark:text-gray-300 cursor-pointer"
+     />
+   </div>
+   <p className="text-[10px] text-gray-500 px-1">Images are automatically compressed. PDFs and Docs must be under 10MB.</p>
+</div>
+
+        
 
         {/* IP Transfer Disclaimer */}
         <div className="text-[10px] text-gray-400 text-center px-4 leading-tight">
