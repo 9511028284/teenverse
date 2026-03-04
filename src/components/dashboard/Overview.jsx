@@ -54,7 +54,7 @@ const TickerItem = ({ label, value, trend }) => (
 
 const Overview = ({ 
   user, isClient, totalEarnings, showToast, jobsCount, 
-  badgesCount, setTab, referralCount, referralEarnings 
+  badgesCount, setTab, referralCount, referralEarnings, energy 
 }) => {
   
   const [greeting, setGreeting] = useState('Welcome back');
@@ -148,7 +148,7 @@ const Overview = ({
                    <Zap size={24} className="text-yellow-500 dark:text-yellow-400 relative z-10 fill-yellow-500 dark:fill-yellow-400" />
                  </div>
                  <div>
-                   <div className="text-2xl font-black text-gray-900 dark:text-white leading-none">{user.energy_points || 0}</div>
+                   <div className="text-2xl font-black text-gray-900 dark:text-white leading-none">{energy}</div>
                    <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Energy Points</div>
                  </div>
               </div>
