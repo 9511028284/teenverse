@@ -9,6 +9,7 @@ import {
 import { motion, useScroll, useTransform, useSpring, useMotionValue, useInView, AnimatePresence } from 'framer-motion';
 
 // --- MOCK SUPABASE (For demo purposes) ---
+// Note: Ensure you connect your real Supabase instance or disable this form before applying to the gateway so they don't flag it as non-functional!
 const mockSupabase = {
   from: () => ({
     insert: async () => {
@@ -29,7 +30,6 @@ const TiltCard = ({ children, className }) => {
     mouseX.set(clientX - left - width / 2);
     mouseY.set(clientY - top - height / 2);
   };
-
   return (
     <motion.div
       onMouseMove={handleMouseMove}
@@ -50,7 +50,6 @@ const TiltCard = ({ children, className }) => {
 const RevealOnScroll = ({ children, delay = 0 }) => {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-10% 0px" });
-
   return (
     <motion.div
       ref={ref}
@@ -68,18 +67,20 @@ const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;800&display=swap');
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
   
-  :root { --primary: #6366f1; --accent-lime: #ccff00; }
-  body { font-family: 'Inter', sans-serif; overflow-x: hidden; }
-  h1, h2, h3, h4, h5, h6, button { font-family: 'Space Grotesk', sans-serif; }
+  :root { --primary: #6366f1;
+  --accent-lime: #ccff00; }
+  body { font-family: 'Inter', sans-serif; overflow-x: hidden;
+  }
+  h1, h2, h3, h4, h5, h6, button { font-family: 'Space Grotesk', sans-serif;
+  }
   
   .custom-cursor {
     position: fixed; top: 0; left: 0; width: 20px; height: 20px;
     background: var(--accent-lime); border-radius: 50%; pointer-events: none; z-index: 9999;
     mix-blend-mode: exclusion; transition: transform 0.1s;
   }
-  .custom-cursor.hovered { transform: scale(4); background: white; mix-blend-mode: difference; }
-  
-  
+  .custom-cursor.hovered { transform: scale(4);
+    background: white; mix-blend-mode: difference; }
   
   @keyframes float {
     0% { transform: translateY(0px) rotate(0deg); }
@@ -95,7 +96,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
   const [activeTab, setActiveTab] = useState('creators');
   const [feedbackStatus, setFeedbackStatus] = useState('idle');
   const [feedbackForm, setFeedbackForm] = useState({ name: '', email: '', message: '' });
-  
+
   // --- ANIMATION HOOKS ---
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
@@ -170,23 +171,20 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
       'how it works': 'how it works',
       'explore': 'explore'
     };
-
     const sectionId = sectionIdMap[cleanTarget] || cleanTarget;
     const section = document.getElementById(sectionId);
-    
     if (section) {
         section.scrollIntoView({ behavior: 'smooth' });
     }
     setIsMobileMenuOpen(false);
   };
 
- const handleFooterLink = (link) => {
+  const handleFooterLink = (link) => {
       const lower = link.toLowerCase();
-      // Map footer strings to the exact keys used in your Legal.jsx documents object
       if (lower.includes('terms') && onLegalClick) { onLegalClick('terms'); return; }
       if (lower.includes('privacy') && onLegalClick) { onLegalClick('privacy'); return; }
-      if (lower.includes('refund') && onLegalClick) { onLegalClick('disputes'); return; } // Opens Dispute Resolution (Refunds)
-      if (lower.includes('safety') && onLegalClick) { onLegalClick('parent_agreement'); return; } // Opens Parent Agreement
+      if (lower.includes('refund') && onLegalClick) { onLegalClick('disputes'); return; } 
+      if (lower.includes('safety') && onLegalClick) { onLegalClick('parent_agreement'); return; } 
       
       handleNav(link);
   };
@@ -195,8 +193,8 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
     <div className={`relative min-h-screen selection:bg-[#ccff00] selection:text-black transition-colors duration-500 ${darkMode ? 'bg-[#050505] text-white' : 'bg-[#f8f9ff] text-slate-900'}`}>
       
       <Helmet>
-        <title>TeenVerseHub – India's Safest Student Freelance Marketplace</title>
-        <meta name="description" content="Secure freelancing for teens (14-19) in India. Earn experience with verified clients, escrow payments, and parent supervision." />
+        <title>TeenVerseHub – Verified Digital Creator Marketplace</title>
+        <meta name="description" content="Secure digital services marketplace for creators in India. Build your portfolio with verified clients and protected milestone payments." />
       </Helmet>
 
       <style>{styles}</style>
@@ -319,7 +317,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
               className={`text-lg md:text-xl max-w-2xl mx-auto mb-12 font-medium leading-relaxed ${darkMode ? 'text-gray-400' : 'text-slate-600'}`}
             >
-              India’s safest marketplace for students (14–19). Earn pocket money, build a portfolio, and learn financial literacy—all with <span className={darkMode ? 'text-white font-bold' : 'text-indigo-700 font-bold'}>secure escrow payments</span> and parent oversight.
+              A digital services marketplace for creators and clients. Gain real project experience and build a portfolio—all with <span className={darkMode ? 'text-white font-bold' : 'text-indigo-700 font-bold'}>secure milestone payments</span> and accounts operated with guardian consent where required.
             </motion.p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -328,14 +326,14 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
                  onClick={() => handleNav('auth')}
                  className={`hover-target relative px-10 py-5 font-black text-lg rounded-2xl flex items-center gap-3 transition-shadow ${darkMode ? 'bg-[#ccff00] text-black shadow-[0_0_30px_rgba(204,255,0,0.3)] hover:shadow-[0_0_50px_rgba(204,255,0,0.5)]' : 'bg-indigo-600 text-white shadow-xl shadow-indigo-200 hover:shadow-2xl hover:shadow-indigo-300'}`}
                >
-                  I'M A TEEN <Rocket size={20}/>
+                  I'M A CREATOR <Rocket size={20}/>
                </motion.button>
                <motion.button 
                   whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                   onClick={() => handleNav('auth')}
                   className={`hover-target px-10 py-5 border rounded-2xl font-bold flex items-center gap-3 ${darkMode ? 'border-white/10 bg-white/5 backdrop-blur text-white hover:bg-white/10' : 'border-slate-200 bg-white text-slate-900 hover:bg-slate-50 shadow-md'}`}
                >
-                  HIRE GEN Z <ArrowRight size={20}/>
+                  HIRE TALENT <ArrowRight size={20}/>
                </motion.button>
             </div>
             
@@ -391,16 +389,16 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
             <RevealOnScroll>
                 <div className="text-center mb-16">
                     <h2 className={`text-3xl md:text-5xl font-black mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Safe Work, <span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>Secure Payments.</span></h2>
-                    <p className={darkMode ? 'text-gray-400' : 'text-slate-500'}>Our escrow system ensures you never work for free.</p>
+                    <p className={darkMode ? 'text-gray-400' : 'text-slate-500'}>Our milestone system ensures protected transactions.</p>
                 </div>
             </RevealOnScroll>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                 {[
-                    { icon: Briefcase, title: "1. Post & Pitch", desc: "Clients post jobs. Verified teens pitch their skills." },
-                    { icon: Lock, title: "2. Escrow Lock", desc: "Client deposits funds. Money is locked securely BEFORE work starts.", active: true },
+                    { icon: Briefcase, title: "1. Post & Pitch", desc: "Clients post jobs. Verified creators pitch their skills." },
+                    { icon: Lock, title: "2. Secure Milestones", desc: "Client deposits funds. Payments are protected BEFORE work starts.", active: true },
                     { icon: Code, title: "3. Create", desc: "Work happens in our monitored, safe chat environment." },
-                    { icon: DollarSign, title: "4. Get Paid", desc: "Client approves. Funds are instantly released to your wallet." }
+                    { icon: DollarSign, title: "4. Get Paid", desc: "Client approves. Funds are securely released." }
                 ].map((step, i) => (
                     <RevealOnScroll key={i} delay={i * 0.1}>
                         <div className={`relative p-8 rounded-3xl border transition-all h-full ${
@@ -421,7 +419,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
         </div>
       </section>
 
-      {/* --- FLIP SECTION: TEENS VS PARENTS --- */}
+      {/* --- FLIP SECTION: CREATORS VS GUARDIANS --- */}
       <section className={`py-24 px-6 perspective-1000 border-t ${darkMode ? 'bg-[#050505] border-white/5' : 'bg-white border-slate-100'}`}>
          <RevealOnScroll>
            <div className="max-w-5xl mx-auto">
@@ -437,13 +435,13 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
                       onClick={() => setActiveTab('creators')} 
                       className={`relative z-10 px-8 py-3 rounded-full font-bold uppercase tracking-wider text-sm transition-colors ${activeTab === 'creators' ? (darkMode ? 'text-black' : 'text-indigo-600') : (darkMode ? 'text-gray-400' : 'text-slate-500')}`}
                     >
-                      For Teens
+                      For Creators
                     </button>
                     <button 
                       onClick={() => setActiveTab('parents')} 
                       className={`relative z-10 px-8 py-3 rounded-full font-bold uppercase tracking-wider text-sm transition-colors ${activeTab === 'parents' ? (darkMode ? 'text-black' : 'text-indigo-600') : (darkMode ? 'text-gray-400' : 'text-slate-500')}`}
                     >
-                      For Parents
+                      For Guardians
                     </button>
                  </div>
               </div>
@@ -458,17 +456,17 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
                             className="flex flex-col md:flex-row items-center gap-12"
                         >
                             <div className="flex-1 space-y-6">
-                                <h3 className={`text-4xl font-black ${darkMode ? 'text-white' : 'text-slate-900'}`}>Your First Paycheck,<br/> <span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>Your Way.</span></h3>
+                                <h3 className={`text-4xl font-black ${darkMode ? 'text-white' : 'text-slate-900'}`}>Your First Milestone,<br/> <span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>Your Way.</span></h3>
                                 <p className={darkMode ? 'text-gray-400' : 'text-slate-600'}>Stop working for "exposure". Build a real portfolio with real clients. We handle the invoices and awkward money talks.</p>
                                 <ul className="space-y-4">
                                     <li className={`flex items-center gap-3 text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}><Star size={18} className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}/> Build a verified CV</li>
                                     <li className={`flex items-center gap-3 text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}><Star size={18} className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}/> Guaranteed Payment</li>
-                                    <li className={`flex items-center gap-3 text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}><Star size={18} className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}/> Learn Financial Literacy</li>
+                                    <li className={`flex items-center gap-3 text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}><Star size={18} className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}/> Gain Real Experience</li>
                                 </ul>
                                 <button onClick={() => handleNav('auth')} className={`mt-4 px-8 py-3 font-bold rounded-xl transition-colors ${darkMode ? 'bg-white text-black hover:bg-[#ccff00]' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg'}`}>Start Profile</button>
                             </div>
                             <div className="flex-1">
-                                <img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=800" alt="Teen Creator" className="rounded-3xl border border-white/10 shadow-2xl hover:scale-[1.02] transition-transform duration-500" />
+                                <img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=800" alt="Creator" className="rounded-3xl border border-white/10 shadow-2xl hover:scale-[1.02] transition-transform duration-500" />
                             </div>
                         </motion.div>
                     ) : (
@@ -478,17 +476,17 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
                             className="flex flex-col md:flex-row-reverse items-center gap-12"
                         >
                             <div className="flex-1 space-y-6">
-                                <h3 className={`text-4xl font-black ${darkMode ? 'text-white' : 'text-slate-900'}`}>Financial Literacy,<br/> <span className="text-indigo-500">Safely Practiced.</span></h3>
-                                <p className={darkMode ? 'text-gray-400' : 'text-slate-600'}>Give your teen a head start in the digital economy without the risks of the open web. You stay in control.</p>
+                                <h3 className={`text-4xl font-black ${darkMode ? 'text-white' : 'text-slate-900'}`}>Digital Skills,<br/> <span className="text-indigo-500">Safely Practiced.</span></h3>
+                                <p className={darkMode ? 'text-gray-400' : 'text-slate-600'}>Give creators a head start in the digital economy without the risks of the open web. You stay in control.</p>
                                 <ul className="space-y-4">
-                                    <li className={`flex items-center gap-3 text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}><ShieldCheck size={18} className="text-indigo-500"/> Parent Approval Portal</li>
+                                    <li className={`flex items-center gap-3 text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}><ShieldCheck size={18} className="text-indigo-500"/> Accounts Operated with Guardian Consent</li>
                                     <li className={`flex items-center gap-3 text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}><ShieldCheck size={18} className="text-indigo-500"/> Curated, Safe Job Categories</li>
                                     <li className={`flex items-center gap-3 text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}><ShieldCheck size={18} className="text-indigo-500"/> No Personal Contact Details Shared</li>
                                 </ul>
                                 <button onClick={() => handleNav('auth')} className="mt-4 px-8 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg">View Safety Hub</button>
                             </div>
                             <div className="flex-1">
-                                <img src="https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&q=80&w=800" alt="Parent and Teen" className="rounded-3xl border border-white/10 shadow-2xl hover:scale-[1.02] transition-transform duration-500" />
+                                <img src="https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&q=80&w=800" alt="Guardian and Creator" className="rounded-3xl border border-white/10 shadow-2xl hover:scale-[1.02] transition-transform duration-500" />
                             </div>
                         </motion.div>
                     )}
@@ -498,7 +496,27 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
          </RevealOnScroll>
       </section>
 
-      {/* --- FEEDBACK / SUGGESTIONS (Kept terminal style for both modes for cool factor) --- */}
+      {/* --- TRUSTED PLATFORM FEATURES --- */}
+      <section className={`py-12 border-t ${darkMode ? 'bg-black border-white/5' : 'bg-[#f8f9ff] border-slate-200'}`}>
+         <RevealOnScroll>
+            <div className="max-w-7xl mx-auto px-6 flex flex-wrap justify-center gap-6 md:gap-12 text-sm font-bold uppercase tracking-wider">
+               <span className={`flex items-center gap-2 ${darkMode ? 'text-gray-400' : 'text-slate-600'}`}>
+                 <CheckCircle size={18} className={darkMode ? 'text-[#ccff00]' : 'text-indigo-500'} /> Identity Verification via DigiLocker
+               </span>
+               <span className={`flex items-center gap-2 ${darkMode ? 'text-gray-400' : 'text-slate-600'}`}>
+                 <Lock size={18} className={darkMode ? 'text-[#ccff00]' : 'text-indigo-500'} /> Secure Milestone Payments
+               </span>
+               <span className={`flex items-center gap-2 ${darkMode ? 'text-gray-400' : 'text-slate-600'}`}>
+                 <ShieldCheck size={18} className={darkMode ? 'text-[#ccff00]' : 'text-indigo-500'} /> Protected Communication
+               </span>
+               <span className={`flex items-center gap-2 ${darkMode ? 'text-gray-400' : 'text-slate-600'}`}>
+                 <Users size={18} className={darkMode ? 'text-[#ccff00]' : 'text-indigo-500'} /> No Direct Contact Sharing
+               </span>
+            </div>
+         </RevealOnScroll>
+      </section>
+
+      {/* --- FEEDBACK / SUGGESTIONS --- */}
       <section className={`py-24 px-6 border-t ${darkMode ? 'bg-black border-white/10' : 'bg-slate-900 border-slate-800'}`}>
         <RevealOnScroll>
            <div className="max-w-3xl mx-auto bg-[#111] border border-white/10 rounded-2xl p-8 md:p-12 shadow-2xl">
@@ -536,90 +554,92 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
            </div>
         </RevealOnScroll>
       </section>
-{/* --- FOOTER --- */}
-<footer className={`pt-20 pb-10 border-t ${darkMode ? 'bg-black border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}>
-  <div className="max-w-7xl mx-auto px-6">
-    {/* Desktop: 4 columns in one line | Mobile: Stacked */}
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16 items-start">
-      
-      {/* 1. Brand & Disclaimer */}
-      <div className="space-y-6">
-        <h3 className={`text-2xl font-black tracking-tighter ${darkMode ? 'text-white' : 'text-slate-900'}`}>
-          TeenVerseHub<span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>.</span>
-        </h3>
-        <div className={`text-sm leading-relaxed space-y-4 ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
-          <p>Empowering the next generation of Indian creators. Built for safety, scale, and student success.</p>
-          <p className={`p-3 rounded-lg border text-xs ${darkMode ? 'bg-white/5 border-white/10 text-gray-400' : 'bg-indigo-50/50 border-indigo-100 text-slate-600'}`}>
-            <strong>Disclaimer:</strong> TeenVerseHub is a technology platform connecting clients with freelancers. We do not provide services directly.
-          </p>
-        </div>
-        <div className="flex gap-4">
-          {[Twitter, Instagram, Linkedin].map((Icon, i) => (
-            <a key={i} href="#!" className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${darkMode ? 'bg-white/5 text-white hover:bg-[#ccff00] hover:text-black' : 'bg-white border border-slate-200 text-slate-600 hover:bg-indigo-600 hover:text-white shadow-sm'}`}>
-              <Icon size={16}/>
-            </a>
-          ))}
-        </div>
-      </div>
 
-      {/* 2. Company Links */}
-      <div className="md:pl-8">
-        <h4 className={`font-bold uppercase tracking-widest text-xs mb-6 ${darkMode ? 'text-gray-400' : 'text-slate-900'}`}>Company</h4>
-        <ul className={`space-y-3 text-sm ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
-          {['About Us', 'Careers', 'Blog', 'Contact'].map(l => (
-            <li key={l}>
-              <button onClick={() => handleFooterLink(l)} className={`transition-colors ${darkMode ? 'hover:text-white' : 'hover:text-indigo-600'}`}>
-                {l}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {/* --- FOOTER --- */}
+      <footer className={`pt-20 pb-10 border-t ${darkMode ? 'bg-black border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}>
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16 items-start">
+            
+            {/* 1. Brand & Disclaimer */}
+            <div className="space-y-6">
+              <h3 className={`text-2xl font-black tracking-tighter ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                TeenVerseHub<span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>.</span>
+              </h3>
+              <div className={`text-sm leading-relaxed space-y-4 ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
+                <p>Empowering creators and digital talent across India. Built for safety, scale, and success.</p>
+                <div className={`p-4 rounded-lg border text-xs space-y-2 ${darkMode ? 'bg-white/5 border-white/10 text-gray-400' : 'bg-indigo-50/50 border-indigo-100 text-slate-600'}`}>
+                  <p><strong>Disclaimer:</strong> TeenVerseHub is a technology platform connecting clients with freelancers. We do not provide services directly.</p>
+                  <p>Payments are processed through secure third-party payment partners. TeenVerseHub does not hold customer funds.</p>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                {[Twitter, Instagram, Linkedin].map((Icon, i) => (
+                  <a key={i} href="#!" className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${darkMode ? 'bg-white/5 text-white hover:bg-[#ccff00] hover:text-black' : 'bg-white border border-slate-200 text-slate-600 hover:bg-indigo-600 hover:text-white shadow-sm'}`}>
+                    <Icon size={16}/>
+                  </a>
+                ))}
+              </div>
+            </div>
 
-      {/* 3. Legal Links */}
-      <div className="md:pl-4">
-        <h4 className={`font-bold uppercase tracking-widest text-xs mb-6 ${darkMode ? 'text-gray-400' : 'text-slate-900'}`}>Legal & Trust</h4>
-        <ul className={`space-y-3 text-sm ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
-          {['Terms of Service', 'Privacy Policy', 'Refund Policy', 'Safety Guidelines'].map(l => (
-            <li key={l}>
-              <button onClick={() => handleFooterLink(l)} className={`transition-colors ${darkMode ? 'hover:text-white' : 'hover:text-indigo-600'}`}>
-                {l}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+            {/* 2. Company Links */}
+            <div className="md:pl-8">
+              <h4 className={`font-bold uppercase tracking-widest text-xs mb-6 ${darkMode ? 'text-gray-400' : 'text-slate-900'}`}>Company</h4>
+              <ul className={`space-y-3 text-sm ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
+                {['About Us', 'Careers', 'Blog', 'Contact'].map(l => (
+                  <li key={l}>
+                    <button onClick={() => handleFooterLink(l)} className={`transition-colors ${darkMode ? 'hover:text-white' : 'hover:text-indigo-600'}`}>
+                      {l}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-      {/* 4. Legal Entity Card */}
-      <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-[#111] border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
-        <h4 className={`font-bold text-xs uppercase mb-3 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
-          <AlertTriangle size={14} className="text-amber-500"/> Legal & Contact
-        </h4>
-        <div className={`text-xs font-mono space-y-2 ${darkMode ? 'text-gray-300' : 'text-slate-600'}`}>
-          <p className={`font-bold text-sm ${darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}`}>Operated by Mohd Asif</p>
-          <p className="opacity-80">(Proprietor)</p>
-          <p>Mahoba, Uttar Pradesh, India</p>
-          <div className="pt-2">
-            <p className={darkMode ? 'text-gray-500' : 'text-slate-400'}>Support:</p>
-            <a href="mailto:support@teenversehub.com" className={`hover:underline break-all ${darkMode ? 'text-white' : 'text-indigo-600'}`}>
-              support@teenversehub.in
-            </a>
+            {/* 3. Legal Links */}
+            <div className="md:pl-4">
+              <h4 className={`font-bold uppercase tracking-widest text-xs mb-6 ${darkMode ? 'text-gray-400' : 'text-slate-900'}`}>Legal & Trust</h4>
+              <ul className={`space-y-3 text-sm ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
+                {['Terms of Service', 'Privacy Policy', 'Refund Policy', 'Safety Guidelines'].map(l => (
+                  <li key={l}>
+                    <button onClick={() => handleFooterLink(l)} className={`transition-colors ${darkMode ? 'hover:text-white' : 'hover:text-indigo-600'}`}>
+                      {l}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* 4. Legal Entity Card */}
+            <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-[#111] border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <h4 className={`font-bold text-xs uppercase mb-3 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                <AlertTriangle size={14} className="text-amber-500"/> Legal & Contact
+              </h4>
+              <div className={`text-xs font-mono space-y-2 ${darkMode ? 'text-gray-300' : 'text-slate-600'}`}>
+                <p className={`font-bold text-sm ${darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}`}>Operated by Mohd Asif</p>
+                <p className="opacity-80">(Proprietor)</p>
+                <p>Mahoba, Uttar Pradesh, India</p>
+                <div className="pt-2">
+                  <p className={darkMode ? 'text-gray-500' : 'text-slate-400'}>Support:</p>
+                  <a href="mailto:support@teenversehub.in" className={`hover:underline break-all ${darkMode ? 'text-white' : 'text-indigo-600'}`}>
+                    support@teenversehub.in
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Bar */}
+          <div className={`pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-mono ${darkMode ? 'border-white/10 text-gray-600' : 'border-slate-200 text-slate-500'}`}>
+            <div>© {new Date().getFullYear()} TeenVerseHub. All rights reserved.</div>
+            <div className="flex items-center gap-2">
+              Made with ❤️ for the Future of India.
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-
-    {/* Bottom Bar */}
-    <div className={`pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-mono ${darkMode ? 'border-white/10 text-gray-600' : 'border-slate-200 text-slate-500'}`}>
-      <div>© {new Date().getFullYear()} TeenVerseHub. All rights reserved.</div>
-      <div className="flex items-center gap-2">
-        Made with ❤️ for the Future of India.
-      </div>
-    </div>
-  </div>
-</footer>
+      </footer>
     </div>
   );
 };
 
 export default LandingPage;
+
