@@ -27,23 +27,20 @@ const Legal = ({ onBack, page = "terms" }) => {
         <div className="space-y-6 text-gray-600 dark:text-gray-300 leading-relaxed">
           <p className="text-sm font-mono text-gray-400">Effective Date: January 1, 2026</p>
           <p>
-            Welcome to <strong>TeenVerseHub</strong>. By accessing or using our platform, you ("User") agree to be bound by these Terms. 
-            If you are under 18, you represent that you have obtained parental consent to use this platform.
+            Welcome to <strong>TeenVerseHub</strong>. By accessing or using our platform, you ("User") agree to be bound by these Terms.
           </p>
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">1. Intermediary Status</h4>
           <p>
-            TeenVerseHub operates solely as a technology intermediary connecting Freelancers and Clients. 
-            We are <strong>not</strong> an employer, recruiting agency, or contracting agent. 
-            We do not control, supervise, or guarantee the quality of work delivered by Freelancers.
+            TeenVerseHub operates solely as a technology intermediary connecting Freelancers and Clients. We are <strong>not</strong> an employer, recruiting agency, or contracting agent. We do not control, supervise, or guarantee the quality of work delivered by Freelancers.
           </p>
           <p className="text-sm bg-gray-100 dark:bg-gray-800 p-3 rounded-lg border-l-4 border-gray-400">
-            <strong>Note:</strong> TeenVerseHub does not determine pricing, scope, or delivery of services between Clients and Freelancers.
+            <strong>Note:</strong> TeenVerseHub does not determine pricing, scope, or delivery of services between Clients and Freelancers. TeenVerseHub does not guarantee job availability, earnings, or client engagement.
           </p>
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">2. Eligibility & Account Security</h4>
           <ul className="list-disc ml-5 space-y-2">
-            <li><strong>Age Requirement:</strong> You must be at least 14 years old. Users aged 14–17 ("Teen Freelancers") must operate under the supervision of a verified parent or legal guardian.</li>
+            <li><strong>Age Requirement:</strong> TeenVerseHub accounts may only be created by individuals aged 18 or above. Users aged 14–17 may participate only under a verified parent or legal guardian account. All payments are processed to the guardian's financial account.</li>
             <li><strong>Account Responsibility:</strong> You are responsible for all activity under your account. TeenVerseHub is not liable for loss caused by unauthorized use of your account.</li>
           </ul>
 
@@ -53,8 +50,24 @@ const Legal = ({ onBack, page = "terms" }) => {
             <li>Circumvent our payment system (e.g., sharing phone numbers/UPI to pay offline).</li>
             <li>Post illegal, abusive, or sexually explicit content.</li>
             <li>Use the platform for academic dishonesty (e.g., doing homework for others).</li>
+            <li>Offer services involving illegal goods, adult content, gambling, or any activity prohibited under Indian law.</li>
           </ul>
-          <p className="mt-2 text-red-500 font-medium">Violation results in immediate permanent ban and forfeiture of funds.</p>
+          <p className="mt-2 text-amber-600 font-medium">Violation may result in suspension or termination of the account. Any remaining funds will be handled according to applicable laws and payment provider policies.</p>
+
+          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">4. Limitation of Liability</h4>
+          <p>
+            TeenVerseHub shall not be liable for indirect, incidental, or consequential damages arising from the use of the platform.
+          </p>
+
+          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">5. Platform Availability</h4>
+          <p>
+            TeenVerseHub does not guarantee uninterrupted or error-free operation of the platform. Maintenance, updates, or technical issues may cause temporary unavailability.
+          </p>
+
+          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">6. Force Majeure</h4>
+          <p>
+            TeenVerseHub shall not be liable for failure or delay caused by events beyond reasonable control including natural disasters, internet outages, or regulatory actions.
+          </p>
         </div>
       )
     },
@@ -70,54 +83,38 @@ const Legal = ({ onBack, page = "terms" }) => {
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">1. DigiLocker Consent</h4>
           <p>
-            By proceeding with verification, you explicitly consent to TeenVerseHub
-            requesting and accessing your government-issued documents (such as PAN
-            or Aadhaar XML, where legally permitted) via DigiLocker, solely for the purpose of identity
-            verification and regulatory compliance.
+            By proceeding with verification, you explicitly consent to TeenVerseHub requesting and accessing your government-issued documents (such as PAN or Aadhaar XML, where legally permitted) via DigiLocker, solely for the purpose of identity verification and regulatory compliance.
           </p>
           <p>
-            Access to DigiLocker is initiated only by the user through an explicit
-            verification request. TeenVerseHub does not access documents automatically
-            or without user action.
+            Access to DigiLocker is initiated only by the user through an explicit verification request. TeenVerseHub does not access documents automatically or without user action.
           </p>
           <p>
-            TeenVerseHub does not store your Aadhaar number or biometric information.
-            Only document references and verification status are stored.
+            TeenVerseHub does not store your Aadhaar number or biometric information. Only document references and verification status are stored.
           </p>
           <p className="text-sm">
-            Where DigiLocker is unavailable, TeenVerseHub may offer alternative lawful
-            verification methods with equivalent consent protections.
+            Where DigiLocker is unavailable, TeenVerseHub may offer alternative lawful verification methods with equivalent consent protections.
           </p>
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">2. Minors and Guardian Verification</h4>
           <p>
-            Users below the age of 18 are required to complete verification through
-            their parent or legal guardian. TeenVerseHub does not access or verify
-            government documents of minors directly. Only guardian documents are
-            used for verification and payout eligibility.
+            Users below the age of 18 are required to complete verification through their parent or legal guardian. TeenVerseHub does not access or verify government documents of minors directly. Only guardian documents are used for verification and payout eligibility.
           </p>
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">3. Purpose-Limited Use</h4>
           <p>
-            Verification is performed only when required for financial actions such
-            as payouts or paid engagements. TeenVerseHub does not perform identity
-            verification at the time of signup.
+            Verification is performed only when required for financial actions such as payouts or paid engagements. TeenVerseHub does not perform identity verification at the time of signup.
           </p>
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">4. Data Retention & Audits</h4>
           <p>
-            Verification records are retained only as long as required for legal,
-            accounting, or regulatory purposes. Users may request deletion of their
-            data where permitted by law.
+            Verification records are retained only as long as required for legal, accounting, or regulatory purposes. Users may request deletion of their data where permitted by law.
           </p>
           <p>
-            All verification access is logged with timestamps for audit and compliance
-            purposes.
+            All verification access is logged with timestamps for audit and compliance purposes.
           </p>
 
           <p className="text-xs text-gray-500 italic mt-4 border-t border-gray-200 dark:border-gray-800 pt-4">
-            Verification confirms identity and eligibility for payouts and does not
-            constitute endorsement, certification, or employment by TeenVerseHub.
+            Verification confirms identity and eligibility for payouts and does not constitute endorsement, certification, or employment by TeenVerseHub.
           </p>
         </div>
       )
@@ -139,14 +136,13 @@ const Legal = ({ onBack, page = "terms" }) => {
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">2. Data Usage & Minors</h4>
           <p>
-            We strictly limit the visibility of Teen Freelancers' data. Clients only see: First Name, Skills, and Portfolio. 
+            We strictly limit the visibility of creators' data. Clients only see: First Name, Skills, and Portfolio. 
             <strong>We strictly NEVER sell data to third-party advertisers.</strong>
           </p>
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">3. Data Retention</h4>
           <p>
-            We retain account data for as long as the account is active. Upon deletion request, data is removed within 30 days, 
-            except where retention is required by law (e.g., transaction logs for tax audits).
+            We retain account data for as long as the account is active. Upon deletion request, data is removed within 30 days, except where retention is required by law (e.g., transaction logs for tax audits).
           </p>
         </div>
       )
@@ -159,11 +155,9 @@ const Legal = ({ onBack, page = "terms" }) => {
         <div className="space-y-6 text-gray-600 dark:text-gray-300 leading-relaxed">
           <h4 className="text-lg font-bold text-gray-900 dark:text-white">1. Service Fees</h4>
           <p>
-            TeenVerseHub charges a flat <strong>5% Platform Fee</strong> on all successful transactions.
-            The Platform Fee is a facilitation charge and is exclusive of any applicable taxes. 
-            TeenVerseHub shall levy such taxes only if and when required under applicable law.
-            All amounts displayed are exclusive of any taxes unless expressly stated otherwise.
+            TeenVerseHub charges a flat <strong>5% Platform Fee</strong> on all successful transactions. The Platform Fee is a facilitation charge and is exclusive of any applicable taxes. TeenVerseHub shall levy such taxes only if and when required under applicable law. All amounts displayed are exclusive of any taxes unless expressly stated otherwise.
           </p>
+         
           <p className="text-xs text-gray-500 italic">
              TeenVerseHub’s revenue is limited strictly to its platform facilitation fee.
           </p>
@@ -176,20 +170,22 @@ const Legal = ({ onBack, page = "terms" }) => {
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">2. Settlement Policy</h4>
           <p>
-            Funds are held with the payment gateway in accordance with applicable payment settlement mechanisms until the release conditions are met. 
-            If a Client does not respond within 7 days of submission, funds are <strong>automatically released</strong> to the Freelancer.
+            All payments are processed and held by the payment gateway partner in accordance with their settlement and escrow-like mechanisms. TeenVerseHub does not hold or store customer funds. If a Client does not respond within 7 days of submission, the payment gateway may release the funds to the Freelancer according to its settlement and dispute policies.
           </p>
 
-          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">3. Tax Liability (TDS)</h4>
+          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">3. Chargebacks & Payment Disputes</h4>
           <p>
-            Freelancers are solely responsible for reporting their income and paying applicable taxes.
-            TeenVerseHub does not deduct TDS at present. TeenVerseHub does not act as an e-commerce operator for the purpose of tax collection at source unless mandated under applicable law.
+            If a payment is reversed due to a bank dispute or chargeback initiated by a Client, TeenVerseHub reserves the right to recover the corresponding amount from the freelancer's balance.
           </p>
 
-          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">4. GST Status</h4>
+          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">4. Tax Liability (TDS)</h4>
           <p>
-             TeenVerseHub is currently not registered under the Goods and Services Tax (GST) Act.
-             If registration becomes mandatory in the future, this policy will be updated accordingly.
+            Freelancers are solely responsible for reporting their income and paying applicable taxes. TeenVerseHub does not deduct TDS at present. TeenVerseHub does not act as an e-commerce operator for the purpose of tax collection at source unless mandated under applicable law.
+          </p>
+
+          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">5. GST Status</h4>
+          <p>
+             TeenVerseHub is currently not registered under the Goods and Services Tax (GST) Act. If registration becomes mandatory under Indian law, applicable taxes will be charged accordingly.
           </p>
         </div>
       )
@@ -201,21 +197,24 @@ const Legal = ({ onBack, page = "terms" }) => {
       content: (
         <div className="space-y-6 text-gray-600 dark:text-gray-300 leading-relaxed">
           <p>
-            In the event of a disagreement between Client and Freelancer, TeenVerseHub encourages mutual resolution. If that fails, our <strong>Arbitration Team</strong> steps in.
+            In the event of a disagreement between Client and Freelancer, TeenVerseHub encourages mutual resolution. If that fails, TeenVerseHub may assist in facilitating dispute resolution between Clients and Freelancers.
           </p>
 
-          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">1. Arbitration Process</h4>
+          <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">1. Dispute Resolution Process</h4>
           <ol className="list-decimal ml-5 space-y-2">
             <li>User raises a Dispute ticket via the Dashboard.</li>
-            <li>Funds are frozen immediately pending review.</li>
+            <li>Funds are frozen immediately by the payment gateway pending review.</li>
             <li>Both parties submit evidence (chat logs, file deliverables).</li>
-            <li>TeenVerseHub Admin reviews evidence and issues a binding decision within 72 hours.</li>
+            <li>TeenVerseHub may assist in facilitating dispute resolution between users based on the provided evidence.</li>
           </ol>
           <p className="text-xs text-gray-400 mt-2">
-            Any arbitration shall be conducted in accordance with the Arbitration and Conciliation Act, 1996.
+            However, the final legal resolution remains subject to applicable laws and courts. Any formal legal dispute shall be conducted in accordance with applicable Indian law.
           </p>
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">2. Refund Eligibility</h4>
+          <p className="font-medium text-gray-800 dark:text-gray-200">
+            Refunds, if applicable, are processed through the payment gateway according to their refund and settlement policies.
+          </p>
           <ul className="list-disc ml-5 space-y-1">
             <li><strong>Full Refund:</strong> If Freelancer delivered nothing or missed a strict deadline.</li>
             <li><strong>Partial Refund:</strong> If work was delivered but incomplete/low quality.</li>
@@ -231,26 +230,22 @@ const Legal = ({ onBack, page = "terms" }) => {
       content: (
         <div className="space-y-6 text-gray-600 dark:text-gray-300 leading-relaxed">
           <p className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg border border-amber-200 text-amber-800 dark:text-amber-200 text-sm">
-            <strong>Critical:</strong> By approving your teen's account, you legally bind yourself to these terms.
+            <strong>Critical:</strong> By approving an account, you legally bind yourself to these terms.
           </p>
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">1. Financial Responsibility</h4>
           <p>
-            As the Guardian, you acknowledge that the financial account linked for withdrawals legally belongs to you or is authorized by you.
-            You are responsible for any tax implications of earnings generated by your teen.
+            As the Guardian, you acknowledge that the financial account linked for withdrawals legally belongs to you or is authorized by you. You are responsible for any tax implications of earnings generated under this account.
           </p>
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">2. Supervision</h4>
           <p>
-            While TeenVerseHub employs safety filters, you agree to supervise your teen’s online interactions.
-            TeenVerseHub is not liable for interactions that occur off-platform.
+            While TeenVerseHub employs safety filters, you agree to supervise the account's online interactions. TeenVerseHub is not liable for interactions that occur off-platform.
           </p>
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">3. Right to Revoke</h4>
           <p>
-            You retain the absolute right to revoke your consent at any time.
-            Upon revocation, we will freeze the teen's account 
-            and process any pending payouts to your bank account before deletion.
+            You retain the absolute right to revoke your consent at any time. Upon revocation, we will freeze the account and process any pending payouts to your bank account before deletion.
           </p>
         </div>
       )
@@ -272,8 +267,7 @@ const Legal = ({ onBack, page = "terms" }) => {
 
           <h4 className="text-lg font-bold text-gray-900 dark:text-white mt-6">2. Portfolio Rights</h4>
           <p>
-            Freelancers retain a non-exclusive license to display the completed work in their TeenVerseHub portfolio for self-promotion purposes only, 
-            unless a Non-Disclosure Agreement (NDA) was signed.
+            Freelancers retain a non-exclusive license to display the completed work in their TeenVerseHub portfolio for self-promotion purposes only, unless a Non-Disclosure Agreement (NDA) was signed.
           </p>
         </div>
       )
@@ -325,7 +319,7 @@ const Legal = ({ onBack, page = "terms" }) => {
             <Shield size={14} /> Legally Binding
           </div>
           <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">
-            TeenVerseHub<br/>
+             TeenVerseHub<br/>
             (Proprietorship – India)
           </p>
         </div>
@@ -353,14 +347,26 @@ const Legal = ({ onBack, page = "terms" }) => {
             {current.content}
           </div>
 
-          {/* Legal Disclaimer Footer */}
-          <div className="mt-8 p-6 rounded-2xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-xs flex gap-4 items-start">
-            <Scale size={24} className="shrink-0 text-gray-400"/>
-            <p>
-              <strong>Legal Disclaimer:</strong> The information provided on this page constitutes a binding agreement between you and TeenVerseHub.
-              However, summaries and examples are for convenience only. In case of any discrepancy, the formal legal text prevails.
-              Disputes are subject to the exclusive jurisdiction of the courts in New Delhi, India.
-            </p>
+          {/* Legal Disclaimer & Contact Footer */}
+          <div className="mt-8 p-6 rounded-2xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-xs flex flex-col md:flex-row gap-6 items-start">
+            <div className="flex gap-4 flex-1">
+               <Scale size={24} className="shrink-0 text-gray-400"/>
+               <div className="space-y-2">
+                 <p>
+                   <strong>Legal Disclaimer:</strong> The information provided on this page constitutes a binding agreement between you and TeenVerseHub. However, summaries and examples are for convenience only. In case of any discrepancy, the formal legal text prevails.
+                 </p>
+                 <p>
+                   These Terms shall be governed by and interpreted in accordance with the laws of India. Any disputes shall be subject to the exclusive jurisdiction of the courts located in New Delhi, India.
+                 </p>
+               </div>
+            </div>
+            <div className="md:w-64 shrink-0 bg-white dark:bg-gray-950 p-4 rounded-xl border border-gray-200 dark:border-gray-800 space-y-1 font-mono">
+               <p className="font-bold text-gray-900 dark:text-white">Legal Entity:</p>
+               <p>TeenVerseHub (Proprietorship)</p>
+               <p><strong>Operator:</strong> Mohd Asif</p>
+               <p><strong>Location:</strong> Mahoba, Uttar Pradesh, India</p>
+               <p><strong>Contact:</strong> support@teenversehub.in</p>
+            </div>
           </div>
 
         </div>
