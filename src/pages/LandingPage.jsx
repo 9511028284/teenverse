@@ -180,11 +180,14 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
     setIsMobileMenuOpen(false);
   };
 
-  const handleFooterLink = (link) => {
+ const handleFooterLink = (link) => {
       const lower = link.toLowerCase();
+      // Map footer strings to the exact keys used in your Legal.jsx documents object
       if (lower.includes('terms') && onLegalClick) { onLegalClick('terms'); return; }
       if (lower.includes('privacy') && onLegalClick) { onLegalClick('privacy'); return; }
-      if (lower.includes('refund') && onLegalClick) { onLegalClick('refunds'); return; }
+      if (lower.includes('refund') && onLegalClick) { onLegalClick('disputes'); return; } // Opens Dispute Resolution (Refunds)
+      if (lower.includes('safety') && onLegalClick) { onLegalClick('parent_agreement'); return; } // Opens Parent Agreement
+      
       handleNav(link);
   };
 
@@ -534,14 +537,17 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
         </RevealOnScroll>
       </section>
 
-      {/* --- FOOTER --- */}
+{/* --- FOOTER --- */}
       <footer className={`pt-20 pb-10 border-t ${darkMode ? 'bg-black border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}>
          <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
             <div className="space-y-6">
                <h3 className={`text-2xl font-black tracking-tighter ${darkMode ? 'text-white' : 'text-slate-900'}`}>TeenVerseHub<span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>.</span></h3>
-               <p className={`text-sm leading-relaxed ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
-                  Empowering the next generation of Indian creators. Built for safety, scale, and student success.
-               </p>
+               <div className={`text-sm leading-relaxed space-y-4 ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
+                  <p>Empowering the next generation of Indian creators. Built for safety, scale, and student success.</p>
+                  <p className={`p-3 rounded-lg border ${darkMode ? 'bg-white/5 border-white/10 text-gray-400' : 'bg-indigo-50/50 border-indigo-100 text-slate-600'}`}>
+                     <strong>Disclaimer:</strong> TeenVerseHub is a technology platform that connects clients with freelancers. TeenVerseHub does not provide services directly.
+                  </p>
+               </div>
                <div className="flex gap-4">
                   {[Twitter, Instagram, Linkedin].map((Icon, i) => (
                      <a key={i} href="#!" className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${darkMode ? 'bg-white/5 text-white hover:bg-[#ccff00] hover:text-black' : 'bg-white border border-slate-200 text-slate-600 hover:bg-indigo-600 hover:text-white shadow-sm'}`}><Icon size={18}/></a>
@@ -552,7 +558,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
             <div>
                 <h4 className={`font-bold uppercase tracking-widest text-xs mb-6 ${darkMode ? 'text-gray-400' : 'text-slate-900'}`}>Company</h4>
                 <ul className={`space-y-3 text-sm ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
-                    {['About Us', 'Careers', 'Blog', 'Success Stories'].map(l => (
+                    {['About Us', 'Careers', 'Blog', 'Contact'].map(l => (
                         <li key={l}><button onClick={() => handleFooterLink(l)} className={`transition-colors ${darkMode ? 'hover:text-white' : 'hover:text-indigo-600'}`}>{l}</button></li>
                     ))}
                 </ul>
@@ -561,7 +567,8 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
             <div>
                 <h4 className={`font-bold uppercase tracking-widest text-xs mb-6 ${darkMode ? 'text-gray-400' : 'text-slate-900'}`}>Legal & Trust</h4>
                 <ul className={`space-y-3 text-sm ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
-                    {['Terms of Service', 'Privacy Policy', 'Parent Consent Form', 'Safety Guidelines'].map(l => (
+                    {/* These labels are intercepted by handleFooterLink to open specific Legal tabs */}
+                    {['Terms of Service', 'Privacy Policy', 'Refund Policy', 'Safety Guidelines'].map(l => (
                         <li key={l}><button onClick={() => handleFooterLink(l)} className={`transition-colors ${darkMode ? 'hover:text-white' : 'hover:text-indigo-600'}`}>{l}</button></li>
                     ))}
                 </ul>
@@ -569,19 +576,21 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
 
             <div className={`p-6 rounded-2xl border ${darkMode ? 'bg-[#111] border-white/5' : 'bg-white border-slate-200 shadow-sm'}`}>
                 <h4 className={`font-bold text-xs uppercase mb-3 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
-                    <AlertTriangle size={14} className="text-amber-500"/> Grievance Redressal
+                    <AlertTriangle size={14} className="text-amber-500"/> Legal & Contact
                 </h4>
-                <p className={`text-xs mb-4 ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>For complaints or safety concerns:</p>
-                <div className={`text-xs font-mono ${darkMode ? 'text-gray-300' : 'text-slate-600'}`}>
-                    <p>Compliance Officer</p>
-                    <a href="mailto:support@teenversehub.in" className={`hover:underline ${darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}`}>support@teenversehub.in</a>
-                    <p className={`mt-1 ${darkMode ? 'text-gray-600' : 'text-slate-400'}`}>Response time: &lt; 48 hours</p>
+                <div className={`text-xs font-mono space-y-2 ${darkMode ? 'text-gray-300' : 'text-slate-600'}`}>
+                    <p className={`font-bold text-sm ${darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}`}>Operated by Mohd Asif (Proprietor)</p>
+                    <p>Mahoba, Uttar Pradesh, India</p>
+                    <div className="pt-2">
+                        <p className={darkMode ? 'text-gray-500' : 'text-slate-400'}>Support & Compliance:</p>
+                        <a href="mailto:support@teenversehub.com" className={`hover:underline ${darkMode ? 'text-white' : 'text-indigo-600'}`}>support@teenversehub.com</a>
+                    </div>
                 </div>
             </div>
          </div>
          
          <div className={`max-w-7xl mx-auto px-6 pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-mono ${darkMode ? 'border-white/10 text-gray-600' : 'border-slate-200 text-slate-500'}`}>
-            <div>© 2026 TeenVerseHub. All rights reserved.</div>
+            <div>© {new Date().getFullYear()} TeenVerseHub. All rights reserved.</div>
             <div className="flex items-center gap-2">
                Made with ❤️ for the Future of India.
             </div>
