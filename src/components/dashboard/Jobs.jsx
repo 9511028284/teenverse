@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Search, MapPin, ArrowUpRight, Sparkles, Filter, Briefcase, 
   ChevronDown, ChevronUp, Clock, Calendar, DollarSign, Flag, 
-  AlertTriangle, Paperclip, FileText, Download // ✅ Added new icons for attachments
+  AlertTriangle, Paperclip, FileText, Download 
 } from 'lucide-react';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal'; 
@@ -26,6 +26,8 @@ const getTimeAgo = (dateString) => {
 const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, setModal, setActiveChat, setTab, setSelectedJob, onAction }) => {
   
   const [reportModal, setReportModal] = useState(null);
+  // 🚀 NEW: State to control the Attachments Modal
+  const [attachmentsModal, setAttachmentsModal] = useState(null);
 
   const handleReportSubmit = (e) => {
     e.preventDefault();
@@ -87,7 +89,7 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
            </div>
 
            {/* --- METADATA GRID --- */}
-           <div  className="grid grid-cols-2 gap-2 mb-5">
+           <div className="grid grid-cols-2 gap-2 mb-5">
                <div className="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl p-2.5 flex items-center gap-2">
                    <Clock size={14} className="text-indigo-500 dark:text-indigo-400"/>
                    <div>
@@ -124,37 +126,53 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                )}
            </div>
 
-           {/* 🚀 NEW: ATTACHMENTS SECTION */}
+           {/* 🚀 NEW: ATTACHMENTS SECTION WITH MODAL LOGIC */}
            {data.attachments && data.attachments.length > 0 && (
                <div className="mb-6">
                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1">
                        <Paperclip size={10} /> Reference Files
                    </p>
                    <div className="flex flex-wrap gap-2">
-                       {data.attachments.map((url, i) => {
-                           // Extract filename and remove the Date timestamp we added during upload
-                           const rawName = url.split('/').pop().split('?')[0];
-                           const cleanName = decodeURIComponent(rawName).replace(/^\d+_/, '') || `Attachment ${i + 1}`;
-                           
-                           return (
-                               <a 
-                                   key={i} 
-                                   href={url} 
-                                   target="_blank" 
-                                   rel="noopener noreferrer"
-                                   download
-                                   onClick={(e) => e.stopPropagation()}
-                                   className="group/file flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/30 transition-all"
-                                   title={cleanName}
-                               >
-                                   <FileText size={12} className="text-indigo-500 dark:text-indigo-400" />
-                                   <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 truncate max-w-[120px]">
-                                       {cleanName}
-                                   </span>
-                                   <Download size={10} className="text-indigo-400 opacity-0 group-hover/file:opacity-100 transition-opacity" />
-                               </a>
-                           );
-                       })}
+                       {data.attachments.length === 1 ? (
+                           // Show a single pill if there's only 1 file
+                           (() => {
+                               const url = data.attachments[0];
+                               const rawName = url.split('/').pop().split('?')[0];
+                               const cleanName = decodeURIComponent(rawName).replace(/^\d+_/, '') || 'Attachment 1';
+                               return (
+                                   <a 
+                                       href={url} 
+                                       target="_blank" 
+                                       rel="noopener noreferrer"
+                                       download
+                                       onClick={(e) => e.stopPropagation()}
+                                       className="group/file flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/30 transition-all"
+                                       title={cleanName}
+                                   >
+                                       <FileText size={12} className="text-indigo-500 dark:text-indigo-400" />
+                                       <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 truncate max-w-[120px]">
+                                           {cleanName}
+                                       </span>
+                                       <Download size={10} className="text-indigo-400 opacity-0 group-hover/file:opacity-100 transition-opacity" />
+                                   </a>
+                               );
+                           })()
+                       ) : (
+                           // Show "View X Files" button if there are multiple files
+                           <button 
+                               onClick={(e) => {
+                                   e.stopPropagation();
+                                   setAttachmentsModal(data.attachments);
+                               }}
+                               className="group/file flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-500/30 transition-all"
+                           >
+                               <FileText size={12} className="text-indigo-500 dark:text-indigo-400" />
+                               <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
+                                   View {data.attachments.length} Files
+                               </span>
+                               <ArrowUpRight size={10} className="text-indigo-400 opacity-0 group-hover/file:opacity-100 transition-opacity" />
+                           </button>
+                       )}
                    </div>
                </div>
            )}
@@ -313,6 +331,47 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                 </div>
             </form>
         </Modal>
+      )}
+
+      {/* 🚀 NEW: ATTACHMENTS MODAL */}
+      {attachmentsModal && (
+          <Modal title="Reference Files" onClose={() => setAttachmentsModal(null)}>
+              <div className="space-y-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                      The client provided the following reference files for this mission. Click any file to view or download it.
+                  </p>
+                  <div className="grid grid-cols-1 gap-2 max-h-80 overflow-y-auto pr-1">
+                      {attachmentsModal.map((url, i) => {
+                          const rawName = url.split('/').pop().split('?')[0];
+                          const cleanName = decodeURIComponent(rawName).replace(/^\d+_/, '') || `Attachment ${i + 1}`;
+                          return (
+                              <a 
+                                  key={i} 
+                                  href={url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  download
+                                  className="group/file flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-white/5 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:border-indigo-100 dark:hover:border-indigo-500/20 transition-all"
+                                  title={cleanName}
+                              >
+                                  <div className="flex items-center gap-3 overflow-hidden">
+                                      <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center shrink-0">
+                                          <FileText size={14} className="text-indigo-600 dark:text-indigo-400" />
+                                      </div>
+                                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
+                                          {cleanName}
+                                      </span>
+                                  </div>
+                                  <Download size={16} className="text-gray-400 group-hover/file:text-indigo-500 transition-colors shrink-0 ml-2" />
+                              </a>
+                          );
+                      })}
+                  </div>
+                  <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-white/5 mt-4">
+                      <Button onClick={() => setAttachmentsModal(null)} variant="ghost">Close</Button>
+                  </div>
+              </div>
+          </Modal>
       )}
 
     </div>

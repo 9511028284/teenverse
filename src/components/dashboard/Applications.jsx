@@ -2,34 +2,26 @@ import React, { useState } from 'react';
 import Button from '../ui/Button'; 
 import Modal from '../ui/Modal';    
 import ReviewModal from '../modals/ReviewModal'; 
+import ChatSystem from '../features/ChatSystem'; // Ensure this path matches your folder structure
 import { 
   Clock, CheckCircle, XCircle, Package, Lock, Unlock, 
   FileText, ExternalLink, RefreshCw, AlertTriangle, Star, ShieldCheck, 
-  Receipt, Wallet, AlertOctagon, User, Banknote, Hourglass, Flag
+  Receipt, Wallet, AlertOctagon, User, Banknote, Hourglass, Flag, MessageSquare
 } from 'lucide-react';
-import { supabase } from '../../supabase'; // Assuming you have this set up
 
 const Applications = ({ user, applications, isClient, onAction, onViewTimeline, parentMode, showToast }) => {
   
   // --- STATES ---
-  const [revisionModal, setRevisionModal] = useState(null); 
   const [reviewApp, setReviewApp] = useState(null); 
   const [releaseModal, setReleaseModal] = useState(null); 
   const [rejectModal, setRejectModal] = useState(null);
-  
-  // New Report Modal State
   const [reportModal, setReportModal] = useState(null); 
+  
+  // NEW CHAT STATES
+  const [chatApp, setChatApp] = useState(null);
+  const [chatInitialMessage, setChatInitialMessage] = useState("");
 
   // --- HANDLERS ---
-  
-  const handleSendRevision = async (e) => {
-    e.preventDefault();
-    const message = e.target.revision_msg.value;
-    if (!message) return;
-    onAction('revision', revisionModal, { message }); 
-    setRevisionModal(null);
-  };
-
   const handleReviewSubmit = async (rating, tags) => {
      onAction('review', reviewApp, { rating, tags });
      setReviewApp(null);
@@ -57,13 +49,21 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
       const reason = formData.get('reason');
       const description = formData.get('description');
 
-      // Call the onAction prop with 'report' type
-      // OR handle it directly here if you prefer, but keeping it consistent with onAction is better
       onAction('report', reportModal, { reason, description });
-      
       setReportModal(null);
   };
 
+  const handleOpenChat = (app, initialMsg = "") => {
+      setChatInitialMessage(initialMsg);
+      setChatApp(app);
+  };
+
+  const handleRequestRevision = (app) => {
+      // 1. Update status in backend to 'Revision Requested'
+      onAction('revision', app); 
+      // 2. Open chat with pre-filled template
+      handleOpenChat(app, "Hi, I have reviewed the delivery and need some revisions. Please update the following:\n\n- ");
+  };
 
   // --- RENDER ACTIONS LOGIC ---
   const renderActions = (app) => {
@@ -73,7 +73,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
         return <span className="text-red-500 text-xs font-bold flex items-center gap-1"><XCircle size={12}/> Refunded/Rejected</span>;
     }
 
-    // B. PROCESSING STATE (Funds Released by Client -> Admin Hold)
+    // B. PROCESSING STATE
     if (app.status === 'Processing') {
         if (isClient) {
             return (
@@ -82,23 +82,16 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                 </div>
             );
         } else {
-            // 🚨 FREELANCER VIEW
-            // Button only shows if !is_bank_linked
             if (!user?.is_bank_linked) {
                 return (
                     <div className="flex flex-col items-end gap-1">
                         <span className="text-xs text-green-600 font-bold">Payment Approved!</span>
-                        <Button 
-                            size="sm" 
-                            onClick={() => onAction('withdraw_funds', app)} 
-                            className="bg-green-600 hover:bg-green-700 text-white shadow-lg animate-bounce"
-                        >
+                        <Button size="sm" onClick={() => onAction('withdraw_funds', app)} className="bg-green-600 hover:bg-green-700 text-white shadow-lg animate-bounce">
                             <Banknote size={14} className="mr-1"/> Link Bank to Receive
                         </Button>
                     </div>
                 );
             }
-            // If Bank IS Linked:
             return (
                 <div className="flex flex-col items-end">
                     <span className="text-amber-600 text-xs font-bold flex items-center gap-1">
@@ -110,10 +103,9 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
         }
     }
 
-    // C. PAID / COMPLETED STATE
+    // C. PAID / COMPLETED STATE (No Chat Allowed Here)
     if (app.status === 'Paid') {
         if (isClient) {
-            // Client View (Review Logic)
             if (!app.client_rating) {
                 return (
                     <div className="flex flex-col items-end gap-1">
@@ -134,7 +126,6 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                  );
             }
         } else {
-            // FREELANCER VIEW (WITHDRAWAL LOGIC)
             return <span className="text-emerald-500 text-xs font-bold flex items-center gap-1"><CheckCircle size={12}/> Funds Deposited</span>;
         }
     }
@@ -158,9 +149,14 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                 <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
                     <Lock size={10} /> Escrow Active
                 </span>
-                <button onClick={() => setRejectModal(app)} className="text-[10px] text-red-400 hover:text-red-500 underline transition-colors">
-                    Cancel Order
-                </button>
+                <div className="flex items-center gap-2 mt-1">
+                    <Button size="sm" variant="outline" onClick={() => handleOpenChat(app)} className="text-blue-500 border-blue-200 hover:bg-blue-50">
+                        <MessageSquare size={14}/> Chat
+                    </Button>
+                    <button onClick={() => setRejectModal(app)} className="text-[10px] text-red-400 hover:text-red-500 underline transition-colors">
+                        Cancel Order
+                    </button>
+                </div>
             </div>
         );
       }
@@ -183,12 +179,14 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
               </div>
 
               <div className="flex gap-2 justify-end">
-                <Button size="sm" variant="outline" onClick={() => onAction('view_submission', app)}>View</Button>
-                <Button size="sm" variant="outline" onClick={() => setRevisionModal(app)} className="text-amber-600 border-amber-200 hover:bg-amber-50" title="Request Revision">
-                    <RefreshCw size={14}/>
+                <Button size="sm" variant="outline" onClick={() => handleOpenChat(app)} className="text-blue-500 border-blue-200 hover:bg-blue-50" title="Open Chat">
+                    <MessageSquare size={14}/> Chat
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleRequestRevision(app)} className="text-amber-600 border-amber-200 hover:bg-amber-50" title="Request Revision">
+                    <RefreshCw size={14}/> Revise
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setRejectModal(app)} className="text-red-500 border-red-200 hover:bg-red-50 flex items-center gap-1" title="Reject & Refund">
-                    <XCircle size={14}/>
+                    <XCircle size={14}/> Reject
                 </Button>
                 <Button size="sm" onClick={() => onAction('approve', app)} className="bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200 shadow-md">Approve</Button>
               </div>
@@ -198,16 +196,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
       
       if (app.status === 'Completed') {
         return (
-          <Button 
-            size="sm" 
-            onClick={() => parentMode ? null : setReleaseModal(app)} 
-            disabled={parentMode} 
-            className={`flex items-center gap-2 transition-all duration-300 ${
-                parentMode 
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-300' 
-                : 'bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200'
-            }`}
-          >
+          <Button size="sm" onClick={() => parentMode ? null : setReleaseModal(app)} disabled={parentMode} className={`flex items-center gap-2 transition-all duration-300 ${parentMode ? 'bg-gray-300 text-gray-500 cursor-not-allowed border border-gray-300' : 'bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-200'}`}>
             {parentMode ? <Lock size={14}/> : <Unlock size={14}/>} 
             {parentMode ? 'Locked: Ask Parent' : 'Release Payment'}
           </Button>
@@ -218,20 +207,42 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
     // E. FREELANCER ACTIONS
     if (!isClient) {
       if (app.status === 'Pending') return <span className="text-gray-400 text-xs italic">Waiting for client...</span>;
+      
       if (app.status === 'Revision Requested') {
         return (
-            <div className="flex flex-col items-end">
-                <div className="text-[10px] text-amber-600 font-bold flex items-center gap-1 mb-1 animate-bounce">
+            <div className="flex flex-col items-end gap-2">
+                <div className="text-[10px] text-amber-600 font-bold flex items-center gap-1 animate-bounce">
                     <AlertTriangle size={10}/> REVISION REQUESTED
                 </div>
-                <Button size="sm" onClick={() => onAction('submit', app)} className="bg-amber-500 hover:bg-amber-600 text-white shadow-md">
-                    <RefreshCw size={14} className="mr-1"/> Resubmit
-                </Button>
+                <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => handleOpenChat(app)} className="text-blue-500 border-blue-200 hover:bg-blue-50">
+                        <MessageSquare size={14}/> Chat
+                    </Button>
+                    <Button size="sm" onClick={() => onAction('submit', app)} className="bg-amber-500 hover:bg-amber-600 text-white shadow-md">
+                        <RefreshCw size={14} className="mr-1"/> Resubmit
+                    </Button>
+                </div>
             </div>
         );
       }
-      if (app.status === 'Accepted') return <Button size="sm" onClick={() => onAction('submit', app)} className="bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200"><Package size={14} className="mr-1"/> Deliver Work</Button>;
-      if (app.status === 'Submitted') return <span className="text-amber-500 text-xs font-medium bg-amber-50 px-2 py-1 rounded-md">Under Review</span>;
+      if (app.status === 'Accepted') return (
+          <div className="flex gap-2 justify-end">
+              <Button size="sm" variant="outline" onClick={() => handleOpenChat(app)} className="text-blue-500 border-blue-200 hover:bg-blue-50">
+                  <MessageSquare size={14}/> Chat
+              </Button>
+              <Button size="sm" onClick={() => onAction('submit', app)} className="bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200">
+                  <Package size={14} className="mr-1"/> Deliver Work
+              </Button>
+          </div>
+      );
+      if (app.status === 'Submitted') return (
+          <div className="flex flex-col items-end gap-2">
+              <span className="text-amber-500 text-xs font-medium bg-amber-50 px-2 py-1 rounded-md">Under Review</span>
+              <Button size="sm" variant="outline" onClick={() => handleOpenChat(app)} className="text-blue-500 border-blue-200 hover:bg-blue-50">
+                  <MessageSquare size={14}/> Chat
+              </Button>
+          </div>
+      );
       if (app.status === 'Completed') return <span className="text-emerald-600 text-xs font-bold animate-pulse">Approved! Payment Processing...</span>;
     }
 
@@ -330,22 +341,31 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
 
        {/* --- MODALS SECTION --- */}
 
-       {/* 1. Revision Modal */}
-       {revisionModal && (
-        <Modal title="Request Revisions" onClose={() => setRevisionModal(null)}>
-            <form onSubmit={handleSendRevision} className="space-y-4">
-                <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl text-amber-800 text-xs">
-                    <h4 className="font-bold flex items-center gap-2 mb-1 text-sm"><AlertTriangle size={16}/> Constructive Feedback Only</h4>
-                    <p>Clearly explain what changes you need. Be specific to help the freelancer deliver faster.</p>
+       {/* 1. Chat System Modal */}
+       {chatApp && (
+         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div className="w-full max-w-4xl relative h-[90vh] md:h-[85vh]">
+                <button 
+                    onClick={() => setChatApp(null)}
+                    className="absolute -top-12 right-0 text-white/50 hover:text-white transition-colors bg-white/10 rounded-full p-2"
+                >
+                    <XCircle size={24} />
+                </button>
+                <div className="w-full h-full rounded-2xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10">
+                    <ChatSystem 
+                        user={user}
+                        // We map the active application data to what ChatSystem expects for "activeChat"
+                        activeChat={{
+                            id: isClient ? chatApp.freelancer_id : chatApp.client_id,
+                            name: isClient ? chatApp.freelancer_name : chatApp.client_name,
+                            application_id: chatApp.id // Using this for DB application-based isolation
+                        }}
+                        setActiveChat={() => setChatApp(null)}
+                        initialMessage={chatInitialMessage}
+                    />
                 </div>
-                <textarea name="revision_msg" required placeholder="e.g., The font size is too small..." className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none min-h-[120px] text-sm dark:bg-black dark:text-white dark:border-gray-700 resize-none"></textarea>
-                
-                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
-                    <Button variant="ghost" type="button" onClick={() => setRevisionModal(null)} className="w-full sm:w-auto">Cancel</Button>
-                    <Button className="bg-amber-500 hover:bg-amber-600 text-white w-full sm:w-auto">Send Request</Button>
-                </div>
-            </form>
-        </Modal>
+            </div>
+         </div>
        )}
 
        {/* 2. Release Modal */}
@@ -404,8 +424,8 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                 </div>
                 
                 <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
-                    <Button variant="ghost" type="button" onClick={() => setRejectModal(null)} className="w-full sm:w-auto">Go Back</Button>
-                    <Button className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200 w-full sm:w-auto">{rejectModal.status === 'Accepted' ? 'Cancel Order' : 'Reject Work'}</Button>
+                    <Button variant="ghost" type="button" onClick={() => setRejectModal(null)} className="w-full sm:flex-1">Go Back</Button>
+                    <Button className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200 w-full sm:flex-1">{rejectModal.status === 'Accepted' ? 'Cancel Order' : 'Reject Work'}</Button>
                 </div>
             </form>
         </Modal>
