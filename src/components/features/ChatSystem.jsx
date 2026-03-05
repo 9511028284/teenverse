@@ -119,7 +119,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); 
   }, [messages]);
 
-  // 4. SEND MESSAGE
+// 4. SEND MESSAGE
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim() || !activeChat?.application_id) return;
@@ -139,20 +139,34 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
         }
     }
 
+    // 🚨 BULLETPROOF FIX: Fetch the exact user ID directly from the active Supabase session
+    const { data: { session } } = await supabase.auth.getSession();
+    const currentUserId = session?.user?.id || user?.id; 
+
+    if (!currentUserId) {
+        alert("Error: Authentication lost. Please refresh the page.");
+        return;
+    }
+
     const msgData = { 
-        application_id: activeChat?.application_id, 
-        sender_id: user?.id, 
-        receiver_id: activeChat?.id, 
+        application_id: activeChat.application_id, 
+        sender_id: currentUserId, // <--- Guaranteed to not be null now!
+        receiver_id: activeChat.id, 
         content: input
     };
 
+    // Optimistic update
     setMessages((prev) => [...prev, { ...msgData, created_at: new Date().toISOString() }]);
     setInput('');
 
+    // Insert into DB
     const { error } = await supabase.from('messages').insert([msgData]);
-    if (error) console.error("Send error:", error);
+    
+    if (error) {
+        console.error("Send error:", error);
+        alert(`Failed to send: ${error.message}`);
+    }
   };
-
   const handleReportUser = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
