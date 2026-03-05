@@ -59,10 +59,24 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
   };
 
   const handleRequestRevision = (app) => {
-      // 1. Update status in backend to 'Revision Requested'
       onAction('revision', app); 
-      // 2. Open chat with pre-filled template
       handleOpenChat(app, "Hi, I have reviewed the delivery and need some revisions. Please update the following:\n\n- ");
+  };
+
+
+  // ✅ SMART FALLBACK HELPER
+  const getJobTitle = (app) => {
+      // Check all common Supabase join structures
+      if (app.title) return app.title; 
+      if (app.job_title) return app.job_title;
+      if (app.job?.title) return app.job.title; 
+      if (app.jobs) {
+          if (Array.isArray(app.jobs)) return app.jobs[0]?.title; 
+          if (app.jobs.title) return app.jobs.title; 
+      }
+      
+      // If the job title is completely missing (or job was deleted), show the Job ID elegantly!
+      return app.job_id ? `Project #${app.job_id}` : 'Archived Project';
   };
 
   // --- RENDER ACTIONS LOGIC ---
@@ -103,7 +117,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
         }
     }
 
-    // C. PAID / COMPLETED STATE (No Chat Allowed Here)
+    // C. PAID / COMPLETED STATE
     if (app.status === 'Paid') {
         if (isClient) {
             if (!app.client_rating) {
@@ -276,7 +290,8 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
               {applications.map(app => (
                 <tr key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
                   <td className="p-4">
-                    <div className="font-bold text-gray-900 dark:text-white line-clamp-1">{app.jobs?.title || 'Unknown Job'}</div>
+                    {/* ✅ FIX APPLIED HERE: Using getJobTitle(app) */}
+                    <div className="font-bold text-gray-900 dark:text-white line-clamp-1">{getJobTitle(app)}</div>
                     <button onClick={() => onViewTimeline(app)} className="text-[10px] text-indigo-500 hover:text-indigo-600 flex items-center gap-1 mt-1 font-medium transition-colors">
                       <Clock size={10}/> View Timeline
                     </button>
@@ -354,11 +369,10 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                 <div className="w-full h-full rounded-2xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10">
                     <ChatSystem 
                         user={user}
-                        // We map the active application data to what ChatSystem expects for "activeChat"
                         activeChat={{
                             id: isClient ? chatApp.freelancer_id : chatApp.client_id,
                             name: isClient ? chatApp.freelancer_name : chatApp.client_name,
-                            application_id: chatApp.id // Using this for DB application-based isolation
+                            application_id: chatApp.id 
                         }}
                         setActiveChat={() => setChatApp(null)}
                         initialMessage={chatInitialMessage}

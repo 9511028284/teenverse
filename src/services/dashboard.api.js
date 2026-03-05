@@ -59,8 +59,16 @@ export const fetchDashboardData = async (user) => {
       jobsQuery = jobsQuery.eq('client_id', user.id);
     }
 
-    // 3. Applications Query (Limit 50)
-    let appsQuery = supabase.from('applications').select('*').limit(50);
+    // 3. Applications Query (Limit 50) - ✅ FIXED: Added the jobs join to fetch the title
+    let appsQuery = supabase
+      .from('applications')
+      .select(`
+        *,
+        jobs ( title )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
     if (isClient) {
       appsQuery = appsQuery.eq('client_id', user.id);
     } else {
@@ -257,7 +265,6 @@ export const processPayment = async (appId, amount, freelancerId, escrowConsent)
     if (!user) throw new Error("User not authenticated");
 
     // 2. Invoke Secure Edge Function
-    // We do NOT update the DB here directly anymore.
     const { data, error } = await supabase.functions.invoke('order-manager', {
       body: { 
         action: 'RELEASE_ESCROW',
@@ -288,7 +295,6 @@ export const processPayment = async (appId, amount, freelancerId, escrowConsent)
 // ==========================================
 // 6. ADMIN ACTIONS (SECURE)
 // ==========================================
-// [File: src/services/dashboard.api.js]
 
 export const fetchAdminEscrowOrders = async (page = 0, limit = 50) => {
   try {
@@ -296,8 +302,6 @@ export const fetchAdminEscrowOrders = async (page = 0, limit = 50) => {
     const to = from + limit - 1;
 
     // 1. QUERY WITH EXPLICIT JOINS
-    // We join 'applications'.
-    // Inside applications, we join 'jobs' (for title) and 'clients' (for name).
     const { data, error, count } = await supabase
       .from('escrow_orders')
       .select(`
@@ -324,21 +328,16 @@ export const fetchAdminEscrowOrders = async (page = 0, limit = 50) => {
     const formattedData = (data || []).map(order => {
       const app = order.applications || {};
       const jobData = app.jobs || {};
-      const clientData = app.clients || {}; // Get the joined client data
+      const clientData = app.clients || {};
 
       return {
-        // IDs
         id: app.id || order.app_id || order.id, 
         escrow_order_id: order.id,
         client_id: order.client_id,
         freelancer_id: order.freelancer_id,
-
-        // Display Names (Using the joined data)
         client_name: clientData.name || 'Unknown Client', 
         freelancer_name: app.freelancer_name || 'Unknown Freelancer',
         jobs: { title: jobData.title || 'Unknown Job' },
-
-        // Financials
         bid_amount: order.bid_amount, 
         status: order.status, 
         created_at: order.created_at,
@@ -353,6 +352,7 @@ export const fetchAdminEscrowOrders = async (page = 0, limit = 50) => {
     return { data: [], count: 0, error: err };
   }
 };
+
 export const adminForceRelease = async (appId, amount, freelancerId) => {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -381,7 +381,7 @@ export const adminForceRefund = async (appId, clientId) => {
     // Call Edge Function with ADMIN Action
     const { data, error } = await supabase.functions.invoke('order-manager', {
         body: { 
-          action: 'ADMIN_FORCE_REFUND', // Ensure this exists in your order-manager logic too
+          action: 'ADMIN_FORCE_REFUND', 
           appId: appId,
           userId: user.id,
           payload: { clientId }
@@ -419,34 +419,30 @@ export const requestRevision = async (appId, message, freelancerId) => {
 export const getEnergy = async (userId) => {
   const { data, error } = await supabase
     .from('freelancers')
-    .select('energy_points') // <--- CHANGE THIS from 'energy'
+    .select('energy_points') 
     .eq('id', userId)
     .single();
 
   if (error) return { energy: 0 };
-  
-  // We map 'energy_points' from DB to 'energy' for your frontend state
   return { energy: data?.energy_points || 0 }; 
 };
 
 export const deductEnergy = async (userId, amount) => {
-  // First check if they have enough
   const { data: user, error: fetchError } = await supabase
     .from('freelancers')
-    .select('energy_points') // <--- CHANGE THIS
+    .select('energy_points') 
     .eq('id', userId)
     .single();
 
   if (fetchError || !user) return { success: false, error: fetchError };
 
-  if (user.energy_points < amount) { // <--- CHANGE THIS
+  if (user.energy_points < amount) { 
      return { success: false, error: { message: "Insufficient Energy Points" } };
   }
 
-  // Perform deduction
   const { error: updateError } = await supabase
     .from('freelancers')
-    .update({ energy_points: user.energy_points - amount }) // <--- CHANGE THIS
+    .update({ energy_points: user.energy_points - amount }) 
     .eq('id', userId);
 
   if (updateError) return { success: false, error: updateError };
@@ -477,7 +473,6 @@ export const updateUserProfile = async (userId, updates, table) => {
   
   if (!error) {
       // ✅ AUTOMATIC LOGGING
-      // This uses the logAuditAction helper we defined in this file
       await logAuditAction('USER_UPDATE', userId, {
           table: table,
           fields: Object.keys(updates)
@@ -486,11 +481,12 @@ export const updateUserProfile = async (userId, updates, table) => {
   
   return { error };
 };
+
 export const getPublicProfile = async (userId) => {
   // 1. Fetch User Details
   const { data: user, error } = await supabase
     .from('freelancers') 
-    .select('id, name, bio, nationality, tag_line, unlocked_skills, created_at, social_links, cover_image') // Added images just in case
+    .select('id, name, bio, nationality, tag_line, unlocked_skills, created_at, social_links, cover_image')
     .eq('id', userId)
     .single();
     
@@ -499,7 +495,7 @@ export const getPublicProfile = async (userId) => {
   // 2. Fetch Badges
   const { data: badges } = await supabase
     .from('user_badges')
-    .select('name:badge_name, earned_at') // <--- RENAME badge_name TO name
+    .select('name:badge_name, earned_at') 
     .eq('user_id', userId);
 
   // 3. Fetch Portfolio
@@ -509,12 +505,12 @@ export const getPublicProfile = async (userId) => {
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
-  // 4. --- NEW: Fetch Latest Resume ---
+  // 4. Fetch Latest Resume
   const { data: resume } = await supabase
     .from('resumes')
     .select('content')
     .eq('user_id', userId)
-    .order('created_at', { ascending: false }) // Get the newest one
+    .order('created_at', { ascending: false }) 
     .limit(1)
     .single();
 
@@ -522,7 +518,7 @@ export const getPublicProfile = async (userId) => {
       user, 
       badges: badges || [], 
       portfolio: portfolio || [], 
-      resume: resume?.content || null // Returns the resume JSON or null
+      resume: resume?.content || null 
   };
 };
 
@@ -545,10 +541,6 @@ export const getInvoiceUrl = async (filePath) => {
   }
 }
 
-// [File: src/services/dashboard.api.js]
-
-// ... existing code ...
-
 // 🆕 FETCH BANKING DETAILS FOR ADMIN
 export const getUserBankingDetails = async (userId) => {
   const { data, error } = await supabase
@@ -566,21 +558,18 @@ export const getUserBankingDetails = async (userId) => {
 
 export const submitReview = async (appId, rating, tags = []) => {
   try {
-    // 1. Get Current User
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("User not authenticated");
 
-    // 2. Validate Frontend Side
     if (!rating) throw new Error("Rating is required");
 
-    // 3. Call Edge Function
     const { data, error } = await supabase.functions.invoke('order-manager', {
       body: { 
         action: 'SUBMIT_REVIEW',
         appId: appId,
         userId: user.id,
         payload: { 
-            rating: parseInt(rating), // Ensure it's a number
+            rating: parseInt(rating), 
             tags: tags 
         }
       }
@@ -597,8 +586,6 @@ export const submitReview = async (appId, rating, tags = []) => {
 
 export const claimDailyReward = async (userId, date) => {
   try {
-    // Uses the RPC function we discussed to handle UUIDs safely
-    // If you haven't created the function in Supabase SQL Editor yet, do that first!
     const { error } = await supabase.rpc('claim_daily_reward', { 
       user_id: userId, 
       today: date 
@@ -616,28 +603,22 @@ export const claimDailyReward = async (userId, date) => {
 // 10. REPORTING SYSTEM (MVP)
 // ==========================================
 
-// Inside dashboard.api.js
-
 export const submitReport = async (reportData) => {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Must be logged in to report");
 
-    // Check if we received the ID
     if (!reportData.target_id) {
         throw new Error("Missing target_id in API call");
     }
 
     const { error } = await supabase.from('reports').insert([{
       reporter_id: user.id,
-      
-      // ✅ DIRECT MAPPING (Ensure these match your logic file)
       reported_user_id: reportData.reported_user_id, 
       target_type: reportData.target_type,
-      target_id: reportData.target_id, // <--- This was likely undefined before
-      
+      target_id: reportData.target_id, 
       reason: reportData.reason,
-      details: reportData.description // Maps 'description' from form to 'details' in DB
+      details: reportData.description 
     }]);
 
     if (error) throw error;

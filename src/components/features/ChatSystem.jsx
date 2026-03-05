@@ -37,7 +37,6 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
   ];
 
   const handleQuickReplyClick = (reply) => {
-      // Append to existing text or set as new text
       setInput(prev => prev ? `${prev} ${reply}` : reply);
   };
 
@@ -86,7 +85,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
       const { data } = await supabase
         .from('messages')
         .select('*')
-        .eq('application_id', activeChat.application_id) // STRICT ISOLATION
+        .eq('application_id', activeChat.application_id)
         .order('created_at', { ascending: true });
       
       setMessages(data || []);
@@ -94,7 +93,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
     };
     fetchMessages();
 
-    // SECURE REALTIME: Listen only to this specific project order
+    // SECURE REALTIME
     const channel = supabase
       .channel(`chat_${activeChat.application_id}`)
       .on('postgres_changes', { 
@@ -105,14 +104,15 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
       }, (payload) => {
          const newMsg = payload.new;
          // Prevent duplicating the sender's optimistic UI message
-         if (newMsg.sender_id !== user.id) {
+         if (newMsg.sender_id !== user?.id) {
             setMessages((prev) => [...prev, newMsg]);
          }
       })
       .subscribe();
       
+    // IMPORTANT: Use user?.id to prevent crash if user object drops during render
     return () => { supabase.removeChannel(channel); };
-  }, [activeChat, user.id]);
+  }, [activeChat, user?.id]); 
 
   // AUTO SCROLL
   useEffect(() => { 
@@ -124,13 +124,11 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
     e.preventDefault();
     if (!input.trim() || !activeChat?.application_id) return;
 
-    // --- CONTACT BLOCKING CHECK ---
     if (containsPhoneNumber(input) || containsContactWords(input)) {
         alert("Sharing phone numbers, emails, or external contact details is not allowed to protect both parties. Please communicate strictly through the platform chat.");
         return;
     }
 
-    // --- AI TOXICITY CHECK ---
     if (model) {
         const predictions = await model.classify([input]);
         const isBad = predictions.some(p => p.results[0].match === true);
@@ -142,13 +140,12 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
     }
 
     const msgData = { 
-        application_id: activeChat.application_id, // LINK TO PROJECT
-        sender_id: user.id, 
-        receiver_id: activeChat.id, 
+        application_id: activeChat?.application_id, 
+        sender_id: user?.id, 
+        receiver_id: activeChat?.id, 
         content: input
     };
 
-    // Optimistic UI Update for sender
     setMessages((prev) => [...prev, { ...msgData, created_at: new Date().toISOString() }]);
     setInput('');
 
@@ -160,9 +157,9 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
     e.preventDefault();
     const formData = new FormData(e.target);
     const reportData = {
-        reporter_id: user.id,
-        reported_user_id: activeChat.id,
-        target_id: activeChat.application_id,
+        reporter_id: user?.id,
+        reported_user_id: activeChat?.id,
+        target_id: activeChat?.application_id,
         target_type: 'chat_violation',
         reason: formData.get('reason'),
         description: formData.get('details')
@@ -172,11 +169,11 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
     else { alert("User reported."); setReportModalOpen(false); }
   };
 
+  // Failsafe: Don't render UI if activeChat isn't fully loaded
   if (!activeChat) return null;
 
   // --- UI RENDER ---
   return (
-    // ADDED: rounded-2xl md:rounded-3xl border border-gray-800 shadow-2xl for proper Modal feel
     <div className="flex w-full h-full bg-[#0a0a0a] text-white overflow-hidden relative font-sans flex-col rounded-2xl md:rounded-3xl border border-gray-800 shadow-2xl">
       
       {/* TOAST ALERT */}
@@ -194,9 +191,9 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
           </button>
           
           <div className="flex-1">
-              <h3 className="font-bold text-sm leading-tight">{activeChat.name}</h3>
+              <h3 className="font-bold text-sm leading-tight">{activeChat?.name}</h3>
               <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
-                <Lock size={10} className="text-emerald-500" /> Escrow Chat ID: {activeChat.application_id.slice(0,8)}
+                <Lock size={10} className="text-emerald-500" /> Escrow Chat ID: {activeChat?.application_id?.toString().slice(0,8)}
               </p>
           </div>
 
@@ -219,11 +216,11 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
                     <div className="w-12 h-12 bg-gray-800/50 border border-gray-700/50 rounded-full mx-auto flex items-center justify-center mb-2">
                         <Lock size={18} className="text-gray-400"/>
                     </div>
-                    <p className="text-[11px] px-8">Secure, encrypted chat with <span className="font-bold text-white">{activeChat.name}</span>.<br/>Do not share external contact information.</p>
+                    <p className="text-[11px] px-8">Secure, encrypted chat with <span className="font-bold text-white">{activeChat?.name}</span>.<br/>Do not share external contact information.</p>
                 </div>
 
                 {messages.map((msg, index) => {
-                const isMe = msg.sender_id === user.id;
+                const isMe = msg.sender_id === user?.id;
                 return (
                     <div key={index} className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[85%] sm:max-w-[75%] px-4 py-2.5 text-[13px] shadow-sm relative border
@@ -249,8 +246,6 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
 
       {/* 3. QUICK REPLIES & INPUT BAR */}
       <div className="flex-none p-3 bg-gray-900/80 backdrop-blur-md border-t border-gray-800/60 z-30 flex flex-col gap-2">
-        
-        {/* Quick Replies Row */}
         <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar hide-scrollbar items-center">
             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider shrink-0 mr-1">Quick Reply:</span>
             {quickReplies.map((reply, index) => (
@@ -264,7 +259,6 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
             ))}
         </div>
 
-        {/* Input Area */}
         <div className="relative flex items-end gap-2 max-w-4xl mx-auto w-full">
           <textarea 
               value={input} 
@@ -299,7 +293,6 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
           </Modal>
       )}
 
-      {/* Optional Custom Scrollbar CSS for this specific component to hide scrollbar on the quick replies */}
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar {
             display: none;
