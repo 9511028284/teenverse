@@ -65,7 +65,7 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
     }
   };
 
-  // ==========================================
+// ==========================================
   // ACTION: SUBMIT FINAL IDENTITY
   // ==========================================
   const onIdentitySubmit = async (e) => {
@@ -75,13 +75,36 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
     if (isMinor && !identityConsent) return alert("Guardian consent is strictly required.");
 
     setIsSubmitting(true);
+
+    // 🚨 NEW: Capture Legal Consent Footprint
+    let clientIp = 'unknown';
+    const userAgent = navigator.userAgent; // Captures browser & device info
+    const consentVersion = 'v1.0-TeenVerseHub'; // Hardcode your terms version
+    
+    // Only fetch IP if they are a minor checking the consent box
+    if (isMinor && identityConsent) {
+      try {
+        const ipResponse = await fetch('https://api.ipify.org?format=json');
+        const ipData = await ipResponse.json();
+        clientIp = ipData.ip;
+      } catch (err) {
+        console.warn("Could not fetch IP automatically.");
+      }
+    }
+
     await handleIdentitySubmit({ 
       ageGroup: isMinor ? 'minor' : 'adult', 
       panNumber, 
       digilocker_verified: true,
       dob: userDob,
-      guardianConsent: identityConsent 
+      guardianConsent: identityConsent,
+      guardianName: panVerified ? verifiedNameFromSurepass : null, // Ensure this variable is in scope!
+      // Pass the digital footprint down!
+      consentIp: clientIp,
+      consentUserAgent: userAgent,
+      consentVersion: consentVersion
     });
+    
     setIsSubmitting(false);
   };
 

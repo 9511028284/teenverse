@@ -128,12 +128,17 @@ export const useDashboardLogic = (user, setUser, showToast) => {
           setModal('kyc_verification'); 
           
           supabase.functions.invoke('digilocker', {
-              // 🚨 NEW: Passing user_id so the Edge Function can update the DB
               body: { action: 'GET_DOCUMENT', verification_id: verificationId, user_id: user.id }
           }).then(({ data, error }) => {
               if (error || !data?.success) {
-                  showToast("DigiLocker failed or consent was denied.", "error");
+                  // 🚨 NEW: Print the exact error to the browser console!
+                  console.error("DIGILOCKER BACKEND ERROR:", error || data?.error);
+                  
+                  // Show the error message directly in the toast if it exists
+                  const errorMessage = data?.error || "DigiLocker failed or consent was denied.";
+                  showToast(errorMessage, "error");
               } else {
+                  // ... rest of your success code ...
                   // The DB is now updated! We just sync the local React state to match it.
                   setUser(prev => ({ 
                       ...prev, 
@@ -311,7 +316,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
  // ------------------------------------------
   // ⚡ ACTION: IDENTITY VERIFICATION (V2)
   // ------------------------------------------
-  const handleIdentitySubmit = async ({ ageGroup, panNumber, digilocker_verified, dob, guardianConsent }) => {
+  const handleIdentitySubmit = async ({ ageGroup, panNumber, digilocker_verified, dob, guardianConsent, guardianName, consentIp, consentUserAgent, consentVersion }) => {
     showToast("Finalizing Identity Verification...", "info");
 
     try {
@@ -323,7 +328,12 @@ export const useDashboardLogic = (user, setUser, showToast) => {
                 dob: dob,
                 pan_number: panNumber, 
                 digilocker_verified: digilocker_verified,
-                guardian_consent: guardianConsent 
+                guardian_consent: guardianConsent,
+                guardian_name: guardianName,
+                // 🚨 NEW: Send footprint to backend
+                consent_ip: consentIp,
+                consent_user_agent: consentUserAgent,
+                consent_version: consentVersion 
             }
         });
 
