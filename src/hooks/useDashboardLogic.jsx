@@ -507,56 +507,70 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
   const handleApplyJob = async (e, energyCost, educationConsent) => {
     e.preventDefault();
-    if (parentMode) { showToast("Parent Mode Active", "error"); return; }
+
+    // 1. Security & Locks
+    if (parentMode) { showToast("Parent Mode Active 🛑", "error"); return; }
     if (!checkKycLock('apply_paid')) return; 
     
+    // 2. Skill Gate (No more ugly confirm alerts!)
     if (!isClient && selectedJob) {
       const jobCategory = selectedJob.category || 'dev';
       if (!unlockedSkills.includes(jobCategory)) {
-        if (confirm(`⚠️ Skill Verification Required\n\nYou need a verified '${jobCategory}' badge to apply for "${selectedJob.title}".\n\nWould you like to take the AI Assessment now?`)) {
-           await startAiQuiz(jobCategory, selectedJob.title);
-        }
+        // Instead of window.confirm, we trigger a custom modal state
+        setModal({ 
+            type: 'skill_gate', 
+            category: jobCategory, 
+            jobTitle: selectedJob.title 
+        });
         return; 
       }
     }
 
-    // 🚀 FIX: Safely parse and validate the energy cost
+    // 3. Energy Cost Validation
     const parsedCost = Number(energyCost);
-
     if (isNaN(parsedCost) || parsedCost <= 0) {
-        showToast("System Error: Invalid energy cost detected.", "error");
-        console.error("handleApplyJob received an invalid energyCost:", energyCost);
-        return;
+        return showToast("System Error: Invalid energy cost detected.", "error");
     }
 
+    // 4. Optimistic UI Check (Prevents unnecessary database calls)
     if (energy < parsedCost) { 
-        showToast(`Not enough energy! You need ${parsedCost} ⚡`, "error"); 
-        return; 
+        return showToast(`Low battery! 🪫 You need ${parsedCost} ⚡ to apply.`, "error"); 
     }
 
-    if (applications.some(app => app.job_id === selectedJob.id && app.freelancer_id === user.id)) { 
-      showToast("Already applied!", "error"); return; 
-    }
-
-    const { success, error: energyError } = await api.deductEnergy(user.id, parsedCost);
-    if (!success) { showToast(energyError.message, "error"); return; }
-    
-    setEnergy(prev => prev - parsedCost);
-    
+    // 5. ATOMIC RPC CALL (Energy + Application in one secure vault transaction)
+    showToast("Shooting your shot... 🚀", "info");
     const formData = new FormData(e.target);
-    const appData = { 
-      job_id: selectedJob.id, freelancer_id: user.id, freelancer_name: user.name, 
-      client_id: selectedJob.client_id, cover_letter: formData.get('cover_letter'), 
-      bid_amount: formData.get('bid_amount'), is_educational_waiver_signed: educationConsent 
-    };
     
-    const { error } = await api.applyForJob(appData, selectedJob.title);
+    const { data, error } = await supabase.rpc('apply_for_job_with_energy', {
+        p_job_id: selectedJob.id,
+        p_freelancer_id: user.id,
+        p_freelancer_name: user.name,
+        p_client_id: selectedJob.client_id,
+        p_cover_letter: formData.get('cover_letter'),
+        p_bid_amount: formData.get('bid_amount'),
+        p_is_educational_waiver_signed: educationConsent,
+        p_energy_cost: parsedCost
+    });
+
     if (error) { 
-        setEnergy(prev => prev + parsedCost);
-        api.awardEnergy(user.id, parsedCost); 
+        // Supabase will automatically return our custom RPC exception messages!
         showToast(error.message, 'error'); 
     } else { 
-        showToast('Applied successfully!'); 
+        // Success! Now we update the React UI to match the database
+        setEnergy(prev => prev - parsedCost);
+        showToast('W application! 🎯 Proposal sent.', 'success'); 
+        
+        // Instantly update the applications array so the UI feels fast
+        const newApp = {
+            id: data.application_id, 
+            job_id: selectedJob.id, 
+            freelancer_id: user.id, 
+            status: 'Pending', 
+            bid_amount: formData.get('bid_amount'), 
+            created_at: new Date().toISOString()
+        };
+        setApplications(prev => [newApp, ...prev]);
+        
         setModal(null); 
     }
   };

@@ -186,13 +186,13 @@ export default function App() {
       else { showToast('Failed to send feedback', 'error'); }
   };
 
-  if (loading) {
-      return (
-        <div className="h-screen w-screen bg-[#050505] flex items-center justify-center text-indigo-500">
-            <Loader2 className="animate-spin w-10 h-10" />
-        </div>
-      );
-  }
+ if (loading) {
+    return (
+      <div className="h-[100dvh] w-full bg-[#050505] flex items-center justify-center text-indigo-500">
+        <Loader2 className="animate-spin w-10 h-10" />
+      </div>
+    );
+}
 
   return (
    <>

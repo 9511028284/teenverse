@@ -161,7 +161,23 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                         energy={energy}
                       />
                     )}
-                    {tab === 'jobs' && <Jobs isClient={isClient} services={services} filteredJobs={filteredJobs} searchTerm={searchTerm} setSearchTerm={setters.setSearchTerm} setModal={setters.setModal} setTab={setters.setTab} setSelectedJob={setters.setSelectedJob} parentMode={parentMode} onAction={actions.handleAppAction} />}
+                   {tab === 'jobs' && (
+    <Jobs 
+        user={user} /* 🚀 THE FIX: Passing the user data down! */
+        isClient={isClient} 
+        services={services} 
+        filteredJobs={filteredJobs} 
+        searchTerm={searchTerm} 
+        setSearchTerm={setters.setSearchTerm} 
+        setModal={setters.setModal} 
+        setTab={setters.setTab} 
+        setSelectedJob={setters.setSelectedJob} 
+        parentMode={parentMode} 
+        onAction={actions.handleAppAction} 
+        // Note: If you have setActiveChat in your setters, add it here too!
+        // setActiveChat={setters.setActiveChat} 
+    />
+)}
                     {tab === 'posted-jobs' && isClient && <ClientPostedJobs jobs={jobs} setModal={setters.setModal} handleDeleteJob={actions.handleDeleteJob} />}
                     
                     {tab === 'my-services' && !isClient && (

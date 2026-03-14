@@ -9,6 +9,7 @@ import { twMerge } from 'tailwind-merge';
 function cn(...inputs) { return twMerge(clsx(inputs)); }
 
 const ApplyJobModal = ({ onClose, onSubmit, job, user, currentEnergy }) => {
+    if (!job) return null;
   const [coverLetter, setCoverLetter] = useState('');
   const [loading, setLoading] = useState(false);
   const [isMagicLoading, setIsMagicLoading] = useState(false);
@@ -16,6 +17,7 @@ const ApplyJobModal = ({ onClose, onSubmit, job, user, currentEnergy }) => {
   
   // Bid State
   const [bidAmount, setBidAmount] = useState(job.budget || 0);
+  
 
   const ENERGY_COST = 2;
   const hasEnoughEnergy = currentEnergy >= ENERGY_COST;
