@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from './supabase'; 
 import Toast from './components/ui/Toast';
-import { SpeedInsights } from "@vercel/speed-insights/next"
+
+// ✅ Fixed Import: Using the React version instead of the Next.js version
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Loader2 } from 'lucide-react';
 
 // Pages
@@ -40,6 +42,15 @@ export default function App() {
 
   const navigate = useNavigate();
   const location = useLocation();
+
+  // ⚡ OPTIMIZATION: Instant Scroll Restoration
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'auto' 
+    });
+  }, [location.pathname]);
 
   // Compatibility helper
   const setView = (viewName) => {
@@ -193,10 +204,13 @@ export default function App() {
         <Loader2 className="animate-spin w-10 h-10" />
       </div>
     );
-}
+ }
 
   return (
    <>
+      {/* ✅ Vercel Analytics Tracker */}
+      <SpeedInsights />
+
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
       <Routes>
@@ -212,7 +226,6 @@ export default function App() {
 
         <Route path="/legal" element={<LegalWrapper />} />
         
-        {/* FIX: Replaced window.location.reload() with navigate('/dashboard') */}
         <Route path="/termsagreement" element={<TermsAgreement onAgree={() => navigate('/dashboard')} />} />
         
         <Route path="/parent-approval" element={<ParentApprovalWrapper />} />
