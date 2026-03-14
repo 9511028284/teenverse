@@ -23,6 +23,52 @@ const isSameDay = (dateString) => {
   );
 };
 
+// Helper: Clean Cloudflare R2 Uploads (Eliminates Duplicate Code!)
+const uploadFilesToR2 = async (files, userId, folderPrefix, maxSizeBytes, showToast) => {
+    let uploadedUrls = [];
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size === 0) continue;
+
+        if (file.size > maxSizeBytes) {
+            showToast(`"${file.name}" exceeds the size limit. Please choose a smaller file.`, "error");
+            throw new Error("File size limit exceeded");
+        }
+
+        const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+        const filePath = folderPrefix ? `${folderPrefix}/${userId}/${Date.now()}_${safeName}` : `${userId}/${Date.now()}_${safeName}`; 
+
+        try {
+            const { data: presignData, error: presignError } = await supabase.functions.invoke('generate-r2-url', {
+                body: { fileName: filePath, fileType: file.type }
+            });
+
+            if (presignError || !presignData?.signedUrl) throw new Error("Could not get secure upload link.");
+
+            const uploadRes = await fetch(presignData.signedUrl, {
+                method: 'PUT',
+                body: file,
+                headers: { 'Content-Type': file.type }
+            });
+
+            if (!uploadRes.ok) throw new Error("R2 Upload failed");
+
+            if (folderPrefix === 'jobs') {
+                 uploadedUrls.push(presignData.publicUrl);
+            } else {
+                 const baseUrl = import.meta.env.VITE_R2_PUBLIC_URL.replace(/\/$/, "");
+                 const cleanPath = filePath.replace(/^\//, "");
+                 uploadedUrls.push(`${baseUrl}/${cleanPath}`);
+            }
+        } catch (err) {
+            console.error("Upload Error:", err);
+            showToast(`Failed to upload ${file.name}`, "error");
+            throw err; 
+        }
+    }
+    return uploadedUrls;
+};
+
 export const useDashboardLogic = (user, setUser, showToast) => {
   const isClient = user?.type === 'client';
    
@@ -61,7 +107,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [editProfileModal, setEditProfileModal] = useState(false);
 
   // --- KYC & QUIZ STATES ---
-  const [kycFile, setKycFile] = useState(null); // Kept for backward compatibility if needed elsewhere
+  const [kycFile, setKycFile] = useState(null); 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [isQuizLoading, setIsQuizLoading] = useState(false);
@@ -110,7 +156,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   };
 
   // ------------------------------------------
- // ------------------------------------------
   // 🔄 DIGILOCKER REDIRECT CATCHER & DOB FETCH
   // ------------------------------------------
   useEffect(() => {
@@ -131,19 +176,14 @@ export const useDashboardLogic = (user, setUser, showToast) => {
               body: { action: 'GET_DOCUMENT', verification_id: verificationId, user_id: user.id }
           }).then(({ data, error }) => {
               if (error || !data?.success) {
-                  // 🚨 NEW: Print the exact error to the browser console!
                   console.error("DIGILOCKER BACKEND ERROR:", error || data?.error);
-                  
-                  // Show the error message directly in the toast if it exists
                   const errorMessage = data?.error || "DigiLocker failed or consent was denied.";
                   showToast(errorMessage, "error");
               } else {
-                  // ... rest of your success code ...
-                  // The DB is now updated! We just sync the local React state to match it.
                   setUser(prev => ({ 
                       ...prev, 
                       digilocker_verified: true, 
-                      kyc_status: 'age_verified', // Triggers Step 2 UI
+                      kyc_status: 'age_verified', 
                       dob: data.dob 
                   }));
                   showToast(`Age Verified! Please enter your PAN.`, "success");
@@ -186,12 +226,14 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
             if (!isClient && userProfileData) {
                 setEnergy(userProfileData.energy_points || 20);
-                if (!hasCheckedReward.current && userProfileData.last_login_date) {
-                    if (isSameDay(userProfileData.last_login_date)) {
-                        hasCheckedReward.current = true;
-                    } else {
+                
+                // 🚀 FIX: Correct Daily Reward check to handle new users (NULL dates)
+                if (!hasCheckedReward.current) {
+                    if (!userProfileData.last_login_date || !isSameDay(userProfileData.last_login_date)) {
                         hasCheckedReward.current = true;
                         setTimeout(() => setShowRewardModal(true), 1500);
+                    } else {
+                        hasCheckedReward.current = true;
                     }
                 }
             }
@@ -228,18 +270,26 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
     loadData();
     return () => { isMounted = false; };
-  }, [user, isClient, showToast, jobs.length]);
+  }, [user, isClient, showToast]); // 🚀 FIX: Removed jobs.length dependency to stop re-fetching loop
 
   const claimReward = async () => {
     setIsClaiming(true);
     const today = new Date().toISOString().split('T')[0];
     const rewardAmount = 10;
-    setEnergy(prev => prev + rewardAmount);
-    setShowRewardModal(false);
-    showToast(`⚡ +${rewardAmount} Energy Claimed!`, "success");
-    hasCheckedReward.current = true;
+    
+    // 🚀 FIX: API First (Prevents visual glitch if they claim twice)
     const { success } = await api.claimDailyReward(user.id, today);
-    if (success) await logAction('DAILY_REWARD_CLAIMED', { date: today, amount: rewardAmount });
+    
+    if (success) {
+        setEnergy(prev => prev + rewardAmount);
+        showToast(`⚡ +${rewardAmount} Energy Claimed!`, "success");
+        await logAction('DAILY_REWARD_CLAIMED', { date: today, amount: rewardAmount });
+    } else {
+        showToast("You have already claimed your reward for today!", "info");
+    }
+    
+    setShowRewardModal(false);
+    hasCheckedReward.current = true;
     setIsClaiming(false);
   };
 
@@ -247,9 +297,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // 🔐 SMART LOCK SYSTEM (KYC STATE MACHINE)
   // ------------------------------------------
   const checkKycLock = (actionType) => {
-    if (isClient) return true; // Clients don't need freelancer KYC
+    if (isClient) return true; 
 
-    // 1. Block Applying for Jobs
     if (actionType === 'apply_paid') {
         if (!user.is_kyc_verified) {
             showToast("🔒 Identity verification required to apply for jobs.", "info");
@@ -258,7 +307,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         }
     }
 
-    // 2. Block Receiving Payments/Withdrawals
     if (actionType === 'withdraw_funds' || actionType === 'release_escrow') {
         if (!user.is_kyc_verified) {
             showToast("🔒 Identity verification required to receive funds.", "error");
@@ -273,7 +321,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
 
     return true; 
-};
+  };
 
   const handleReportSubmit = async (e) => {
     e.preventDefault();
@@ -313,7 +361,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
   };
 
- // ------------------------------------------
+  // ------------------------------------------
   // ⚡ ACTION: IDENTITY VERIFICATION (V2)
   // ------------------------------------------
   const handleIdentitySubmit = async ({ ageGroup, panNumber, digilocker_verified, dob, guardianConsent, guardianName, consentIp, consentUserAgent, consentVersion }) => {
@@ -322,18 +370,10 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     try {
         const { data, error: fnError } = await supabase.functions.invoke('pan', {
             body: { 
-                action: 'SAVE_KYC_DATA', 
-                user_id: user.id, 
-                age_group: ageGroup,
-                dob: dob,
-                pan_number: panNumber, 
-                digilocker_verified: digilocker_verified,
-                guardian_consent: guardianConsent,
-                guardian_name: guardianName,
-                // 🚨 NEW: Send footprint to backend
-                consent_ip: consentIp,
-                consent_user_agent: consentUserAgent,
-                consent_version: consentVersion 
+                action: 'SAVE_KYC_DATA', user_id: user.id, age_group: ageGroup,
+                dob: dob, pan_number: panNumber, digilocker_verified: digilocker_verified,
+                guardian_consent: guardianConsent, guardian_name: guardianName,
+                consent_ip: consentIp, consent_user_agent: consentUserAgent, consent_version: consentVersion 
             }
         });
 
@@ -343,31 +383,15 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         await logAction('IDENTITY_VERIFIED', { mode: KYC_MODE, age_group: ageGroup });
         showToast("✅ Identity Fully Verified! You can now apply for gigs.", "success");
         
-        // 1. Update the local user state
         setUser(prev => ({ 
-            ...prev, 
-            kyc_status: 'verified', 
-            is_kyc_verified: true,
-            kyc_type: ageGroup,
-            dob: dob,
-            digilocker_verified: true
+            ...prev, kyc_status: 'verified', is_kyc_verified: true,
+            kyc_type: ageGroup, dob: dob, digilocker_verified: true
         }));
         
-        // 2. 🏆 AWARD THE VERIFIED BADGE
         if (!badges.some(b => b.name === 'Verified')) {
-            // Update local state instantly for UI
             setBadges(prev => [...prev, { name: 'Verified', icon: 'ShieldCheck' }]);
-            
-            // Save to database
-            await supabase.from('user_badges').insert({ 
-                user_id: user.id, 
-                badge_name: 'Verified' 
-            });
-            
-            // Extra toast for the gamification pop!
-            setTimeout(() => {
-                showToast("🏆 BADGE UNLOCKED: Verified Identity!", "success");
-            }, 1000);
+            await supabase.from('user_badges').insert({ user_id: user.id, badge_name: 'Verified' });
+            setTimeout(() => showToast("🏆 BADGE UNLOCKED: Verified Identity!", "success"), 1000);
         }
 
         setModal(null);
@@ -379,6 +403,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         return false;
     }
   };
+
   // ------------------------------------------
   // 🏦 ACTION: BANK ACCOUNT
   // ------------------------------------------
@@ -386,12 +411,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     showToast("Linking Bank Account...", "info");
     try {
         const { data, error: fnError } = await supabase.functions.invoke('kyc-handler', {
-            body: { 
-                action: 'LINK_BANK', 
-                user_id: user.id, 
-                age_group: ageGroup,
-                bank_details: bankDetails 
-            }
+            body: { action: 'LINK_BANK', user_id: user.id, age_group: ageGroup, bank_details: bankDetails }
         });
 
         if (fnError) throw new Error(fnError.message || "Banking Service Unreachable");
@@ -400,12 +420,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         await logAction('BANK_LINKED', { ifsc: bankDetails.ifsc_code, mode: KYC_MODE });
         showToast("🎉 Bank Account Linked! Withdrawals enabled.", "success");
         
-        setUser(prev => ({ 
-            ...prev, 
-            is_bank_linked: true,
-            kyc_status: 'approved' 
-        }));
-        
+        setUser(prev => ({ ...prev, is_bank_linked: true, kyc_status: 'approved' }));
         setModal(null);
 
     } catch (err) {
@@ -423,73 +438,29 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const budget = parseFloat(formData.get('budget'));
     const title = formData.get('title');
     
-    // Grab the files from the 'attachments' input in PostJobModal
     const fileInput = e.target.querySelector('input[name="attachments"]');
-    const files = fileInput ? fileInput.files : []; 
+    const files = fileInput ? Array.from(fileInput.files) : []; 
     
     if (budget < 1) return showToast("Minimum budget is ₹1", "error"); 
     if (title.length < 5) return showToast("Job title is too short", "error"); 
     
     let uploadedUrls = [];
 
-    // --- 🚀 CLOUDFLARE R2 UPLOAD LOGIC ---
-    if (files && files.length > 0) {
-      showToast("Uploading attachments to secure vault...", "info");
-      
-      // Define 10MB limit in bytes
-      const MAX_SIZE_BYTES = 10 * 1024 * 1024; 
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file.size === 0) continue;
-
-        // 🛑 NEW: 10MB Size Limit Check
-        if (file.size > MAX_SIZE_BYTES) {
-            return showToast(`"${file.name}" exceeds the 10MB limit. Please choose a smaller file.`, "error");
-        }
-
-        const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
-        // We use a 'jobs/' prefix to keep these organized separately from submissions
-        const filePath = `jobs/${user.id}/${Date.now()}_${safeName}`; 
-
+    if (files.length > 0) {
+        showToast("Uploading attachments to secure vault...", "info");
         try {
-          // 1️⃣ Ask our Edge Function for a secure Cloudflare R2 URL
-          const { data: presignData, error: presignError } = await supabase.functions.invoke('generate-r2-url', {
-             body: { fileName: filePath, fileType: file.type }
-          });
-
-          if (presignError || !presignData?.signedUrl) throw new Error("Could not get secure upload link.");
-
-          // 2️⃣ Upload the file directly to Cloudflare R2
-          const uploadRes = await fetch(presignData.signedUrl, {
-            method: 'PUT',
-            body: file,
-            headers: { 'Content-Type': file.type }
-          });
-
-          if (!uploadRes.ok) throw new Error("R2 Upload failed");
-
-          // 3️⃣ Save the resulting public Cloudflare URL
-          uploadedUrls.push(presignData.publicUrl);
-          
-        } catch (err) {
-           console.error("Upload Error:", err);
-           showToast(`Failed to upload ${file.name}`, "error");
+            // 🚀 CLEANUP: Used the new helper function
+            uploadedUrls = await uploadFilesToR2(files, user.id, 'jobs', 10 * 1024 * 1024, showToast);
+        } catch (error) {
+            return; // Exit early if upload failed
         }
-      }
     }
 
     const jobData = { 
-        client_id: user.id, 
-        client_name: user.name, 
-        title: title, 
-        budget: budget, 
-        job_type: 'Fixed', 
-        duration: formData.get('duration'), 
-        tags: formData.get('tags'), 
-        description: formData.get('description'), 
-        category: formData.get('category') || 'dev',
-        attachments: uploadedUrls // ✅ Cloudflare R2 URLs attached to the database payload
+        client_id: user.id, client_name: user.name, title: title, budget: budget, 
+        job_type: 'Fixed', duration: formData.get('duration'), tags: formData.get('tags'), 
+        description: formData.get('description'), category: formData.get('category') || 'dev',
+        attachments: uploadedUrls 
     };
     
     const { error } = await api.createJob(jobData);
@@ -502,7 +473,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         setJobs([jobData, ...jobs]); 
     }
   };
-
   
   const handleDeleteJob = async (id) => {
     if(!window.confirm("Are you sure you want to delete this job?")) return;
@@ -538,7 +508,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const handleApplyJob = async (e, energyCost, educationConsent) => {
     e.preventDefault();
     if (parentMode) { showToast("Parent Mode Active", "error"); return; }
-    if (!checkKycLock('apply_paid')) return; // Uses the new State Machine
+    if (!checkKycLock('apply_paid')) return; 
     
     if (!isClient && selectedJob) {
       const jobCategory = selectedJob.category || 'dev';
@@ -550,16 +520,29 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       }
     }
 
-    if (energy < energyCost) { showToast("Not enough energy! ⚡", "error"); return; }
+    // 🚀 FIX: Safely parse and validate the energy cost
+    const parsedCost = Number(energyCost);
+
+    if (isNaN(parsedCost) || parsedCost <= 0) {
+        showToast("System Error: Invalid energy cost detected.", "error");
+        console.error("handleApplyJob received an invalid energyCost:", energyCost);
+        return;
+    }
+
+    if (energy < parsedCost) { 
+        showToast(`Not enough energy! You need ${parsedCost} ⚡`, "error"); 
+        return; 
+    }
 
     if (applications.some(app => app.job_id === selectedJob.id && app.freelancer_id === user.id)) { 
       showToast("Already applied!", "error"); return; 
     }
 
-    const { success, error: energyError } = await api.deductEnergy(user.id, energyCost);
+    const { success, error: energyError } = await api.deductEnergy(user.id, parsedCost);
     if (!success) { showToast(energyError.message, "error"); return; }
     
-    setEnergy(prev => prev - energyCost);
+    setEnergy(prev => prev - parsedCost);
+    
     const formData = new FormData(e.target);
     const appData = { 
       job_id: selectedJob.id, freelancer_id: user.id, freelancer_name: user.name, 
@@ -568,8 +551,14 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     };
     
     const { error } = await api.applyForJob(appData, selectedJob.title);
-    if (error) { showToast(error.message, 'error'); } 
-    else { showToast('Applied successfully!'); setModal(null); }
+    if (error) { 
+        setEnergy(prev => prev + parsedCost);
+        api.awardEnergy(user.id, parsedCost); 
+        showToast(error.message, 'error'); 
+    } else { 
+        showToast('Applied successfully!'); 
+        setModal(null); 
+    }
   };
 
   const handleAcceptApplication = async (app) => {
@@ -615,70 +604,29 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const workLink = formData.get('work_link');
     const message = formData.get('message');
     
-    // Grab the files from the specific input
     const fileInput = e.target.querySelector('input[type="file"]');
     const files = fileInput && fileInput.files ? Array.from(fileInput.files) : []; 
     
-    // 🛑 1. LIMIT: Maximum 5 files
     if (files.length > 5) {
         return showToast("You can only upload a maximum of 5 files.", "error");
     }
 
-    // 🛑 2. LIMIT: Maximum 15MB per file
-    const MAX_SIZE_BYTES = 15 * 1024 * 1024; // 15MB in bytes
-    for (let i = 0; i < files.length; i++) {
-        if (files[i].size > MAX_SIZE_BYTES) {
-            return showToast(`"${files[i].name}" exceeds the 15MB limit. Please choose a smaller file.`, "error");
-        }
-    }
-
-    // Validations passed! Now close the modal and start uploading
     setModal(null);
     showToast("Uploading work to secure vault...", "info");
     
     let uploadedUrls = [];
     
     if (files.length > 0) {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file.size === 0) continue; 
-
-        const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
-        const filePath = `${user.id}/${Date.now()}_${safeName}`;
-        
         try {
-          // 1️⃣ Ask our Edge Function for a secure Cloudflare R2 URL
-          const { data: presignData, error: presignError } = await supabase.functions.invoke('generate-r2-url', {
-             body: { fileName: filePath, fileType: file.type }
-          });
-
-          if (presignError || !presignData?.signedUrl) throw new Error("Could not get secure upload link.");
-
-          // 2️⃣ Upload the file directly to Cloudflare R2
-          const uploadRes = await fetch(presignData.signedUrl, {
-            method: 'PUT',
-            body: file,
-            headers: { 'Content-Type': file.type }
-          });
-
-          if (!uploadRes.ok) throw new Error("R2 Upload failed");
-
-          // 3️⃣ Save the resulting public Cloudflare URL
-          // Make sure this uses your clean, public VITE_R2_PUBLIC_URL instead of the raw presign URL
-          const baseUrl = import.meta.env.VITE_R2_PUBLIC_URL.replace(/\/$/, "");
-          const cleanPath = filePath.replace(/^\//, "");
-          uploadedUrls.push(`${baseUrl}/${cleanPath}`);
-          
-        } catch (err) {
-           console.error("Upload Error:", err);
-           showToast(`Failed to upload ${file.name}`, "error");
+            // 🚀 CLEANUP: Used the new helper function
+            uploadedUrls = await uploadFilesToR2(files, user.id, null, 15 * 1024 * 1024, showToast);
+        } catch (error) {
+            return; // Exit early if upload failed
         }
-      }
     }
     
     const timestamp = new Date().toISOString();
     
-    // Send the Cloudflare R2 URLs to your existing order-manager
     const { error } = await supabase.functions.invoke('order-manager', {
       body: { 
         action: 'SUBMIT_WORK', 

@@ -70,7 +70,8 @@ const ApplyJobModal = ({ onClose, onSubmit, job, user, currentEnergy }) => {
     setLoading(true);
     // Simulate API delay
     setTimeout(() => {
-        onSubmit(e, { bidAmount, coverLetter, cost: ENERGY_COST });
+        // ✅ FIXED: Pass exact arguments expected by handleApplyJob(e, cost, consent)
+        onSubmit(e, ENERGY_COST, educationConsent); 
         setLoading(false);
     }, 1000);
   };

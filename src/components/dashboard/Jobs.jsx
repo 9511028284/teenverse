@@ -23,10 +23,10 @@ const getTimeAgo = (dateString) => {
     return 'Just now';
 };
 
-const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, setModal, setActiveChat, setTab, setSelectedJob, onAction }) => {
+// 🚀 NEW: Added 'user' to the props to check KYC status
+const Jobs = ({ user, isClient, services, filteredJobs, searchTerm, setSearchTerm, setModal, setActiveChat, setTab, setSelectedJob, onAction }) => {
   
   const [reportModal, setReportModal] = useState(null);
-  // 🚀 NEW: State to control the Attachments Modal
   const [attachmentsModal, setAttachmentsModal] = useState(null);
 
   const handleReportSubmit = (e) => {
@@ -126,7 +126,7 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                )}
            </div>
 
-           {/* 🚀 NEW: ATTACHMENTS SECTION WITH MODAL LOGIC */}
+           {/* ATTACHMENTS SECTION */}
            {data.attachments && data.attachments.length > 0 && (
                <div className="mb-6">
                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1">
@@ -134,7 +134,6 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                    </p>
                    <div className="flex flex-wrap gap-2">
                        {data.attachments.length === 1 ? (
-                           // Show a single pill if there's only 1 file
                            (() => {
                                const url = data.attachments[0];
                                const rawName = url.split('/').pop().split('?')[0];
@@ -158,7 +157,6 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                                );
                            })()
                        ) : (
-                           // Show "View X Files" button if there are multiple files
                            <button 
                                onClick={(e) => {
                                    e.stopPropagation();
@@ -209,10 +207,20 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                </div>
                
                <button 
-                  onClick={() => isClient ? 
-                    (setActiveChat({ id: data.freelancer_id, name: data.freelancer_name }), setTab('messages')) : 
-                    (setSelectedJob(data), setModal('apply-job'))
-                  }
+                  onClick={() => {
+                      if (isClient) {
+                          setActiveChat({ id: data.freelancer_id, name: data.freelancer_name });
+                          setTab('messages');
+                      } else {
+                          // 🚀 NEW: KYC Security Check enforced before opening ApplyJobModal
+                          if (!user?.is_kyc_verified) {
+                              setModal('kyc_verification');
+                          } else {
+                              setSelectedJob(data);
+                              setModal('apply-job');
+                          }
+                      }
+                  }}
                   className="h-10 px-5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black font-bold text-sm flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg hover:shadow-xl dark:shadow-white/10"
                >
                    {isClient ? 'Chat' : 'Apply'}
@@ -333,7 +341,7 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
         </Modal>
       )}
 
-      {/* 🚀 NEW: ATTACHMENTS MODAL */}
+      {/* --- ATTACHMENTS MODAL --- */}
       {attachmentsModal && (
           <Modal title="Reference Files" onClose={() => setAttachmentsModal(null)}>
               <div className="space-y-4">
