@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from './supabase'; 
 import Toast from './components/ui/Toast';
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Loader2 } from 'lucide-react';
 
 // Pages
