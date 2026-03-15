@@ -95,9 +95,20 @@ const DashboardModals = ({ user, logic, showToast }) => {
                 <OrderTimeline application={timelineApp} />
                 <div className="mt-8 pt-4 border-t border-gray-100 dark:border-white/5 flex justify-center">
                     <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gray-100 dark:bg-white/5 text-[10px] font-mono text-gray-500 uppercase tracking-tighter">
-                        Order ID: #{timelineApp.id.split('-')[0]}
+                        {/* 👇 Fix applied here: safely rendering the raw ID */}
+                        Order ID: #{timelineApp.id}
                     </span>
                 </div>
+            </div>
+          </Modal>
+        )}
+
+         {/* TIMELINE */}
+        {timelineApp && (
+          <Modal title={`Project Timeline: ${timelineApp.jobs?.title}`} onClose={() => setTimelineApp(null)}>
+            <OrderTimeline application={timelineApp} />
+            <div className="mt-4 text-center">
+                <span className="text-xs bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-gray-500">Order ID: #{timelineApp.id}</span>
             </div>
           </Modal>
         )}

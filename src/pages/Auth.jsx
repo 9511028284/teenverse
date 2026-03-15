@@ -1,20 +1,21 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X, Check, Sparkles, Zap, CheckCircle, Fingerprint } from 'lucide-react';
 import { useAuthLogic } from '../hooks/useAuthLogic';
 import { Toast, FloatingNotif, LegalFooter } from '../components/auth/AuthUI';
 import { LoginView, SignupView, ForgotPasswordView, UpdatePasswordView } from '../components/auth/AuthForms';
 
-// --- MOTION VARIANTS FOR ULTRA-SMOOTH TRANSITIONS ---
+// ⚡ OPTIMIZATION: Removed expensive filter: "blur(8px)" which causes massive frame drops during transitions
 const pageTransition = {
-  initial: { opacity: 0, y: 20, scale: 0.96, filter: "blur(8px)" },
-  animate: { opacity: 1, y: 0, scale: 1, filter: "blur(0px)" },
-  exit: { opacity: 0, y: -20, scale: 0.96, filter: "blur(8px)" },
+  initial: { opacity: 0, y: 20, scale: 0.96 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, y: -20, scale: 0.96 },
   transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } // Apple-like spring easing
 };
 
 const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
   const { state, actions, refs } = useAuthLogic(onLogin, onSignUpSuccess);
+  const prefersReducedMotion = useReducedMotion();
   
   return (
     <div className="min-h-screen bg-[#020202] flex items-center justify-center p-4 sm:p-8 font-sans text-gray-100 relative overflow-hidden selection:bg-indigo-500 selection:text-white">
@@ -23,13 +24,19 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
       <div className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
       
       {/* 2. BACKGROUND FX: Cinematic Orbs */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
-         <motion.div animate={{ rotate: 360 }} transition={{ duration: 60, repeat: Infinity, ease: "linear" }} className="absolute inset-0 origin-center">
-             <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-indigo-600/10 rounded-full blur-[140px] mix-blend-screen pointer-events-none"/>
-             <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-fuchsia-600/10 rounded-full blur-[140px] mix-blend-screen pointer-events-none"/>
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+         <motion.div 
+            animate={prefersReducedMotion ? {} : { rotate: 360 }} 
+            transition={{ duration: 60, repeat: Infinity, ease: "linear" }} 
+            style={{ willChange: "transform" }}
+            className="absolute inset-0 origin-center"
+         >
+             {/* ⚡ OPTIMIZATION: Replaced expensive blur-[140px] and mix-blend-mode with GPU-friendly radial gradients */}
+             <div className="absolute top-[-20%] left-[-20%] w-[80vw] h-[80vw] bg-[radial-gradient(circle,rgba(79,70,229,0.12)_0%,transparent_60%)] rounded-full"/>
+             <div className="absolute bottom-[-20%] right-[-20%] w-[80vw] h-[80vw] bg-[radial-gradient(circle,rgba(192,38,211,0.12)_0%,transparent_60%)] rounded-full"/>
          </motion.div>
-         {/* Subtle Grid Pattern */}
-         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
+         {/* Subtle Grid Pattern - Removed mix-blend-overlay for performance */}
+         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10"></div>
          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
       </div>
 
@@ -40,7 +47,9 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         initial={{ opacity: 0, y: 40 }} 
         animate={{ opacity: 1, y: 0 }} 
         transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }} 
-        className="w-full max-w-[1280px] h-[88vh] bg-[#0a0a0a]/60 backdrop-blur-3xl border border-white/5 rounded-[2.5rem] shadow-[0_30px_100px_-20px_rgba(0,0,0,1)] overflow-hidden flex flex-col md:flex-row relative z-10"
+        // ⚡ OPTIMIZATION: Reduced backdrop blur to 2xl, added hardware acceleration hints
+        style={{ willChange: "transform, opacity" }}
+        className="w-full max-w-[1280px] h-[88vh] bg-[#0a0a0a]/60 backdrop-blur-2xl border border-white/5 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col md:flex-row relative z-10"
       >
         
         {/* Close Button */}
@@ -52,7 +61,8 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
         <div className="hidden md:flex w-[45%] relative flex-col justify-between p-14 border-r border-white/5 bg-black/40 overflow-hidden group">
           
           <div className="absolute inset-0 z-0 overflow-hidden">
-             <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop" alt="Abstract Flow" className="w-full h-full object-cover opacity-30 mix-blend-luminosity group-hover:scale-105 group-hover:opacity-40 transition-all duration-[10s] ease-out"/>
+             {/* ⚡ OPTIMIZATION: Replaced mix-blend-luminosity with standard CSS filters for better composite performance */}
+             <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop" loading="lazy" decoding="async" alt="Abstract Flow" className="w-full h-full object-cover opacity-20 grayscale group-hover:scale-105 group-hover:opacity-30 transition-all duration-[10s] ease-out transform-gpu"/>
              <div className="absolute inset-0 bg-gradient-to-tr from-black via-black/80 to-transparent"></div>
           </div>
           
@@ -88,7 +98,6 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
 
         {/* --- RIGHT SIDE (DYNAMIC FORMS) --- */}
         <div className="flex-1 p-6 md:p-16 overflow-y-auto relative flex flex-col justify-center custom-scrollbar">
-          {/* Ensure AnimatePresence watches the top-level state changes */}
           <AnimatePresence mode="wait">
              
              {/* SUCCESS EMAIL SENT VIEW */}
@@ -113,14 +122,15 @@ const Auth = ({ setView, onLogin, onSignUpSuccess }) => {
              /* CORE AUTHENTICATION FORMS */
              (
                  <motion.div 
-                    key={state.viewMode} /* Key is crucial here for AnimatePresence to detect the change */
+                    key={state.viewMode}
                     variants={pageTransition} 
                     initial="initial" 
                     animate="animate" 
                     exit="exit"
                     className="w-full max-w-md mx-auto my-auto"
                  >
-                    {state.viewMode === 'login' && <LoginView state={state} actions={actions} />}
+                    {/* Update this line in Auth.js */}
+                      {state.viewMode === 'login' && <LoginView state={state} actions={actions} refs={refs} />}
                     {state.viewMode === 'signup' && <SignupView state={state} actions={actions} refs={refs} />}
                     {state.viewMode === 'update_password' && <UpdatePasswordView state={state} actions={actions} />}
                     {state.viewMode === 'forgot' && <ForgotPasswordView state={state} actions={actions} refs={refs} />}
