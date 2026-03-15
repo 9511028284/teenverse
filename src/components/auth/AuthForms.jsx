@@ -29,7 +29,7 @@ const Floating3DIcon = memo(({ src, className, delay = 0 }) => {
 });
 
 // --- LOGIN VIEW ---
-export const LoginView = memo(({ state, actions }) => {
+export const LoginView = memo(({ state, actions, refs }) => {
   const [showPassword, setShowPassword] = useState(false);
   
   return (
