@@ -44,7 +44,6 @@ export const LoginView = memo(({ state, actions, refs }) => {
 
       <div className="space-y-6 relative z-10">
         <div className="space-y-2 relative">
-           {/* Removed blur-[1px] as CSS blur is very taxing on low-end GPUs */}
            <Floating3DIcon src="https://img.icons8.com/3d-fluency/250/mail.png" className="-left-10 top-6 w-14 h-14 opacity-30" delay={0.5} />
            <label className="text-[10px] font-bold text-slate-500 dark:text-gray-500 uppercase tracking-widest ml-1">Email</label>
            <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl flex items-center px-4 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/20 dark:focus-within:bg-white/10 transition-all group shadow-sm dark:shadow-none">
@@ -80,7 +79,7 @@ export const LoginView = memo(({ state, actions, refs }) => {
           </div>
       )}
         
-      <button onClick={actions.handleFinalSubmit} disabled={state.loading} className="w-full mt-8 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition-all shadow-lg flex justify-center items-center gap-2 transform active:scale-[0.98] uppercase tracking-widest text-sm relative overflow-hidden group">
+      <button onClick={actions.handleFinalSubmit} disabled={state.loading} className="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition-all shadow-lg flex justify-center items-center gap-2 transform active:scale-[0.98] uppercase tracking-widest text-sm relative overflow-hidden group">
          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out rounded-2xl"></div>
          {state.loading ? <Loader2 className="animate-spin relative z-10"/> : <span className="relative z-10 flex items-center gap-2">Login <ArrowRight size={18}/></span>}
       </button>
@@ -105,7 +104,7 @@ export const LoginView = memo(({ state, actions, refs }) => {
 
 // --- SIGNUP VIEW ---
 export const SignupView = memo(({ state, actions, refs }) => {
-  const { step, formData, isPhoneVerified, phoneVerificationId, otpLoading, phoneOtp, socialUser, agreedToTerms } = state;
+  const { step, formData, isPhoneVerified, otpLoading, socialUser, agreedToTerms } = state;
   
   return (
     <motion.div key="signup" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="h-full flex flex-col relative">
@@ -157,35 +156,27 @@ export const SignupView = memo(({ state, actions, refs }) => {
                 <div className="grid md:grid-cols-2 gap-4">
                     <input value={formData.name} onChange={(e) => actions.updateField('name', e.target.value)} className="w-full bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-4 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 outline-none transition-all placeholder-slate-400 dark:placeholder-gray-600 shadow-sm dark:shadow-none" placeholder="Full Name"/>
                      
-                    {/* Phone Verification Block */}
+                    {/* Phone Verification Block via MSG91 Widget */}
                     <div className="relative">
                         <div className="flex gap-2">
                             <input 
                                 type="tel" 
                                 value={formData.phone} 
                                 onChange={(e) => { 
-                                    if(isPhoneVerified) actions.setIsPhoneVerified(false);
+                                    if(isPhoneVerified) actions.setIsPhoneVerified(false); 
                                     actions.updateField('phone', e.target.value); 
                                 }} 
-                                disabled={isPhoneVerified || phoneVerificationId}
+                                disabled={isPhoneVerified}
                                 className={`flex-1 bg-white dark:bg-white/5 border ${isPhoneVerified ? 'border-green-500 text-green-600 dark:text-green-400' : 'border-slate-200 dark:border-white/10 text-slate-900 dark:text-white'} rounded-2xl p-4 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 outline-none transition-all placeholder-slate-400 dark:placeholder-gray-600 font-mono shadow-sm dark:shadow-none`} 
                                 placeholder="9876543210"
                             />
-                            {!isPhoneVerified && !phoneVerificationId && (
-                                <button type="button" onClick={actions.handleSendPhoneOtp} disabled={otpLoading} className="bg-slate-900 dark:bg-indigo-600 text-white px-5 rounded-2xl font-bold text-xs uppercase tracking-wider disabled:opacity-50 hover:bg-slate-800 dark:hover:bg-indigo-500 transition-colors shadow-sm">
+                            {!isPhoneVerified && (
+                                <button type="button" onClick={actions.handlePhoneVerification} disabled={otpLoading} className="bg-slate-900 dark:bg-indigo-600 text-white px-5 rounded-2xl font-bold text-xs uppercase tracking-wider disabled:opacity-50 hover:bg-slate-800 dark:hover:bg-indigo-500 transition-colors shadow-sm">
                                     {otpLoading ? <Loader2 className="animate-spin" size={16}/> : 'Verify'}
                                 </button>
                             )}
                             {isPhoneVerified && <div className="bg-green-100 dark:bg-green-500/20 border border-green-300 dark:border-green-500/50 text-green-600 dark:text-green-400 px-5 rounded-2xl flex items-center justify-center"><Check size={20} /></div>}
                         </div>
-                        {phoneVerificationId && !isPhoneVerified && (
-                            <div className="mt-2 p-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl animate-in fade-in slide-in-from-top-2">
-                                <div className="flex gap-2">
-                                    <input value={phoneOtp} onChange={(e) => actions.setPhoneOtp(e.target.value)} className="flex-1 bg-white dark:bg-black/40 border border-indigo-300 dark:border-indigo-500/50 rounded-xl p-3 text-slate-900 dark:text-white font-mono text-center tracking-widest text-lg focus:border-indigo-500 outline-none" placeholder="123456" maxLength={6}/>
-                                    <button type="button" onClick={actions.handlePhoneVerify} disabled={otpLoading} className="bg-green-500 hover:bg-green-600 text-white px-5 rounded-xl font-bold shadow-sm">{otpLoading ? <Loader2 className="animate-spin" size={16}/> : <Check size={18}/>}</button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
                 
@@ -247,7 +238,7 @@ export const SignupView = memo(({ state, actions, refs }) => {
                                 value={formData.org}
                                 onChange={(e) => actions.updateField('org', e.target.value)} 
                                 className="w-full bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-5 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 outline-none transition-all placeholder-slate-400 dark:placeholder-gray-600 shadow-sm dark:shadow-none"
-                             />
+                            />
                         </div>
                     )}
                      
@@ -268,7 +259,7 @@ export const SignupView = memo(({ state, actions, refs }) => {
         )}
 
         <div className="mt-auto pt-8 border-t border-slate-200 dark:border-white/10 flex justify-end">
-            {step < 4 ?
+            {step < 4 ? 
               <button onClick={actions.handleNext} disabled={state.loading} className="bg-slate-900 dark:bg-white text-white dark:text-black hover:bg-slate-800 dark:hover:bg-gray-200 px-8 py-4 rounded-2xl font-black flex items-center gap-3 transition-all transform active:scale-95 shadow-md uppercase tracking-widest text-sm">
                 Next <ArrowRight size={18}/>
               </button> 
@@ -278,8 +269,6 @@ export const SignupView = memo(({ state, actions, refs }) => {
               </button>
             }
         </div>
-        
-        <div id="recaptcha-container"></div>
     </motion.div>
   );
 });
