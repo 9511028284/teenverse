@@ -5,6 +5,7 @@ import Toast from './components/ui/Toast';
 
 // ✅ Fixed Import: Using the React version instead of the Next.js version
 import { SpeedInsights } from "@vercel/speed-insights/react";
+import { Analytics } from "@vercel/analytics/next"
 import { Loader2 } from 'lucide-react';
 
 // Pages
