@@ -76,7 +76,7 @@ const processCashfreePayment = async (params, onSuccess, onFail) => {
   const cashfree = new window.Cashfree({ mode: "production" }); 
 
   try {
-    const { data: orderData, error: orderError } = await supabase.functions.invoke('cashfree-payment', {
+    const { data: orderData, error: orderError } = await supabase.functions.invoke('payment-gateway', {
       body: { 
         action: 'CREATE_ORDER', amount: params.amount, customerPhone: params.customerPhone,
         freelancerId: params.freelancerId, appId: params.appId, userId: params.userId
@@ -90,7 +90,7 @@ const processCashfreePayment = async (params, onSuccess, onFail) => {
       redirectTarget: "_modal" 
     });
 
-    const { data: verifyData } = await supabase.functions.invoke('cashfree-payment', {
+    const { data: verifyData } = await supabase.functions.invoke('payment-gateway', {
       body: { action: 'VERIFY_ORDER', orderId: orderData.order_id, appId: params.appId }
     });
 

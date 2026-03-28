@@ -5,7 +5,7 @@ export const processCashfreePayment = async (params, onSuccess, onFail) => {
 
   try {
     // 1. Call Edge Function to CREATE ORDER
-    const { data: orderData, error: orderError } = await supabase.functions.invoke('cashfree-payment', {
+    const { data: orderData, error: orderError } = await supabase.functions.invoke('payment-gateway', {
       body: { 
         action: 'CREATE_ORDER',
         amount: params.amount,
@@ -26,7 +26,7 @@ export const processCashfreePayment = async (params, onSuccess, onFail) => {
 
     // 3. IMPORTANT: When modal closes, VERIFY the payment via Edge Function
     // We don't trust the frontend; we ask the server to check Cashfree's API
-    const { data: verifyData } = await supabase.functions.invoke('cashfree-payment', {
+    const { data: verifyData } = await supabase.functions.invoke('payment-gateway', {
       body: { 
         action: 'VERIFY_ORDER',
         orderId: orderData.order_id,
