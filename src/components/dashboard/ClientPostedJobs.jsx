@@ -6,6 +6,9 @@ import Button from '../ui/Button';
 const JobBlueprint = ({ job, handleDeleteJob }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // ✅ THE FIX: Safely handle null descriptions
+  const description = job?.description || '';
+
   return (
     <div className="group relative bg-[#0F172A] p-1 rounded-[24px] transition-all hover:bg-gradient-to-br hover:from-indigo-500/20 hover:to-purple-500/20">
       
@@ -17,15 +20,15 @@ const JobBlueprint = ({ job, handleDeleteJob }) => {
           {/* Header */}
           <div className="flex justify-between items-start mb-4">
               <div>
-                  <h3 className="font-bold text-lg text-white mb-1 group-hover:text-indigo-400 transition-colors">{job.title}</h3>
+                  <h3 className="font-bold text-lg text-white mb-1 group-hover:text-indigo-400 transition-colors">{job?.title || 'Untitled Mission'}</h3>
                   <div className="flex items-center gap-2 text-xs text-gray-500 font-mono">
-                      <span className="px-2 py-0.5 rounded bg-white/5 border border-white/5 uppercase tracking-wider">{job.category}</span>
+                      <span className="px-2 py-0.5 rounded bg-white/5 border border-white/5 uppercase tracking-wider">{job?.category || 'General'}</span>
                       <span>•</span>
-                      <span>{new Date(job.created_at).toLocaleDateString()}</span>
+                      <span>{job?.created_at ? new Date(job.created_at).toLocaleDateString() : 'Just now'}</span>
                   </div>
               </div>
               <button 
-                onClick={() => handleDeleteJob(job.id)} 
+                onClick={() => handleDeleteJob(job?.id)} 
                 className="p-2 text-gray-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                 title="Decommission Job"
               >
@@ -36,9 +39,10 @@ const JobBlueprint = ({ job, handleDeleteJob }) => {
           {/* Description */}
           <div className="bg-white/5 rounded-xl p-4 mb-4 border border-white/5">
              <p className={`text-sm text-gray-400 leading-relaxed font-light ${isExpanded ? '' : 'line-clamp-2'}`}>
-                {job.description}
+                {description || <span className="italic opacity-50">No description provided for this mission.</span>}
              </p>
-             {job.description.length > 80 && (
+             {/* ✅ THE FIX: Now safely checks the length without crashing */}
+             {description.length > 80 && (
                 <button 
                     onClick={() => setIsExpanded(!isExpanded)} 
                     className="text-[10px] font-bold text-indigo-400 mt-2 uppercase tracking-wide flex items-center gap-1 hover:text-indigo-300"
@@ -52,7 +56,7 @@ const JobBlueprint = ({ job, handleDeleteJob }) => {
           <div className="mt-auto pt-4 border-t border-white/5 flex items-center justify-between">
              <div>
                  <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Budget</p>
-                 <span className="text-lg font-black text-white">₹{job.budget}</span>
+                 <span className="text-lg font-black text-white">₹{job?.budget || 0}</span>
              </div>
              
              <div className="flex gap-2">
@@ -71,7 +75,12 @@ const JobBlueprint = ({ job, handleDeleteJob }) => {
   );
 };
 
-const ClientPostedJobs = ({ jobs, setModal, handleDeleteJob }) => {
+// ✅ THE FIX: Set a default empty array for jobs so jobs.length never crashes
+const ClientPostedJobs = ({ jobs = [], setModal, handleDeleteJob }) => {
+  
+  // Extra safety net just in case jobs is explicitly passed as null
+  const safeJobs = jobs || [];
+
   return (
     <div className="space-y-8 animate-fade-in pb-20">
       <div className="flex justify-between items-end">
@@ -83,13 +92,13 @@ const ClientPostedJobs = ({ jobs, setModal, handleDeleteJob }) => {
             Initialise New Job
         </Button>
       </div>
-    
+      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-        {jobs.map(job => (
-          <JobBlueprint key={job.id} job={job} handleDeleteJob={handleDeleteJob} />
+        {safeJobs.map(job => (
+          <JobBlueprint key={job?.id} job={job} handleDeleteJob={handleDeleteJob} />
         ))}
 
-        {jobs.length === 0 && (
+        {safeJobs.length === 0 && (
             <div className="col-span-full py-20 border border-dashed border-white/10 rounded-[32px] bg-white/5 flex flex-col items-center justify-center text-center">
                 <div className="w-20 h-20 bg-black rounded-full border border-white/10 flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
                     <Briefcase size={24} className="text-gray-600"/>

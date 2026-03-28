@@ -17,45 +17,70 @@ export const useChat = (activeChat, user, initialMessage) => {
     getIdentity();
   }, [user]);
 
-  // 2. PRE-FILL INPUT IF TEMPLATE PROVIDED
   useEffect(() => {
     if (initialMessage) setInput(initialMessage);
   }, [initialMessage]);
 
+  // 🧠 THE FIX: Safely differentiate a Service UUID from an Application BigInt
+  const isUuid = (val) => typeof val === 'string' && val.includes('-');
+  const isDirectChat = !activeChat?.application_id || isUuid(activeChat.application_id);
+  const appId = isDirectChat ? null : activeChat.application_id;
+
   // 3. FETCH MESSAGES & REALTIME SUBSCRIPTION
   useEffect(() => {
-    if (!activeChat?.application_id || !myId) return;
+    if (!activeChat?.id || !myId) return; 
 
     const fetchMessages = async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('application_id', activeChat.application_id)
-        .order('created_at', { ascending: false }) 
-        .limit(50); 
-      
-      if (!error && data) {
-        setMessages(data.reverse()); 
-        if (data.length < 50) setHasMore(false);
+      try {
+        let query = supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(50);
+
+        if (appId) {
+            query = query.eq('application_id', appId); // Project Chat
+        } else {
+            // Direct Chat
+            query = query.is('application_id', null)
+                         .or(`and(sender_id.eq.${myId},receiver_id.eq.${activeChat.id}),and(sender_id.eq.${activeChat.id},receiver_id.eq.${myId})`);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        
+        if (data) {
+          setMessages([...data].reverse()); 
+          if (data.length < 50) setHasMore(false);
+        }
+      } catch (err) {
+        console.error("Fetch error:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     fetchMessages();
 
-    // SECURE REALTIME WITH DEDUPLICATION
+    // 🧠 THE FIX: Sort IDs alphabetically so User A and User B connect to the EXACT same WebSocket channel!
+    const sortedIds = [myId, activeChat.id].sort();
+    const channelName = appId ? `chat_app_${appId}` : `chat_direct_${sortedIds[0]}_${sortedIds[1]}`;
+
     const channel = supabase
-      .channel(`chat_${activeChat.application_id}`)
+      .channel(channelName)
       .on('postgres_changes', { 
           event: 'INSERT', 
           schema: 'public', 
-          table: 'messages',
-          filter: `application_id=eq.${activeChat.application_id}`
+          table: 'messages'
       }, (payload) => {
          const newMsg = payload.new;
          if (newMsg.sender_id !== myId) {
+            
+            // Security Check: Does this incoming message belong in THIS specific chat window?
+            if (isDirectChat) {
+                const belongsToUs = (newMsg.sender_id === activeChat.id && newMsg.receiver_id === myId);
+                if (!belongsToUs || newMsg.application_id !== null) return;
+            } else {
+                if (newMsg.application_id?.toString() !== appId?.toString()) return;
+            }
+
             setMessages((prev) => {
-              // Strict deduplication safety
               const exists = prev.some(msg => msg.id === newMsg.id);
               if (exists) return prev;
               return [...prev, newMsg];
@@ -65,35 +90,37 @@ export const useChat = (activeChat, user, initialMessage) => {
       .subscribe();
       
     return () => { supabase.removeChannel(channel); };
-  }, [activeChat, myId]); 
+  }, [activeChat, myId, appId, isDirectChat]); 
 
   // 4. PAGINATION (LOAD MORE)
   const loadMore = async () => {
-    if (!hasMore || !activeChat?.application_id) return;
+    if (!hasMore || !activeChat?.id) return;
     
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('application_id', activeChat.application_id)
-      .order('created_at', { ascending: false })
-      .range(messages.length, messages.length + 49);
+    let query = supabase.from('messages').select('*').order('created_at', { ascending: false }).range(messages.length, messages.length + 49);
+    
+    if (appId) {
+        query = query.eq('application_id', appId);
+    } else {
+        query = query.is('application_id', null).or(`and(sender_id.eq.${myId},receiver_id.eq.${activeChat.id}),and(sender_id.eq.${activeChat.id},receiver_id.eq.${myId})`);
+    }
 
+    const { data, error } = await query;
     if (!error && data) {
       if (data.length < 50) setHasMore(false);
-      setMessages(prev => [...data.reverse(), ...prev]);
+      setMessages(prev => [...[...data].reverse(), ...prev]);
     }
   };
 
-  // 5. BULLETPROOF SEND LOGIC (ROLLBACK + STATUS)
+  // 5. BULLETPROOF SEND LOGIC 
   const executeSendMessage = async () => {
-    if (!input.trim() || !activeChat?.application_id || !myId) return false;
+    if (!input.trim() || !activeChat?.id || !myId) return false;
 
     const tempId = `temp-${Date.now()}`;
     const messageText = input;
     
     const optimisticMsg = { 
         id: tempId,
-        application_id: activeChat.application_id, 
+        application_id: appId, 
         sender_id: myId,
         receiver_id: activeChat.id, 
         content: messageText,
@@ -101,56 +128,33 @@ export const useChat = (activeChat, user, initialMessage) => {
         status: "sending"
     };
 
-    // Optimistic UI Update
     setMessages((prev) => [...prev, optimisticMsg]);
     setInput('');
 
-    // DB Payload (Exclude temp ID so Postgres auto-generates the real one)
+    // DB Payload 
     const dbPayload = {
-        application_id: activeChat.application_id, 
+        application_id: appId, 
         sender_id: myId,
         receiver_id: activeChat.id, 
         content: messageText
     };
 
-    const { data, error } = await supabase
-        .from('messages')
-        .insert([dbPayload])
-        .select()
-        .single(); 
+    const { data, error } = await supabase.from('messages').insert([dbPayload]).select().single(); 
 
     if (error) {
         console.error("Send error:", error);
-        // ROLLBACK: Remove the failed message from UI
         setMessages((prev) => prev.filter(msg => msg.id !== tempId));
-
-        // Display Backend Trust & Safety block if triggered
         if (error.message.includes('TRUST_SAFETY_BLOCK')) {
-            const cleanError = error.message.replace('TRUST_SAFETY_BLOCK: ', '');
-            alert(`Blocked by Server: ${cleanError}`);
+            alert(`Blocked by Server: ${error.message.replace('TRUST_SAFETY_BLOCK: ', '')}`);
         } else {
-            alert("Message failed to send. Please check your connection.");
+            alert("Message failed to send. Check Supabase RLS policies!");
         }
         return false;
     } else {
-        // SUCCESS: Swap temp ID for real ID and mark as sent
-        setMessages((prev) =>
-            prev.map(msg =>
-                msg.id === tempId ? { ...data, status: "sent" } : msg
-            )
-        );
+        setMessages((prev) => prev.map(msg => msg.id === tempId ? { ...data, status: "sent" } : msg));
     }
     return true;
   };
 
-  return { 
-      messages, 
-      input, 
-      setInput, 
-      loading, 
-      myId, 
-      executeSendMessage,
-      loadMore,
-      hasMore
-  };
+  return { messages, input, setInput, loading, myId, executeSendMessage, loadMore, hasMore };
 };

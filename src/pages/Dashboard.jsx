@@ -11,7 +11,8 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';   
 
 // Components
-import DashboardSidebar from '../components/dashboard/DashboardSidebar'; 
+import DashboardSidebar from '../components/dashboard/DashboardSidebar';
+import ChatSystem from '../components/features/ChatSystem'; // Adjust path as needed 
 import DashboardModals from '../components/dashboard/DashboardModals';
 import Overview from '../components/dashboard/Overview';
 import Jobs from '../components/dashboard/Jobs';
@@ -36,6 +37,8 @@ const pageTransition = { type: "tween", ease: "anticipate", duration: 0.4 };
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
   const logic = useDashboardLogic(user, setUser, showToast);
   const { state, setters, actions } = logic;
+
+  const { setActiveChat } = setters;
   
   // ✅ FIXED: Added reportModal to destructuring
   const { 
@@ -174,6 +177,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         setSelectedJob={setters.setSelectedJob} 
         parentMode={parentMode} 
         onAction={actions.handleAppAction} 
+        setActiveChat={setActiveChat}
         // Note: If you have setActiveChat in your setters, add it here too!
         // setActiveChat={setters.setActiveChat} 
     />
@@ -197,6 +201,15 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                         showToast={showToast}
                       />
                     )}
+
+                    {/* Add this inside the <motion.div> where tab === 'jobs', tab === 'overview', etc. are */}
+{tab === 'messages' && (
+   <ChatSystem 
+      user={user} 
+      activeChat={state.activeChat} // Passing the chat ID if they clicked from a profile
+      setActiveChat={setters.setActiveChat}
+   />
+)}
                   
                     {tab === 'academy' && !isClient && (
                       <Academy 

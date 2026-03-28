@@ -77,6 +77,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [zenMode, setZenMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeChat, setActiveChat] = useState(null);
 
   // --- REPORTING STATE ---
   const [reportModal, setReportModal] = useState(null); 
@@ -1007,14 +1008,14 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         isAiLoading, SAFE_QUIZZES, profileCardRef, currentXP, nextLevelXP, progressPercent,
         userLevel, filteredJobs,
         isQuizLoading, 
-        reportModal 
+        reportModal, activeChat // 👈 ADD THIS
     },
     setters: {
         setTab, setMenuOpen, setZenMode, setModal, setSelectedJob, setShowRewardModal,
         setKycFile, setScore, setCurrentQuestionIndex, setTimelineApp, setViewWorkApp,
         setSearchTerm, setProfileForm, setPaymentModal, setParentMode, setRawPortfolioText,
         setEditProfileModal, setViewProfileId, setPublicProfileData, setShowNotifications, setApplications,
-        setReportModal 
+        setReportModal, setActiveChat 
     },
     actions: {
         handlePostJob, 

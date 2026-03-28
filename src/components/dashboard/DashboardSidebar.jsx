@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Briefcase, ListChecks, Package, FileText, MessageSquare,
   BookOpen, Sparkles, Share2, UserCircle, Settings, Zap 
 } from 'lucide-react';
-import BadgeItem from './BadgeItem'; // Ensure this path is correct
+import BadgeItem from './BadgeItem'; // Ensure this path matches your project structure
 
 const DashboardSidebar = ({ 
   user, isClient, badges, userLevel, progressPercent, 
@@ -67,7 +67,7 @@ const DashboardSidebar = ({
                </div>
                <div className="overflow-hidden">
                    <h3 className="text-sm font-bold text-slate-800 dark:text-white truncate flex items-center gap-1">{user.name?.split(' ')[0] || 'User'} {badges.some(b => b.name === 'Verified Teen') && <ShieldCheck size={12} className="text-blue-500"/>}</h3>
-                   <p className="text-xs text-slate-500 dark:text-gray-400 capitalize">{user.type} Account</p>
+                   <p className="text-xs text-slate-500 dark:text-gray-400 capitalize">{user.type || user.role} Account</p>
                </div>
             </div>
             
@@ -130,6 +130,9 @@ const DashboardSidebar = ({
                {isClient && <SidebarItem id="posted-jobs" icon={ListChecks} label="My Listings" />}
                {!isClient && <SidebarItem id="my-services" icon={Package} label="My Gigs" />}
                <SidebarItem id="applications" icon={FileText} label="Orders & Jobs" />
+               
+               {/* 💬 THE NEW MESSAGES TAB IS HERE */}
+               <SidebarItem id="messages" icon={MessageSquare} label="Messages" badge="New" /> 
               
                {!isClient && (
                 <>

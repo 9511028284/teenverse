@@ -24,76 +24,8 @@ const getTimeAgo = (dateString) => {
     return 'Just now';
 };
 
-const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, setModal, setActiveChat, setTab, setSelectedJob, onAction }) => {
-  
-  // --- STATES ---
-  const [reportModal, setReportModal] = useState(null);
-  
-  // 🔥 AI MATCHING STATES (Only used by Clients)
-  const [isAiSearching, setIsAiSearching] = useState(false);
-  const [aiResults, setAiResults] = useState(null);
-  const [parsedData, setParsedData] = useState(null);
-
-  const handleReportSubmit = (e) => {
-    e.preventDefault();
-    if (!reportModal) return;
-    const formData = new FormData(e.target);
-    const reason = formData.get('reason');
-    const description = formData.get('description');
-
-    if (onAction) {
-        onAction('report', reportModal, { reason, description });
-    }
-    setReportModal(null);
-  };
-
-  // 🔥 TRIGGER AI MATCHING ENGINE (CLIENTS ONLY)
-  const handleAiSearch = async (e) => {
-    e.preventDefault();
-    if (!searchTerm.trim() || !isClient) return;
-
-    setIsAiSearching(true);
-    setAiResults(null);
-    setParsedData(null);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('match-freelancers', {
-        body: { query: searchTerm }
-      });
-
-      if (error) throw error;
-      
-      setParsedData(data.parsed);
-      categorizeAiResults(data.results);
-    } catch (err) {
-      console.error(err);
-      // Fallback: If AI fails, the normal text filter still works on the catalog below
-    } finally {
-      setIsAiSearching(false);
-    }
-  };
-
-  const categorizeAiResults = (freelancers) => {
-    if (!freelancers || freelancers.length === 0) return;
-
-    const best = freelancers[0]; 
-    const remainingAfterBest = freelancers.filter(f => f.id !== best.id);
-    
-    const getSpeed = (f) => f.response_speed_hours ?? 999;
-    const fast = remainingAfterBest.length > 0 
-        ? remainingAfterBest.reduce((prev, curr) => getSpeed(curr) < getSpeed(prev) ? curr : prev) 
-        : null;
-
-    const remainingAfterFast = remainingAfterBest.filter(f => f.id !== fast?.id);
-    const budget = remainingAfterFast.length > 0 
-        ? remainingAfterFast.reduce((prev, curr) => curr.hourly_rate < prev.hourly_rate ? curr : prev) 
-        : null;
-
-    setAiResults({ best, fast, budget });
-  };
-
-  // --- AI RESULT CARD COMPONENT ---
-  const AiResultCard = ({ title, icon, freelancer, colorClass }) => {
+// ✅ MOVED OUTSIDE: AI RESULT CARD COMPONENT
+const AiResultCard = ({ title, icon, freelancer, colorClass, setActiveChat, setTab }) => {
     if (!freelancer) return null;
     return (
       <div className={`p-5 rounded-[24px] border bg-white dark:bg-[#09090b] shadow-lg relative overflow-hidden group ${colorClass} transition-all hover:-translate-y-1`}>
@@ -136,10 +68,10 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
         </Button>
       </div>
     );
-  };
+};
 
-  // --- STANDARD CARD COMPONENT ---
-  const JobCard = ({ data, type }) => {
+// ✅ MOVED OUTSIDE: STANDARD CARD COMPONENT
+const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setTab, setSelectedJob }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const gradients = [
         "from-pink-500/80 via-rose-500/80 to-yellow-500/80", 
@@ -250,7 +182,74 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
         </div>
       </div>
     )
-  }
+}
+
+// --- MAIN JOBS COMPONENT ---
+const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, setModal, setActiveChat, setTab, setSelectedJob, onAction }) => {
+  
+  // --- STATES ---
+  const [reportModal, setReportModal] = useState(null);
+  
+  // 🔥 AI MATCHING STATES
+  const [isAiSearching, setIsAiSearching] = useState(false);
+  const [aiResults, setAiResults] = useState(null);
+  const [parsedData, setParsedData] = useState(null);
+
+  const handleReportSubmit = (e) => {
+    e.preventDefault();
+    if (!reportModal) return;
+    const formData = new FormData(e.target);
+    const reason = formData.get('reason');
+    const description = formData.get('description');
+
+    if (onAction) {
+        onAction('report', reportModal, { reason, description });
+    }
+    setReportModal(null);
+  };
+
+  const handleAiSearch = async (e) => {
+    e.preventDefault();
+    if (!searchTerm.trim() || !isClient) return;
+
+    setIsAiSearching(true);
+    setAiResults(null);
+    setParsedData(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('match-freelancers', {
+        body: { query: searchTerm }
+      });
+
+      if (error) throw error;
+      
+      setParsedData(data.parsed);
+      categorizeAiResults(data.results);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsAiSearching(false);
+    }
+  };
+
+  const categorizeAiResults = (freelancers) => {
+    if (!freelancers || freelancers.length === 0) return;
+
+    const best = freelancers[0]; 
+    const remainingAfterBest = freelancers.filter(f => f.id !== best.id);
+    
+    const getSpeed = (f) => f.response_speed_hours ?? 999;
+    const fast = remainingAfterBest.length > 0 
+        ? remainingAfterBest.reduce((prev, curr) => getSpeed(curr) < getSpeed(prev) ? curr : prev) 
+        : null;
+
+    const remainingAfterFast = remainingAfterBest.filter(f => f.id !== fast?.id);
+    const budget = remainingAfterFast.length > 0 
+        ? remainingAfterFast.reduce((prev, curr) => curr.hourly_rate < prev.hourly_rate ? curr : prev) 
+        : null;
+
+    setAiResults({ best, fast, budget });
+  };
 
   return (
     <div className="min-h-screen space-y-8 animate-fade-in pb-20">
@@ -259,9 +258,6 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
       <div className="sticky top-6 z-40 mx-auto max-w-3xl px-4">
         
         {isClient ? (
-          /* =========================================================
-             CLIENT VIEW: AI COMMAND CENTER
-             ========================================================= */
           <>
             <form onSubmit={handleAiSearch} className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
@@ -305,9 +301,6 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
             )}
           </>
         ) : (
-          /* =========================================================
-             FREELANCER VIEW: STANDARD REAL-TIME SEARCH
-             ========================================================= */
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full blur opacity-10 group-hover:opacity-20 transition-opacity duration-500"></div>
             <div className="relative bg-white/90 dark:bg-[#0F172A]/90 backdrop-blur-xl border border-gray-200 dark:border-white/10 rounded-full p-2 flex items-center shadow-xl">
@@ -323,7 +316,6 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                     <button type="button" className="w-10 h-10 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10 transition-all">
                         <Filter size={18}/>
                     </button>
-                    {/* Visual Button for consistency, but search is real-time via state */}
                     <Button type="button" className="rounded-full px-6 bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-black dark:hover:bg-gray-200 font-bold tracking-tight">
                         SEARCH
                     </Button>
@@ -333,16 +325,16 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
         )}
       </div>
 
-      {/* --- AI MATCH RESULTS (Only shows if matches found AND user is Client) --- */}
+      {/* --- AI MATCH RESULTS --- */}
       {aiResults && isClient && (
         <div className="px-4 mt-12 mb-8 animate-fade-in-up">
            <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
                <Sparkles size={18} className="text-indigo-500"/> Top AI Matches
            </h3>
            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <AiResultCard title="Best Overall" icon={<Flame size={14}/>} freelancer={aiResults.best} colorClass="border-orange-200 dark:border-orange-500/30 text-orange-600 dark:text-orange-400" />
-              <AiResultCard title="Fastest Reply" icon={<Zap size={14}/>} freelancer={aiResults.fast} colorClass="border-yellow-200 dark:border-yellow-500/30 text-yellow-600 dark:text-yellow-400" />
-              <AiResultCard title="Best Value" icon={<DollarSign size={14}/>} freelancer={aiResults.budget} colorClass="border-emerald-200 dark:border-emerald-500/30 text-emerald-600 dark:text-emerald-400" />
+              <AiResultCard title="Best Overall" icon={<Flame size={14}/>} freelancer={aiResults.best} colorClass="border-orange-200 dark:border-orange-500/30 text-orange-600 dark:text-orange-400" setActiveChat={setActiveChat} setTab={setTab} />
+              <AiResultCard title="Fastest Reply" icon={<Zap size={14}/>} freelancer={aiResults.fast} colorClass="border-yellow-200 dark:border-yellow-500/30 text-yellow-600 dark:text-yellow-400" setActiveChat={setActiveChat} setTab={setTab} />
+              <AiResultCard title="Best Value" icon={<DollarSign size={14}/>} freelancer={aiResults.budget} colorClass="border-emerald-200 dark:border-emerald-500/30 text-emerald-600 dark:text-emerald-400" setActiveChat={setActiveChat} setTab={setTab} />
            </div>
            
            <div className="mt-8 mb-4 flex items-center gap-4">
@@ -360,7 +352,7 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
                  {isClient ? 'Talent Catalog' : 'Mission Board'}
               </h2>
               <p className="text-gray-500 dark:text-gray-400 font-mono text-xs mt-1">
-                 {filteredJobs.length + services.length} ACTIVE SIGNALS DETECTED
+                 {isClient ? services.length : filteredJobs.length} ACTIVE SIGNALS DETECTED
               </p>
           </div>
       </div>
@@ -368,8 +360,9 @@ const Jobs = ({ isClient, services, filteredJobs, searchTerm, setSearchTerm, set
       {/* --- GRID LAYOUT --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 px-4">
         {isClient 
-            ? services.map(s => <JobCard key={s.id} data={s} type="Gig" />)
-            : filteredJobs.map(j => <JobCard key={j.id} data={j} type="Mission" />)
+            // ✅ NOW WE PASS THE REQUIRED PROPS INTO JOBCARD
+            ? services.map(s => <JobCard key={s.id} data={s} type="Gig" isClient={isClient} onAction={onAction} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} />)
+            : filteredJobs.map(j => <JobCard key={j.id} data={j} type="Mission" isClient={isClient} onAction={onAction} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} />)
         }
       </div>
 
