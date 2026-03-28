@@ -4,8 +4,62 @@ import { supabase } from '../../supabase';
 import { useChat } from '../../hooks/useChat'; 
 import Button from '../ui/Button'; 
 import Modal from '../ui/Modal';     
-import Input from '../ui/Input';     
+import Input from '../ui/Input'; 
 
+// ==========================================
+// 💳 CASHFREE PAYMENT HELPER
+// ==========================================
+const processCashfreePayment = async (params, onSuccess, onFail) => {
+  // Ensure you are loading the Cashfree SDK in your index.html
+  const cashfree = new window.Cashfree({ mode: "production" }); 
+
+  try {
+    // 1. Call Edge Function to CREATE ORDER
+    const { data: orderData, error: orderError } = await supabase.functions.invoke('cashfree-payment', {
+      body: { 
+        action: 'CREATE_ORDER',
+        amount: params.amount,
+        customerPhone: params.customerPhone,
+        freelancerId: params.freelancerId,
+        appId: params.appId,
+        userId: params.userId
+      }
+    });
+
+    if (orderError || !orderData?.payment_session_id) {
+        throw new Error("Order creation failed. Check Edge Function logs.");
+    }
+
+    // 2. Open Cashfree Modal
+    await cashfree.checkout({
+      paymentSessionId: orderData.payment_session_id,
+      redirectTarget: "_modal" 
+    });
+
+    // 3. Verify the payment after the modal closes
+    const { data: verifyData } = await supabase.functions.invoke('cashfree-payment', {
+      body: { 
+        action: 'VERIFY_ORDER',
+        orderId: orderData.order_id,
+        appId: params.appId
+      }
+    });
+
+    if (verifyData?.success) {
+      onSuccess(verifyData);
+    } else {
+      onFail("Payment not completed or failed.");
+    }
+
+  } catch (err) {
+    console.error(err);
+    onFail(err.message);
+  }
+};
+
+// ==========================================
+// 💬 MAIN CHAT COMPONENT
+// ==========================================
 const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) => {
   const scrollRef = useRef(null);
   const textareaRef = useRef(null); 
@@ -24,7 +78,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
   const isUuid = (val) => typeof val === 'string' && val.includes('-');
   const isDirect = !activeChat?.application_id || isUuid(activeChat?.application_id);
 
-  // --- 🛠️ TEXT INPUT HANDLERS (Safely placed at the top!) ---
+  // --- 🛠️ TEXT INPUT HANDLERS ---
   const adjustTextareaHeight = () => {
     if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -156,54 +210,61 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
     await supabase.from('messages').insert([dbPayload]);
   };
 
-  // --- DIRECT HIRE LOGIC (CLIENT SIDE) ---
+  // --- 🚀 DIRECT HIRE LOGIC (CLIENT SIDE) ---
   const handleDirectHire = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const title = formData.get('title');
     const amount = formData.get('amount');
 
+    if (!user?.phone) {
+      alert("Please add a phone number to your profile to proceed with payment.");
+      return;
+    }
+
     setIsSending(true);
     try {
-        // 1. Create the job
-        const { data: job, error: jobError } = await supabase.from('jobs').insert({
-            client_id: myId, 
-            client_name: user?.name || 'Client', 
-            title: title, 
-            budget: amount, 
-            job_type: 'Fixed Price', 
-            category: 'Direct Hire', 
-            hired_freelancer_id: activeChat.id
+        // 1. Create the DRAFT Application
+        const { data: job } = await supabase.from('jobs').insert({
+            client_id: myId, client_name: user.name, title, budget: amount, 
+            job_type: 'Fixed Price', category: 'Direct Hire', hired_freelancer_id: activeChat.id
         }).select().single();
-        
-        if (jobError) throw jobError;
 
-        // 2. Get freelancer email
         const { data: freelancer } = await supabase.from('freelancers').select('email').eq('id', activeChat.id).single();
 
-        // 3. Create the Application (REMOVED client_name to match your DB)
-        const { data: app, error: appError } = await supabase.from('applications').insert({
-            job_id: job.id, 
-            freelancer_id: activeChat.id, 
-            freelancer_name: activeChat?.name || 'Freelancer',
-            client_id: myId, 
-            bid_amount: amount, 
-            status: 'Accepted', 
-            freelancer_email: freelancer?.email || 'direct@hire.com'
+        const { data: app } = await supabase.from('applications').insert({
+            job_id: job.id, freelancer_id: activeChat.id, freelancer_name: activeChat.name,
+            client_id: myId, bid_amount: amount, status: 'Pending', 
+            freelancer_email: freelancer?.email || ''
         }).select().single();
-        
-        if (appError) throw appError;
 
-        await sendSystemMessage(`[SYSTEM_ACTION:HIRED] Let's start working on: ${title}!`);
-        setHireModalOpen(false);
-        setActiveChat({ ...activeChat, application_id: app.id }); 
+        // 2. Trigger the Payment Helper
+        await processCashfreePayment({
+          amount: amount,
+          customerPhone: user.phone,
+          freelancerId: activeChat.id,
+          appId: app.id,
+          userId: myId
+        }, 
+        async (verifyData) => {
+          // SUCCESS CALLBACK
+          await sendSystemMessage(`[SYSTEM_ACTION:HIRED] Let's start! ₹${amount} Escrow Secured.`);
+          setActiveChat({ ...activeChat, application_id: app.id });
+          setHireModalOpen(false);
+          setIsSending(false);
+        },
+        (errorMsg) => {
+          // FAIL CALLBACK
+          alert(errorMsg);
+          setIsSending(false);
+        });
         
     } catch (err) {
-        alert("Failed to create project: " + err.message);
-    } finally {
+        alert("Failed: " + err.message);
         setIsSending(false);
     }
   };
+
   const handleSend = async (e) => {
       e.preventDefault();
       if (!input.trim() || isSending) return;
@@ -270,10 +331,10 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
                 >
                    <div className="flex items-center gap-4">
                      <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-lg">
-                        {chat.name.charAt(0)}
+                        {chat.name ? chat.name.charAt(0) : '?'}
                      </div>
                      <div>
-                       <p className="font-bold text-gray-900 dark:text-white group-hover:text-indigo-500 transition-colors">{chat.name}</p>
+                       <p className="font-bold text-gray-900 dark:text-white group-hover:text-indigo-500 transition-colors">{chat.name || 'User'}</p>
                        <p className="text-xs text-gray-500 truncate max-w-[200px] sm:max-w-xs">{chat.lastMessage}</p>
                      </div>
                    </div>

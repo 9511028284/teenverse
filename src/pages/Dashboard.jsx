@@ -208,6 +208,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       user={user} 
       activeChat={state.activeChat} // Passing the chat ID if they clicked from a profile
       setActiveChat={setters.setActiveChat}
+      onAction={actions.handleAppAction}
    />
 )}
                   

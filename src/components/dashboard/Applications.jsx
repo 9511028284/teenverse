@@ -76,7 +76,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
       }
       
       // If the job title is completely missing (or job was deleted), show the Job ID elegantly!
-      return app.job_id ? `Project #${app.job_id}` : 'Archived Project';
+      return app.job_id ? `Project #${app.job_id.toString().slice(0,8)}` : 'Archived Project';
   };
 
   // --- RENDER ACTIONS LOGIC ---
@@ -150,7 +150,8 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
         return (
           <div className="flex gap-2 justify-end">
             <Button size="sm" variant="outline" onClick={() => onAction('reject', app)} className="text-red-500 border-red-200 hover:bg-red-50">Reject</Button>
-            <Button size="sm" onClick={() => onAction('accept', app)} className="bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1 shadow-md shadow-indigo-200">
+            {/* 🚀 THE FIX: This now points to the centralized initiate_payment action */}
+            <Button size="sm" onClick={() => onAction('initiate_payment', app)} className="bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1 shadow-md shadow-indigo-200">
               <ShieldCheck size={14}/> Hire & Pay
             </Button>
           </div>
@@ -290,7 +291,6 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
               {applications.map(app => (
                 <tr key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
                   <td className="p-4">
-                    {/* ✅ FIX APPLIED HERE: Using getJobTitle(app) */}
                     <div className="font-bold text-gray-900 dark:text-white line-clamp-1">{getJobTitle(app)}</div>
                     <button onClick={() => onViewTimeline(app)} className="text-[10px] text-indigo-500 hover:text-indigo-600 flex items-center gap-1 mt-1 font-medium transition-colors">
                       <Clock size={10}/> View Timeline
@@ -376,6 +376,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                         }}
                         setActiveChat={() => setChatApp(null)}
                         initialMessage={chatInitialMessage}
+                        onAction={onAction} // 🚀 THE FIX: Passed onAction so Chat can trigger payments
                     />
                 </div>
             </div>

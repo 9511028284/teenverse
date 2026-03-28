@@ -23,7 +23,7 @@ const isSameDay = (dateString) => {
   );
 };
 
-// Helper: Clean Cloudflare R2 Uploads (Eliminates Duplicate Code!)
+// Helper: Clean Cloudflare R2 Uploads
 const uploadFilesToR2 = async (files, userId, folderPrefix, maxSizeBytes, showToast) => {
     let uploadedUrls = [];
     for (let i = 0; i < files.length; i++) {
@@ -68,6 +68,43 @@ const uploadFilesToR2 = async (files, userId, folderPrefix, maxSizeBytes, showTo
     }
     return uploadedUrls;
 };
+
+// ================================================================
+// 💳 CENTRALIZED PAYMENT HELPER (Used by Chat & Bidding)
+// ================================================================
+const processCashfreePayment = async (params, onSuccess, onFail) => {
+  const cashfree = new window.Cashfree({ mode: "production" }); 
+
+  try {
+    const { data: orderData, error: orderError } = await supabase.functions.invoke('cashfree-payment', {
+      body: { 
+        action: 'CREATE_ORDER', amount: params.amount, customerPhone: params.customerPhone,
+        freelancerId: params.freelancerId, appId: params.appId, userId: params.userId
+      }
+    });
+
+    if (orderError || !orderData?.payment_session_id) throw new Error("Order creation failed.");
+
+    await cashfree.checkout({
+      paymentSessionId: orderData.payment_session_id,
+      redirectTarget: "_modal" 
+    });
+
+    const { data: verifyData } = await supabase.functions.invoke('cashfree-payment', {
+      body: { action: 'VERIFY_ORDER', orderId: orderData.order_id, appId: params.appId }
+    });
+
+    if (verifyData?.success) {
+      onSuccess(verifyData);
+    } else {
+      onFail("Payment not completed or failed.");
+    }
+  } catch (err) {
+    console.error(err);
+    onFail(err.message);
+  }
+};
+// ================================================================
 
 export const useDashboardLogic = (user, setUser, showToast) => {
   const isClient = user?.type === 'client';
@@ -228,7 +265,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
             if (!isClient && userProfileData) {
                 setEnergy(userProfileData.energy_points || 20);
                 
-                // 🚀 FIX: Correct Daily Reward check to handle new users (NULL dates)
                 if (!hasCheckedReward.current) {
                     if (!userProfileData.last_login_date || !isSameDay(userProfileData.last_login_date)) {
                         hasCheckedReward.current = true;
@@ -271,14 +307,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
     loadData();
     return () => { isMounted = false; };
-  }, [user, isClient, showToast]); // 🚀 FIX: Removed jobs.length dependency to stop re-fetching loop
+  }, [user, isClient, showToast]); 
 
   const claimReward = async () => {
     setIsClaiming(true);
     const today = new Date().toISOString().split('T')[0];
     const rewardAmount = 10;
     
-    // 🚀 FIX: API First (Prevents visual glitch if they claim twice)
     const { success } = await api.claimDailyReward(user.id, today);
     
     if (success) {
@@ -450,7 +485,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     if (files.length > 0) {
         showToast("Uploading attachments to secure vault...", "info");
         try {
-            // 🚀 CLEANUP: Used the new helper function
             uploadedUrls = await uploadFilesToR2(files, user.id, 'jobs', 10 * 1024 * 1024, showToast);
         } catch (error) {
             return; // Exit early if upload failed
@@ -509,15 +543,12 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const handleApplyJob = async (e, energyCost, educationConsent) => {
     e.preventDefault();
 
-    // 1. Security & Locks
     if (parentMode) { showToast("Parent Mode Active 🛑", "error"); return; }
     if (!checkKycLock('apply_paid')) return; 
     
-    // 2. Skill Gate (No more ugly confirm alerts!)
     if (!isClient && selectedJob) {
       const jobCategory = selectedJob.category || 'dev';
       if (!unlockedSkills.includes(jobCategory)) {
-        // Instead of window.confirm, we trigger a custom modal state
         setModal({ 
             type: 'skill_gate', 
             category: jobCategory, 
@@ -527,18 +558,15 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       }
     }
 
-    // 3. Energy Cost Validation
     const parsedCost = Number(energyCost);
     if (isNaN(parsedCost) || parsedCost <= 0) {
         return showToast("System Error: Invalid energy cost detected.", "error");
     }
 
-    // 4. Optimistic UI Check (Prevents unnecessary database calls)
     if (energy < parsedCost) { 
         return showToast(`Low battery! 🪫 You need ${parsedCost} ⚡ to apply.`, "error"); 
     }
 
-    // 5. ATOMIC RPC CALL (Energy + Application in one secure vault transaction)
     showToast("Shooting your shot... 🚀", "info");
     const formData = new FormData(e.target);
     
@@ -554,14 +582,11 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     });
 
     if (error) { 
-        // Supabase will automatically return our custom RPC exception messages!
         showToast(error.message, 'error'); 
     } else { 
-        // Success! Now we update the React UI to match the database
         setEnergy(prev => prev - parsedCost);
         showToast('W application! 🎯 Proposal sent.', 'success'); 
         
-        // Instantly update the applications array so the UI feels fast
         const newApp = {
             id: data.application_id, 
             job_id: selectedJob.id, 
@@ -571,7 +596,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
             created_at: new Date().toISOString()
         };
         setApplications(prev => [newApp, ...prev]);
-        
         setModal(null); 
     }
   };
@@ -633,7 +657,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     
     if (files.length > 0) {
         try {
-            // 🚀 CLEANUP: Used the new helper function
             uploadedUrls = await uploadFilesToR2(files, user.id, null, 15 * 1024 * 1024, showToast);
         } catch (error) {
             return; // Exit early if upload failed
@@ -802,6 +825,9 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
   };
 
+  // ================================================================
+  // ⚙️ THE MAIN ACTION HANDLER
+  // ================================================================
   const handleAppAction = async (action, app, payload = null) => {
     if (action === 'view_profile') { handleViewProfile(app.freelancer_id); return; }
     
@@ -822,6 +848,49 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
     const RESTRICTED = ['approve', 'pay', 'release_escrow'];
     if (parentMode && RESTRICTED.includes(action)) { showToast("Parent Mode Active: Action Locked", "error"); return; }
+    
+    // --------------------------------------------------------------
+    // 💳 THE NEW PAYMENT INTERCEPTOR (Chat & Bids)
+    // --------------------------------------------------------------
+    if (action === 'initiate_payment') {
+        if (!user?.phone) {
+            showToast("Please update your phone number in profile settings first.", "error");
+            return;
+        }
+
+        showToast("Opening Secure Checkout...", "info");
+
+        await processCashfreePayment(
+            {
+               amount: app.bid_amount,
+               customerPhone: user.phone,
+               freelancerId: app.freelancer_id,
+               appId: app.id,
+               userId: user.id
+            },
+            async (verifyData) => {
+                // SUCCESS
+                const { error } = await supabase.from('applications')
+                    .update({ status: 'Accepted', payment_status: 'Held' })
+                    .eq('id', app.id);
+                    
+                if(!error) {
+                    showToast("Payment Successful! Escrow Secured.", "success");
+                    setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'Accepted', payment_status: 'Held' } : a));
+                } else {
+                     showToast("Payment verified, but failed to update dashboard.", "error");
+                }
+            },
+            (errorMsg) => {
+                // FAIL
+                showToast(errorMsg, "error");
+            }
+        );
+        return;
+    }
+    // --------------------------------------------------------------
+
+    // Legacy manual accept (if needed)
     if (action === 'accept') { handleAcceptApplication(app); return; }
     
     if (action === 'pay' && !checkKycLock('release_escrow')) { return; }
@@ -1008,7 +1077,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         isAiLoading, SAFE_QUIZZES, profileCardRef, currentXP, nextLevelXP, progressPercent,
         userLevel, filteredJobs,
         isQuizLoading, 
-        reportModal, activeChat // 👈 ADD THIS
+        reportModal, activeChat
     },
     setters: {
         setTab, setMenuOpen, setZenMode, setModal, setSelectedJob, setShowRewardModal,
