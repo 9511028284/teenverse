@@ -143,6 +143,11 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [viewProfileId, setViewProfileId] = useState(null);
   const [publicProfileData, setPublicProfileData] = useState(null);
   const [editProfileModal, setEditProfileModal] = useState(false);
+  
+  // 🚀 PROFILE COMPLETION TRACKER & RATE STATE
+  const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
+  const [hourlyRate, setHourlyRate] = useState(500); // Default slider starting position
+  const hasPromptedProfile = useRef(false);
 
   // --- KYC & QUIZ STATES ---
   const [kycFile, setKycFile] = useState(null); 
@@ -251,9 +256,10 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
             let userProfileData = null;
             if (!isClient) {
+                // 🚀 FETCH NEW FIELDS
                 const { data } = await supabase
                     .from('freelancers')
-                    .select('energy_points, last_login_date')
+                    .select('energy_points, last_login_date, qualification, specialty, resume_url, hourly_rate')
                     .eq('id', user.id)
                     .single();
                 userProfileData = data;
@@ -264,7 +270,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
             if (!isClient && userProfileData) {
                 setEnergy(userProfileData.energy_points || 20);
-                
+                if (userProfileData.hourly_rate) setHourlyRate(userProfileData.hourly_rate);
+
+                // 🚀 CHECK IF PROFILE NEEDS SETUP
+                if (!userProfileData.qualification || !userProfileData.specialty) {
+                    setNeedsProfileSetup(true);
+                }
+
                 if (!hasCheckedReward.current) {
                     if (!userProfileData.last_login_date || !isSameDay(userProfileData.last_login_date)) {
                         hasCheckedReward.current = true;
@@ -308,6 +320,15 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     loadData();
     return () => { isMounted = false; };
   }, [user, isClient, showToast]); 
+
+  // 🚀 SMART TRIGGER FOR PROFILE MODAL
+  useEffect(() => {
+     // Waits until: Page Loaded AND No Reward Modal showing AND Profile is incomplete AND it hasn't popped up yet
+     if (!isLoading && !isClient && needsProfileSetup && !showRewardModal && !modal && !hasPromptedProfile.current) {
+         hasPromptedProfile.current = true;
+         setTimeout(() => setModal('complete_profile'), 1000);
+     }
+  }, [isLoading, isClient, needsProfileSetup, showRewardModal, modal]);
 
   const claimReward = async () => {
     setIsClaiming(true);
@@ -643,25 +664,12 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const workLink = formData.get('work_link');
     const message = formData.get('message');
     
-    const fileInput = e.target.querySelector('input[type="file"]');
-    const files = fileInput && fileInput.files ? Array.from(fileInput.files) : []; 
-    
-    if (files.length > 5) {
-        return showToast("You can only upload a maximum of 5 files.", "error");
+    if (!workLink || workLink.trim() === "") {
+        return showToast("Please provide a link to your project.", "error");
     }
 
     setModal(null);
-    showToast("Uploading work to secure vault...", "info");
-    
-    let uploadedUrls = [];
-    
-    if (files.length > 0) {
-        try {
-            uploadedUrls = await uploadFilesToR2(files, user.id, null, 15 * 1024 * 1024, showToast);
-        } catch (error) {
-            return; // Exit early if upload failed
-        }
-    }
+    showToast("Submitting your work...", "info");
     
     const timestamp = new Date().toISOString();
     
@@ -670,13 +678,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         action: 'SUBMIT_WORK', 
         appId: selectedApp.id, 
         userId: user.id, 
-        payload: { work_link: workLink, message: message, files: uploadedUrls } 
+        payload: { work_link: workLink, message: message, files: [] } 
       }
     });
     
     if (error) { showToast("Submission failed: " + error.message, "error"); } 
     else {
-      await logAction('WORK_SUBMITTED', { app_id: selectedApp.id, has_files: uploadedUrls.length > 0 });
+      await logAction('WORK_SUBMITTED', { app_id: selectedApp.id, has_link: true });
       showToast("Work Submitted Successfully!", "success");
       setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, status: APP_STATUS.SUBMITTED, submitted_at: timestamp } : a));
       setSelectedApp(null);
@@ -825,9 +833,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
   };
 
-  // ================================================================
-  // ⚙️ THE MAIN ACTION HANDLER
-  // ================================================================
   const handleAppAction = async (action, app, payload = null) => {
     if (action === 'view_profile') { handleViewProfile(app.freelancer_id); return; }
     
@@ -849,9 +854,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const RESTRICTED = ['approve', 'pay', 'release_escrow'];
     if (parentMode && RESTRICTED.includes(action)) { showToast("Parent Mode Active: Action Locked", "error"); return; }
     
-    // --------------------------------------------------------------
-    // 💳 THE NEW PAYMENT INTERCEPTOR (Chat & Bids)
-    // --------------------------------------------------------------
     if (action === 'initiate_payment') {
         if (!user?.phone) {
             showToast("Please update your phone number in profile settings first.", "error");
@@ -869,7 +871,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
                userId: user.id
             },
             async (verifyData) => {
-                // SUCCESS
                 const { error } = await supabase.from('applications')
                     .update({ status: 'Accepted', payment_status: 'Held' })
                     .eq('id', app.id);
@@ -881,16 +882,11 @@ export const useDashboardLogic = (user, setUser, showToast) => {
                      showToast("Payment verified, but failed to update dashboard.", "error");
                 }
             },
-            (errorMsg) => {
-                // FAIL
-                showToast(errorMsg, "error");
-            }
+            (errorMsg) => { showToast(errorMsg, "error"); }
         );
         return;
     }
-    // --------------------------------------------------------------
 
-    // Legacy manual accept (if needed)
     if (action === 'accept') { handleAcceptApplication(app); return; }
     
     if (action === 'pay' && !checkKycLock('release_escrow')) { return; }
@@ -966,6 +962,37 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     const { error } = await api.updateUserProfile(user.id, updates, tableName);
     if (error) { showToast(error.message, 'error'); } 
     else { await logAction('PUBLIC_PROFILE_UPDATED', {}); showToast("Public profile updated!", "success"); setUser({ ...user, ...updates }); setEditProfileModal(false); }
+  };
+
+  // 🚀 NEW: COMPLETE PROFILE FORM HANDLER (Link Only)
+  const handleCompleteProfileSubmit = async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      
+      const updates = {
+          qualification: formData.get('qualification'),
+          specialty: formData.get('specialty'),
+          hourly_rate: Number(formData.get('hourly_rate')),
+          // Get the URL if provided, otherwise leave it empty
+          projects: formData.get('project_url') || null 
+      };
+
+      showToast("Saving profile...", "info");
+      try {
+          const { error } = await api.updateUserProfile(user.id, updates, 'freelancers');
+          if (error) throw error;
+
+          showToast("Profile Complete! +10 Energy ⚡", "success");
+          setUser({ ...user, ...updates });
+          setNeedsProfileSetup(false);
+          setModal(null);
+          
+          await api.awardEnergy(user.id, 10);
+          setEnergy(prev => prev + 10);
+          
+      } catch (err) {
+          showToast("Failed to save profile: " + err.message, "error");
+      }
   };
 
   const startAiQuiz = async (categoryId, specificTopic = 'Basics') => {
@@ -1077,14 +1104,17 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         isAiLoading, SAFE_QUIZZES, profileCardRef, currentXP, nextLevelXP, progressPercent,
         userLevel, filteredJobs,
         isQuizLoading, 
-        reportModal, activeChat
+        reportModal, activeChat,
+        hourlyRate, // 🚀 ADDED HERE
+        needsProfileSetup // 🚀 ADDED HERE
     },
     setters: {
         setTab, setMenuOpen, setZenMode, setModal, setSelectedJob, setShowRewardModal,
         setKycFile, setScore, setCurrentQuestionIndex, setTimelineApp, setViewWorkApp,
         setSearchTerm, setProfileForm, setPaymentModal, setParentMode, setRawPortfolioText,
         setEditProfileModal, setViewProfileId, setPublicProfileData, setShowNotifications, setApplications,
-        setReportModal, setActiveChat 
+        setReportModal, setActiveChat,
+        setHourlyRate // 🚀 ADDED HERE
     },
     actions: {
         handlePostJob, 
@@ -1096,7 +1126,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         handleIdentitySubmit, 
         handleBankSubmit,
         startAiQuiz,
-        handleReportSubmit 
+        handleReportSubmit,
+        handleCompleteProfileSubmit
     }
   };
 };

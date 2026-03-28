@@ -248,7 +248,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
         }, 
         async (verifyData) => {
           // SUCCESS CALLBACK
-          await sendSystemMessage(`[SYSTEM_ACTION:HIRED] Let's start! ₹${amount} Escrow Secured.`);
+          await sendSystemMessage(`[SYSTEM_ACTION:HIRED] Let's start! ₹${amount} platform Secured.`);
           setActiveChat({ ...activeChat, application_id: app.id });
           setHireModalOpen(false);
           setIsSending(false);
@@ -340,7 +340,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
                    </div>
                    <div className="text-right flex flex-col items-end">
                       {chat.application_id ? (
-                          <span className="text-[10px] text-gray-400 font-mono flex items-center gap-1"><Lock size={10} className="text-emerald-500"/> Escrow Secure</span>
+                          <span className="text-[10px] text-gray-400 font-mono flex items-center gap-1"><Lock size={10} className="text-emerald-500"/> platform Secure</span>
                       ) : (
                           <span className="text-[10px] text-gray-400 font-mono flex items-center gap-1">Direct Message</span>
                       )}
@@ -372,7 +372,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
                 {isDirect ? (
                     <>Pre-Hire Inquiry</>
                 ) : (
-                    <><Lock size={10} className="text-emerald-500" /> Escrow Chat: {activeChat?.application_id?.toString().slice(0,8)}</>
+                    <><Lock size={10} className="text-emerald-500" /> platform Chat: {activeChat?.application_id?.toString().slice(0,8)}</>
                 )}
               </p>
           </div>
@@ -497,7 +497,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "" }) =>
           <Modal title="Setup Project & Pay" onClose={() => setHireModalOpen(false)}>
               <form onSubmit={handleDirectHire} className="space-y-4">
                   <div className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-800 dark:text-indigo-300 p-4 rounded-xl text-sm border border-indigo-200 dark:border-indigo-500/20">
-                      You are about to hire <strong>{activeChat.name}</strong>. Funds will be held securely in escrow until the work is approved.
+                      You are about to hire <strong>{activeChat.name}</strong>. Funds will be held securely in platform until the work is approved.
                   </div>
                   <Input name="title" type="text" placeholder="Project Title (e.g. Logo Design)" required className="bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white"/>
                   <Input name="amount" type="number" placeholder="Agreed Amount (₹)" min="50" required className="bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white"/>

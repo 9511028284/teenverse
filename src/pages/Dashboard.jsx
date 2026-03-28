@@ -265,6 +265,76 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       {/* MODALS */}
       <DashboardModals user={user} logic={logic} showToast={showToast} />
 
+      {/* --- COMPLETE PROFILE MODAL --- */}
+{state.modal === 'complete_profile' && (
+    <Modal title="Complete Your Creator Profile 🚀" onClose={() => setters.setModal(null)}>
+        <form onSubmit={actions.handleCompleteProfileSubmit} className="space-y-5">
+            <div className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-800 dark:text-indigo-300 p-4 rounded-xl text-sm border border-indigo-200 dark:border-indigo-500/20 text-center">
+                Tell clients what you're good at so they can find you. <strong>Earn +10 Energy for finishing this! ⚡</strong>
+            </div>
+
+            <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Your Main Title / Specialty <span className="text-red-500">*</span></label>
+                <input 
+                    name="specialty" 
+                    required 
+                    placeholder="e.g. Video Editor, Python Dev, Web Designer" 
+                    className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white px-4 py-3 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+            </div>
+
+            <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Your Qualification / Skills <span className="text-red-500">*</span></label>
+                <input 
+                    name="qualification" 
+                    required 
+                    placeholder="e.g. Self-taught, B.Tech, 2 years experience" 
+                    className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white px-4 py-3 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+            </div>
+
+            {/* 🎚️ NEW: INTERACTIVE HOURLY RATE SLIDER */}
+            <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                <label className="flex justify-between items-center text-xs font-bold text-gray-500 uppercase mb-4">
+                    <span>Your Hourly Rate <span className="text-red-500">*</span></span>
+                    <span className="text-lg font-black text-indigo-600 dark:text-indigo-400 bg-white dark:bg-gray-900 border border-indigo-200 dark:border-indigo-900 px-3 py-1 rounded-lg shadow-sm">
+                        ₹{state.hourlyRate}/hr
+                    </span>
+                </label>
+                <input 
+                    name="hourly_rate"
+                    type="range" 
+                    min="50" 
+                    max="4000" 
+                    step="50"
+                    value={state.hourlyRate}
+                    onChange={(e) => setters.setHourlyRate(e.target.value)}
+                    className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                />
+                <div className="flex justify-between text-[10px] text-gray-400 mt-2 font-mono font-bold">
+                    <span>₹50</span>
+                    <span>₹4,000+</span>
+                </div>
+            </div>
+
+            <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Top Project Link (Optional)</label>
+                <input 
+                    name="project_url"
+                    type="url" 
+                    placeholder="https://your-best-project.com, GitHub, Behance..." 
+                    className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white px-4 py-3 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">Clients love seeing past work! Paste a secure link to your best project here.</p>
+            </div>
+
+            <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/30">
+                Save Profile & Claim Energy
+            </Button>
+        </form>
+    </Modal>
+)}
+
       {/* ✅ REPORT MODAL (Uses logic setters & actions) */}
       {reportModal && (
         <Modal title="Submit a Report" onClose={() => setters.setReportModal(null)}>
