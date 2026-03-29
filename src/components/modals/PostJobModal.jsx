@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../ui/Modal';
 import { 
   ChevronRight, Sparkles, Briefcase, Clock, 
-  DollarSign, AlignLeft, Tags, Paperclip // ✅ Added Paperclip icon
+  DollarSign, AlignLeft, Tags, Paperclip 
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -48,9 +48,16 @@ const PostJobModal = ({ onClose, onSubmit }) => {
   const [duration, setDuration] = useState('');
   const durationOptions = ["1-3 Days", "1 Week", "2 Weeks", "1 Month"];
   
+  // 🚀 FIX: Intercept form submission to guarantee no accidental mobile refreshes
+  const handleSafeSubmit = (e) => {
+      e.preventDefault();
+      // Ensure the duration input updates the hidden or state logic correctly
+      if(onSubmit) onSubmit(e);
+  };
+  
   return (
     <Modal title="Create New Mission" onClose={onClose}>
-      <form onSubmit={onSubmit} className="relative space-y-6">
+      <form onSubmit={handleSafeSubmit} className="relative space-y-6">
         
         {/* Decorative Background Blur */}
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
@@ -127,28 +134,27 @@ const PostJobModal = ({ onClose, onSubmit }) => {
            </div>
         </div>
 
-        {/* 5. NEW: File Uploads */}
-<div className="space-y-2">
-   <div className="flex justify-between items-end">
-     <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Reference Files (Optional)</label>
-     <span className="text-[10px] text-gray-500 font-bold">Max 5 Files (10MB each)</span>
-   </div>
-   <div className="relative group cursor-pointer">
-     <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-gray-400 group-hover:text-indigo-500 transition-colors">
-       <Paperclip size={18} />
-     </div>
-     <input
-       type="file"
-       name="attachments"
-       multiple
-       accept="image/*,.pdf,.doc,.docx"
-       className="w-full pl-12 pr-4 py-3 bg-gray-50/50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-2xl outline-none transition-all duration-300 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 dark:file:bg-indigo-500/20 dark:file:text-indigo-300 dark:hover:file:bg-indigo-500/30 text-gray-600 dark:text-gray-300 cursor-pointer"
-     />
-   </div>
-   <p className="text-[10px] text-gray-500 px-1">Images are automatically compressed. PDFs and Docs must be under 10MB.</p>
-</div>
-
-        
+        {/* 5. 🚀 FIXED: Mobile-Safe File Uploads */}
+        <div className="space-y-2">
+           <div className="flex justify-between items-end">
+             <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Reference Files (Optional)</label>
+             <span className="text-[10px] text-gray-500 font-bold">Max 5 Files (10MB each)</span>
+           </div>
+           <div className="relative group cursor-pointer">
+             <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-gray-400 group-hover:text-indigo-500 transition-colors">
+               <Paperclip size={18} />
+             </div>
+             <input
+               type="file"
+               name="attachments"
+               multiple
+               accept="image/*,.pdf,.doc,.docx,.mp3"
+               onClick={(e) => e.stopPropagation()} // 🚀 Prevents mobile event bubbling crash
+               className="w-full pl-12 pr-4 py-3 bg-gray-50/50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-2xl outline-none transition-all duration-300 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 dark:file:bg-indigo-500/20 dark:file:text-indigo-300 dark:hover:file:bg-indigo-500/30 text-gray-600 dark:text-gray-300 cursor-pointer"
+             />
+           </div>
+           <p className="text-[10px] text-gray-500 px-1">Images are automatically compressed. PDFs and Docs must be under 10MB.</p>
+        </div>
 
         {/* IP Transfer Disclaimer */}
         <div className="text-[10px] text-gray-400 text-center px-4 leading-tight">
@@ -156,7 +162,7 @@ const PostJobModal = ({ onClose, onSubmit }) => {
         </div>
 
         {/* Action Button */}
-        <button className="relative w-full group overflow-hidden rounded-2xl bg-indigo-600 p-4 transition-all hover:scale-[1.02] active:scale-95 shadow-xl shadow-indigo-500/30">
+        <button type="submit" className="relative w-full group overflow-hidden rounded-2xl bg-indigo-600 p-4 transition-all hover:scale-[1.02] active:scale-95 shadow-xl shadow-indigo-500/30">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-[150%] group-hover:animate-[shimmer_1.5s_infinite]" />
           <div className="relative z-10 flex items-center justify-center gap-2 font-black text-white uppercase tracking-wider text-sm">
              <Briefcase size={18} /> Launch Mission

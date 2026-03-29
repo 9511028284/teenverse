@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Button from '../ui/Button'; 
 import Modal from '../ui/Modal';    
 import ReviewModal from '../modals/ReviewModal'; 
-import ChatSystem from '../features/ChatSystem'; // Ensure this path matches your folder structure
+import ChatSystem from '../features/ChatSystem'; 
 import { 
   Clock, CheckCircle, XCircle, Package, Lock, Unlock, 
   FileText, ExternalLink, RefreshCw, AlertTriangle, Star, ShieldCheck, 
@@ -63,10 +63,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
       handleOpenChat(app, "Hi, I have reviewed the delivery and need some revisions. Please update the following:\n\n- ");
   };
 
-
-  // ✅ SMART FALLBACK HELPER
   const getJobTitle = (app) => {
-      // Check all common Supabase join structures
       if (app.title) return app.title; 
       if (app.job_title) return app.job_title;
       if (app.job?.title) return app.job.title; 
@@ -74,12 +71,9 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
           if (Array.isArray(app.jobs)) return app.jobs[0]?.title; 
           if (app.jobs.title) return app.jobs.title; 
       }
-      
-      // If the job title is completely missing (or job was deleted), show the Job ID elegantly!
       return app.job_id ? `Project #${app.job_id.toString().slice(0,8)}` : 'Archived Project';
   };
 
-  // --- RENDER ACTIONS LOGIC ---
   const renderActions = (app) => {
     
     // A. REJECTED STATE
@@ -96,6 +90,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                 </div>
             );
         } else {
+            // If they HAVEN'T linked a bank, show the bouncing button
             if (!user?.is_bank_linked) {
                 return (
                     <div className="flex flex-col items-end gap-1">
@@ -106,12 +101,17 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                     </div>
                 );
             }
+            
+            // If they HAVE linked a bank, hide the button and show this locked state
             return (
-                <div className="flex flex-col items-end">
-                    <span className="text-amber-600 text-xs font-bold flex items-center gap-1">
+                <div className="flex flex-col items-end gap-1">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                        <CheckCircle size={10} /> Bank Linked
+                    </div>
+                    <span className="text-amber-600 text-xs font-bold flex items-center gap-1 mt-1">
                         <Hourglass size={12}/> Payment in Queue
                     </span>
-                    <span className="text-[10px] text-gray-400">Admin processing (24hrs)</span>
+                    <span className="text-[10px] text-gray-400">Processing payout (24hrs)</span>
                 </div>
             );
         }
@@ -150,7 +150,6 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
         return (
           <div className="flex gap-2 justify-end">
             <Button size="sm" variant="outline" onClick={() => onAction('reject', app)} className="text-red-500 border-red-200 hover:bg-red-50">Reject</Button>
-            {/* 🚀 THE FIX: This now points to the centralized initiate_payment action */}
             <Button size="sm" onClick={() => onAction('initiate_payment', app)} className="bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1 shadow-md shadow-indigo-200">
               <ShieldCheck size={14}/> Hire & Pay
             </Button>
@@ -372,11 +371,12 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                         activeChat={{
                             id: isClient ? chatApp.freelancer_id : chatApp.client_id,
                             name: isClient ? chatApp.freelancer_name : chatApp.client_name,
-                            application_id: chatApp.id 
+                            application_id: chatApp.id,
+                            status: chatApp.status // PASS STATUS TO TRIGGER LOCKS
                         }}
                         setActiveChat={() => setChatApp(null)}
                         initialMessage={chatInitialMessage}
-                        onAction={onAction} // 🚀 THE FIX: Passed onAction so Chat can trigger payments
+                        onAction={onAction}
                     />
                 </div>
             </div>

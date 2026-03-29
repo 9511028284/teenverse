@@ -196,8 +196,17 @@ const Jobs = ({ isClient, services = [], filteredJobs = [], searchTerm, setSearc
   const [aiResults, setAiResults] = useState(null);
   const [parsedData, setParsedData] = useState(null);
 
-  // 🛡️ SECURITY FILTER: Prevent Direct Hire jobs from showing on the public board
-  const publicMissions = filteredJobs.filter(job => job.category !== 'Direct Hire');
+  // 🛡️ SECURITY FILTER: Prevent Direct Hire jobs and Accepted/Closed jobs from showing on the public board
+  const publicMissions = filteredJobs.filter(job => {
+      // Hide jobs that were created purely for a 1-on-1 chat
+      if (job.category === 'Direct Hire') return false;
+      
+      // Hide jobs that are no longer accepting proposals (They have an active status)
+      // If job.status doesn't exist on your joined query, it will fall back to showing it.
+      if (job.status && !['Pending', 'Open'].includes(job.status)) return false;
+
+      return true;
+  });
 
   const handleReportSubmit = (e) => {
     e.preventDefault();
