@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase'; 
+
+// IMPORTANT: Add this to your .env file: VITE_WORKER_URL=wss://your-worker-name.your-subdomain.workers.dev
+const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'wss://your-worker-url.workers.dev';
 
 export const useChat = (activeChat, user, initialMessage) => {
   const [messages, setMessages] = useState([]);
@@ -7,6 +10,9 @@ export const useChat = (activeChat, user, initialMessage) => {
   const [loading, setLoading] = useState(true);
   const [myId, setMyId] = useState(null);
   const [hasMore, setHasMore] = useState(true);
+  
+  // WebSocket Reference
+  const wsRef = useRef(null);
 
   // 1. SECURELY GET USER IDENTITY
   useEffect(() => {
@@ -21,24 +27,28 @@ export const useChat = (activeChat, user, initialMessage) => {
     if (initialMessage) setInput(initialMessage);
   }, [initialMessage]);
 
-  // 🧠 THE FIX: Safely differentiate a Service UUID from an Application BigInt
+  // 2. IDENTIFY CHAT TYPE & ROOM ID
   const isUuid = (val) => typeof val === 'string' && val.includes('-');
   const isDirectChat = !activeChat?.application_id || isUuid(activeChat.application_id);
   const appId = isDirectChat ? null : activeChat.application_id;
 
-  // 3. FETCH MESSAGES & REALTIME SUBSCRIPTION
+  // 3. FETCH HISTORY & CONNECT WEBSOCKET
   useEffect(() => {
     if (!activeChat?.id || !myId) return; 
 
+    // Generate a consistent Room ID for Cloudflare Durable Objects
+    const sortedIds = [myId, activeChat.id].sort();
+    const roomId = appId ? `app_${appId}` : `direct_${sortedIds[0]}_${sortedIds[1]}`;
+
+    // A. Fetch historical messages from Supabase Database
     const fetchMessages = async () => {
       setLoading(true);
       try {
         let query = supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(50);
 
         if (appId) {
-            query = query.eq('application_id', appId); // Project Chat
+            query = query.eq('application_id', appId);
         } else {
-            // Direct Chat
             query = query.is('application_id', null)
                          .or(`and(sender_id.eq.${myId},receiver_id.eq.${activeChat.id}),and(sender_id.eq.${activeChat.id},receiver_id.eq.${myId})`);
         }
@@ -56,43 +66,52 @@ export const useChat = (activeChat, user, initialMessage) => {
         setLoading(false);
       }
     };
+
     fetchMessages();
 
-    // 🧠 THE FIX: Sort IDs alphabetically so User A and User B connect to the EXACT same WebSocket channel!
-    const sortedIds = [myId, activeChat.id].sort();
-    const channelName = appId ? `chat_app_${appId}` : `chat_direct_${sortedIds[0]}_${sortedIds[1]}`;
+    // B. Connect to Cloudflare Worker WebSocket for Real-time
+    const connectWebSocket = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
 
-    const channel = supabase
-      .channel(channelName)
-      .on('postgres_changes', { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'messages'
-      }, (payload) => {
-         const newMsg = payload.new;
-         if (newMsg.sender_id !== myId) {
-            
-            // Security Check: Does this incoming message belong in THIS specific chat window?
-            if (isDirectChat) {
-                const belongsToUs = (newMsg.sender_id === activeChat.id && newMsg.receiver_id === myId);
-                if (!belongsToUs || newMsg.application_id !== null) return;
-            } else {
-                if (newMsg.application_id?.toString() !== appId?.toString()) return;
-            }
+      const ws = new WebSocket(`${WORKER_URL}/chat/${roomId}?token=${session.access_token}`);
 
-            setMessages((prev) => {
-              const exists = prev.some(msg => msg.id === newMsg.id);
-              if (exists) return prev;
-              return [...prev, newMsg];
-            });
-         }
-      })
-      .subscribe();
+      ws.onopen = () => {
+        console.log(`Connected to Cloudflare Room: ${roomId}`);
+      };
+
+      ws.onmessage = (event) => {
+         const newMsg = JSON.parse(event.data);
+         
+         setMessages((prev) => {
+           // If we sent this message, update its status from 'sending' to 'sent'
+           if (newMsg.sender_id === myId && newMsg.client_temp_id) {
+             return prev.map(msg => msg.id === newMsg.client_temp_id ? { ...newMsg, status: "sent", id: newMsg.id || newMsg.client_temp_id } : msg);
+           }
+           
+           // For incoming messages from the other person, prevent duplicates
+           const exists = prev.some(msg => (msg.id === newMsg.id) || (msg.id === newMsg.client_temp_id));
+           if (exists) return prev;
+           
+           return [...prev, newMsg];
+         });
+      };
+
+      ws.onclose = () => {
+        console.log("WebSocket disconnected.");
+      };
+
+      wsRef.current = ws;
+    };
+
+    connectWebSocket();
       
-    return () => { supabase.removeChannel(channel); };
+    return () => { 
+      if (wsRef.current) wsRef.current.close(); 
+    };
   }, [activeChat, myId, appId, isDirectChat]); 
 
-  // 4. PAGINATION (LOAD MORE)
+  // 4. PAGINATION (LOAD MORE HISTORY FROM SUPABASE)
   const loadMore = async () => {
     if (!hasMore || !activeChat?.id) return;
     
@@ -111,15 +130,17 @@ export const useChat = (activeChat, user, initialMessage) => {
     }
   };
 
-  // 5. BULLETPROOF SEND LOGIC 
+  // 5. BULLETPROOF WEBSOCKET SEND LOGIC 
   const executeSendMessage = async () => {
     if (!input.trim() || !activeChat?.id || !myId) return false;
 
     const tempId = `temp-${Date.now()}`;
     const messageText = input;
     
+    // 1. Optimistic UI Update
     const optimisticMsg = { 
         id: tempId,
+        client_temp_id: tempId, // Track this to match WS response
         application_id: appId, 
         sender_id: myId,
         receiver_id: activeChat.id, 
@@ -131,29 +152,24 @@ export const useChat = (activeChat, user, initialMessage) => {
     setMessages((prev) => [...prev, optimisticMsg]);
     setInput('');
 
-    // DB Payload 
-    const dbPayload = {
+    // 2. Send payload via WebSocket to Cloudflare Worker
+    const wsPayload = {
+        client_temp_id: tempId, // Tells the worker to echo this back so we can mark it 'sent'
         application_id: appId, 
-        sender_id: myId,
         receiver_id: activeChat.id, 
         content: messageText
+        // Note: sender_id is securely attached inside the Cloudflare Worker via JWT
     };
 
-    const { data, error } = await supabase.from('messages').insert([dbPayload]).select().single(); 
-
-    if (error) {
-        console.error("Send error:", error);
-        setMessages((prev) => prev.filter(msg => msg.id !== tempId));
-        if (error.message.includes('TRUST_SAFETY_BLOCK')) {
-            alert(`Blocked by Server: ${error.message.replace('TRUST_SAFETY_BLOCK: ', '')}`);
-        } else {
-            alert("Message failed to send. Check Supabase RLS policies!");
-        }
-        return false;
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify(wsPayload));
+        return true;
     } else {
-        setMessages((prev) => prev.map(msg => msg.id === tempId ? { ...data, status: "sent" } : msg));
+        console.error("WebSocket is not connected.");
+        setMessages((prev) => prev.filter(msg => msg.id !== tempId));
+        alert("Connection lost. Please refresh the chat.");
+        return false;
     }
-    return true;
   };
 
   return { messages, input, setInput, loading, myId, executeSendMessage, loadMore, hasMore };
