@@ -29,16 +29,20 @@ export const useChat = (activeChat, user, initialMessage) => {
 
   // 2. IDENTIFY CHAT TYPE & ROOM ID
   const isUuid = (val) => typeof val === 'string' && val.includes('-');
-  const isDirectChat = !activeChat?.application_id || isUuid(activeChat.application_id);
-  const appId = isDirectChat ? null : activeChat.application_id;
+  const isDirectChat = !activeChat?.application_id || isUuid(activeChat?.application_id);
+  const appId = isDirectChat ? null : activeChat?.application_id;
 
   // 3. FETCH HISTORY & CONNECT WEBSOCKET
   useEffect(() => {
-    if (!activeChat?.id || !myId) return; 
+    // 🚀 THE FIX: Watch primitives (activeChat?.id) instead of the whole object to prevent infinite reconnect loops
+    const chatId = activeChat?.id;
+    if (!chatId || !myId) return; 
 
     // Generate a consistent Room ID for Cloudflare Durable Objects
-    const sortedIds = [myId, activeChat.id].sort();
+    const sortedIds = [myId, chatId].sort();
     const roomId = appId ? `app_${appId}` : `direct_${sortedIds[0]}_${sortedIds[1]}`;
+
+    let isMounted = true; // Prevents state updates if component unmounts
 
     // A. Fetch historical messages from Supabase Database
     const fetchMessages = async () => {
@@ -50,20 +54,20 @@ export const useChat = (activeChat, user, initialMessage) => {
             query = query.eq('application_id', appId);
         } else {
             query = query.is('application_id', null)
-                         .or(`and(sender_id.eq.${myId},receiver_id.eq.${activeChat.id}),and(sender_id.eq.${activeChat.id},receiver_id.eq.${myId})`);
+                         .or(`and(sender_id.eq.${myId},receiver_id.eq.${chatId}),and(sender_id.eq.${chatId},receiver_id.eq.${myId})`);
         }
 
         const { data, error } = await query;
         if (error) throw error;
         
-        if (data) {
+        if (data && isMounted) {
           setMessages([...data].reverse()); 
           if (data.length < 50) setHasMore(false);
         }
       } catch (err) {
         console.error("Fetch error:", err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
@@ -77,7 +81,7 @@ export const useChat = (activeChat, user, initialMessage) => {
       const ws = new WebSocket(`${WORKER_URL}/chat/${roomId}?token=${session.access_token}`);
 
       ws.onopen = () => {
-        console.log(`Connected to Cloudflare Room: ${roomId}`);
+        console.log(`✅ Locked into Cloudflare Room: ${roomId}`);
       };
 
       ws.onmessage = (event) => {
@@ -91,6 +95,17 @@ export const useChat = (activeChat, user, initialMessage) => {
          }
          if (newMsg.system) {
              console.log("✅ SERVER MESSAGE:", newMsg.system);
+             return;
+         }
+
+         // 🚀 THE FIX: Catch the unsaved memory buffer from Cloudflare if we just refreshed!
+         if (newMsg.type === "history") {
+             setMessages(prev => {
+                 // Carefully merge so we don't duplicate messages Supabase already gave us
+                 const existingIds = new Set(prev.map(m => m.id || m.client_temp_id));
+                 const newHistory = newMsg.messages.filter(m => !existingIds.has(m.id || m.client_temp_id));
+                 return [...prev, ...newHistory];
+             });
              return;
          }
          
@@ -118,9 +133,15 @@ export const useChat = (activeChat, user, initialMessage) => {
     connectWebSocket();
       
     return () => { 
-      if (wsRef.current) wsRef.current.close(); 
+      isMounted = false;
+      if (wsRef.current) {
+          // Only close if we are actually leaving the chat, not just re-rendering!
+          wsRef.current.close(1000, "Component unmounted"); 
+      }
     };
-  }, [activeChat, myId, appId, isDirectChat]); 
+    
+    // 🚀 THE CRITICAL FIX: Only watch the ID strings, never the full activeChat object!
+  }, [activeChat?.id, myId, appId, isDirectChat]); 
 
   // 4. PAGINATION (LOAD MORE HISTORY FROM SUPABASE)
   const loadMore = async () => {
