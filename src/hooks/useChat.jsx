@@ -125,6 +125,15 @@ export const useChat = (activeChat, user, initialMessage) => {
 
       ws.onclose = (event) => {
         console.warn(`WebSocket disconnected. Code: ${event.code}, Reason: ${event.reason}`);
+        
+        // 🚀 AUTO-RECONNECT FIX: Reconnect quietly if we didn't close it intentionally
+        // Code 1000 = Normal closure (unmounted), 1008 = Auth failure. We reconnect for anything else!
+        if (isMounted && event.code !== 1008 && event.code !== 1000) {
+            console.log("Attempting to auto-reconnect in 2 seconds...");
+            setTimeout(() => {
+                if (isMounted) connectWebSocket();
+            }, 2000);
+        }
       };
 
       wsRef.current = ws;
@@ -198,8 +207,9 @@ export const useChat = (activeChat, user, initialMessage) => {
         return true;
     } else {
         console.error("WebSocket is not connected.");
+        // Revert optimistic UI update if connection fails immediately
         setMessages((prev) => prev.filter(msg => msg.id !== tempId));
-        alert("Connection lost. Please refresh the chat.");
+        alert("Connection lost. Please refresh the chat or wait to reconnect.");
         return false;
     }
   };
