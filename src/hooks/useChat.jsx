@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase'; 
 
 // IMPORTANT: Add this to your .env file: VITE_WORKER_URL=wss://your-worker-name.your-subdomain.workers.dev
-const WORKER_URL = import.meta.env.VITE_WORKER_URL || 'wss://your-worker-url.workers.dev';
+const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 
 export const useChat = (activeChat, user, initialMessage) => {
   const [messages, setMessages] = useState([]);
@@ -83,6 +83,17 @@ export const useChat = (activeChat, user, initialMessage) => {
       ws.onmessage = (event) => {
          const newMsg = JSON.parse(event.data);
          
+         // 🚨 CATCH SERVER ERRORS & SYSTEM LOGS
+         if (newMsg.error) {
+             console.error("🚨 SERVER REJECTED CONNECTION:", newMsg.error);
+             alert("Chat Connection Error: " + newMsg.error);
+             return;
+         }
+         if (newMsg.system) {
+             console.log("✅ SERVER MESSAGE:", newMsg.system);
+             return;
+         }
+         
          setMessages((prev) => {
            // If we sent this message, update its status from 'sending' to 'sent'
            if (newMsg.sender_id === myId && newMsg.client_temp_id) {
@@ -97,8 +108,8 @@ export const useChat = (activeChat, user, initialMessage) => {
          });
       };
 
-      ws.onclose = () => {
-        console.log("WebSocket disconnected.");
+      ws.onclose = (event) => {
+        console.warn(`WebSocket disconnected. Code: ${event.code}, Reason: ${event.reason}`);
       };
 
       wsRef.current = ws;

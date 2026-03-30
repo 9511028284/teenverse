@@ -108,7 +108,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
             id: app[otherIdColumn], 
             name: app[otherNameColumn],
             application_id: app.id,
-            status: app.status, // 🚀 Added status to track locks
+            status: app.status,
             lastMessage: `Project Status: ${app.status}`,
             timestamp: new Date(app.created_at).getTime()
           }));
@@ -131,7 +131,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
                     id: otherId,
                     name: "Loading...", 
                     application_id: null,
-                    lastMessage: msg.content.includes('[SYSTEM') ? 'System Message' : msg.content.substring(0, 30) + '...',
+                    lastMessage: msg.content?.includes('[SYSTEM') ? 'System Message' : (msg.content?.substring(0, 30) || '') + '...',
                     timestamp: new Date(msg.created_at).getTime()
                  });
               }
@@ -175,14 +175,12 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
   let lockReason = "";
 
   if (activeChat) {
-      // Find all applications with this specific user
       const relatedApps = conversations.filter(c => c.id === activeChat.id && c.application_id);
       
       const hasActiveApp = relatedApps.some(c => ['Pending', 'Accepted', 'Submitted', 'Processing', 'Revision Requested'].includes(c.status));
       const hasCompletedApp = relatedApps.some(c => ['Paid', 'Completed'].includes(c.status));
 
       if (isDirect) {
-          // If it's a DM, lock it if they have an active or completed application
           if (hasActiveApp) {
               isChatLocked = true;
               lockReason = "Active project exists. Please switch to the Secure Project Chat.";
@@ -191,7 +189,6 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
               lockReason = "Project completed and funds released. Chat is securely closed.";
           }
       } else {
-          // If it's an App Chat, lock it if the status is Paid, Completed, or Rejected
           const currentAppStatus = activeChat.status || relatedApps.find(c => c.application_id === activeChat.application_id)?.status;
           if (currentAppStatus && ['Paid', 'Completed', 'Rejected', 'Cancelled'].includes(currentAppStatus)) {
               isChatLocked = true;
@@ -206,7 +203,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
       "I'll get started on this right away.", "Could you please clarify this requirement?", "The revision is ready."
   ];
 
-  const normalize = (text) => text.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9@+]/g, '');
+  const normalize = (text) => text?.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9@+]/g, '') || '';
   const containsContactDetails = (text) => {
     const clean = normalize(text);
     const patterns = [
@@ -418,7 +415,10 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
                 {messages.map((msg, index) => {
                 const isMe = msg.sender_id === myId;
                 
-                if (msg.content === '[SYSTEM_ACTION:REQUEST_HIRE]') {
+                // 🚀 THE FIX: Safely fallback to an empty string if content is missing
+                const safeContent = msg.content || ""; 
+                
+                if (safeContent === '[SYSTEM_ACTION:REQUEST_HIRE]') {
                     return (
                         <div key={msg.id || index} className="w-full flex justify-center my-6">
                             <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-500/30 p-5 rounded-2xl text-center max-w-sm shadow-sm">
@@ -438,13 +438,14 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
                     );
                 }
                 
-                if (msg.content.startsWith('[SYSTEM_ACTION:HIRED]')) {
+                // 🚀 THE FIX: Safely check startsWith on our guaranteed string
+                if (safeContent.startsWith('[SYSTEM_ACTION:HIRED]')) {
                      return (
                          <div key={msg.id || index} className="w-full flex justify-center my-6">
                              <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-500/30 p-4 rounded-2xl text-center max-w-sm shadow-sm">
                                  <CheckCheck size={24} className="mx-auto text-emerald-500 mb-2" />
                                  <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Project Officially Started!</p>
-                                 <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{msg.content.replace('[SYSTEM_ACTION:HIRED]', '')}</p>
+                                 <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{safeContent.replace('[SYSTEM_ACTION:HIRED]', '')}</p>
                              </div>
                          </div>
                      );
@@ -459,7 +460,9 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
                         }
                         ${msg.status === 'sending' ? 'opacity-70' : 'opacity-100'}
                         `}>
-                        <p className="leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
+                        
+                        {/* 🚀 THE FIX: Render the safe content */}
+                        <p className="leading-relaxed whitespace-pre-wrap break-words">{safeContent}</p>
                         
                         <div className={`text-[10px] mt-1.5 flex items-center gap-1 justify-end font-medium tracking-wide
                             ${isMe ? 'text-white/70' : 'text-gray-400 dark:text-gray-400'}`}>
