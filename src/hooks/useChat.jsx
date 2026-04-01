@@ -78,7 +78,8 @@ export const useChat = (activeChat, user, initialMessage) => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const ws = new WebSocket(`${WORKER_URL}/chat/${roomId}?token=${session.access_token}`);
+      // We pass the token as a WebSocket Subprotocol, keeping the URL completely clean and secure!
+const ws = new WebSocket(`${WORKER_URL}/chat/${roomId}`, ["jwt", session.access_token]);
 
       ws.onopen = () => {
         console.log(`✅ Locked into Cloudflare Room: ${roomId}`);
