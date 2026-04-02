@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Rocket, X, User, ShieldCheck, Maximize2, Minimize2, LogOut, ChevronRight,
   LayoutDashboard, Briefcase, ListChecks, Package, FileText, MessageSquare,
-  BookOpen, Sparkles, Share2, UserCircle, Settings, Zap 
+  BookOpen, Sparkles, Share2, UserCircle, Settings, Zap, Crown
 } from 'lucide-react';
 import BadgeItem from './BadgeItem'; // Ensure this path matches your project structure
 
@@ -111,11 +111,12 @@ const DashboardSidebar = ({
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1 custom-scrollbar">
            {zenMode ? (
              <div className="flex flex-col items-center gap-4">
-               {['overview', 'jobs', 'messages', !isClient && 'academy'].filter(Boolean).map(t => (
+               {['overview', 'jobs', 'messages', !isClient && 'pricing', !isClient && 'academy'].filter(Boolean).map(t => (
                  <button key={t} onClick={() => setTab(t)} className={`p-3 rounded-2xl transition-all ${tab===t ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'text-slate-400 hover:bg-white hover:shadow-sm dark:hover:bg-white/5'}`}>
                    {t === 'overview' && <LayoutDashboard size={20}/>}
                    {t === 'jobs' && <Briefcase size={20}/>}
                    {t === 'messages' && <MessageSquare size={20}/>}
+                   {t === 'pricing' && <Crown size={20}/>}
                    {t === 'academy' && <BookOpen size={20}/>}
                    {t === 'profile' && <UserCircle size={20}/>}
                  </button>
@@ -128,16 +129,17 @@ const DashboardSidebar = ({
                <div className="mt-6 mb-2 px-4 text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest">Workspace</div>
                <SidebarItem id="jobs" icon={Briefcase} label={isClient ? 'Browse Services' : 'Find Jobs'} />
                {isClient && <SidebarItem id="posted-jobs" icon={ListChecks} label="My Listings" />}
+               {isClient && <SidebarItem id="pricing" icon={Crown} label="Pricing & Fees" />}
                {!isClient && <SidebarItem id="my-services" icon={Package} label="My Gigs" />}
                <SidebarItem id="applications" icon={FileText} label="Orders & Jobs" />
                
-               {/* 💬 THE NEW MESSAGES TAB IS HERE */}
                <SidebarItem id="messages" icon={MessageSquare} label="Messages" badge="New" /> 
               
                {!isClient && (
                 <>
                   <div className="mt-6 mb-2 px-4 text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest">Growth</div>
                   <SidebarItem id="profile" icon={UserCircle} label="My Profile" color="text-pink-500" />
+                  <SidebarItem id="pricing" icon={Crown} label="Level Up (Pro)" color="text-amber-500" badge="Hot" />
                   <SidebarItem id="academy" icon={BookOpen} label="Academy" />
                   <SidebarItem id="resume" icon={FileText} label="Resume Builder" color="text-pink-500" badge="New" /> 
                   <SidebarItem id="profile-card" icon={Share2} label="Share Profile" />

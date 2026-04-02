@@ -1,4 +1,6 @@
 import React from 'react';
+// Adjust path as needed
+import Pricing from '../components/dashboard/Pricing';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Menu, LayoutDashboard, Briefcase, BookOpen, Settings, 
@@ -242,6 +244,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                     {tab === 'records' && (
                       <Records applications={applications} onDownloadInvoice={actions.handleInvoiceDownload} />
                     )}
+
+                    {tab === 'pricing' && (
+  <Pricing isClient={isClient} />
+)}
                     
                     {tab === 'settings' && (
                       <SettingsComp 
