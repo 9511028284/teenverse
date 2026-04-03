@@ -4,7 +4,7 @@ import {
   Rocket, Star, Zap, Heart, TrendingUp, ArrowRight, CheckCircle, 
   Loader2, DollarSign, ShieldCheck, Lock, Menu, X, 
   Sun, Moon, Instagram, Twitter, Linkedin, Send, Code, Users, Briefcase, AlertTriangle,
-  Layout, Video, PenTool, Globe, Sparkles
+  Layout, Video, PenTool, Globe, Sparkles, Sprout, XCircle, HelpCircle, Wallet, CheckCircle2
 } from 'lucide-react';
 import { motion, useScroll, useTransform, useSpring, useMotionValue, useInView, AnimatePresence } from 'framer-motion';
 
@@ -35,7 +35,7 @@ const TiltCard = ({ children, className }) => {
 };
 
 // --- 2. UTILITY: SCROLL REVEAL WRAPPER ---
-const RevealOnScroll = ({ children, delay = 0 }) => {
+const RevealOnScroll = ({ children, delay = 0, className = "" }) => {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-10% 0px" });
   return (
@@ -44,6 +44,7 @@ const RevealOnScroll = ({ children, delay = 0 }) => {
       initial={{ opacity: 0, y: 40 }}
       animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
       transition={{ duration: 0.8, delay, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
     >
       {children}
     </motion.div>
@@ -55,11 +56,16 @@ const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;800&display=swap');
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
   
-  :root { --primary: #6366f1;
-  --accent-lime: #ccff00; }
-  body { font-family: 'Inter', sans-serif; overflow-x: hidden;
+  :root { 
+    --primary: #6366f1;
+    --accent-lime: #ccff00; 
   }
-  h1, h2, h3, h4, h5, h6, button { font-family: 'Space Grotesk', sans-serif;
+  body { 
+    font-family: 'Inter', sans-serif; 
+    overflow-x: hidden;
+  }
+  h1, h2, h3, h4, h5, h6, button { 
+    font-family: 'Space Grotesk', sans-serif;
   }
   
   .custom-cursor {
@@ -67,15 +73,15 @@ const styles = `
     background: var(--accent-lime); border-radius: 50%; pointer-events: none; z-index: 9999;
     mix-blend-mode: exclusion; transition: transform 0.1s;
   }
-  .custom-cursor.hovered { transform: scale(4);
-  background: white; mix-blend-mode: difference; }
+  .custom-cursor.hovered { 
+    transform: scale(4);
+    background: white; mix-blend-mode: difference; 
+  }
   
   @keyframes float {
-    0% { transform: translateY(0px) rotate(0deg);
-    }
+    0% { transform: translateY(0px) rotate(0deg); }
     50% { transform: translateY(-20px) rotate(5deg); }
-    100% { transform: translateY(0px) rotate(0deg);
-    }
+    100% { transform: translateY(0px) rotate(0deg); }
   }
   .animate-float { animation: float 6s ease-in-out infinite; }
 `;
@@ -129,6 +135,9 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
         'parent portal': 'parent-login',
         'hire talent': 'auth',
         'home': 'landing',
+        'about us': 'about',
+        'faq': 'faq', // ✅ Added FAQ
+        'safety': 'safety' // ✅ Added Safety
     };
     const cleanTarget = target.toLowerCase();
     
@@ -140,8 +149,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
     }
 
     const sectionIdMap = {
-      'safety': 'safety',
-      'how it works': 'how it works',
+      'how it works': 'how-it-works',
       'explore': 'explore'
     };
     const sectionId = sectionIdMap[cleanTarget] || cleanTarget;
@@ -155,12 +163,9 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
   const handleFooterLink = (link) => {
       const lower = link.toLowerCase();
       if (lower.includes('terms') && onLegalClick) { onLegalClick('terms'); return; }
-      if (lower.includes('privacy') && onLegalClick) { onLegalClick('privacy'); return;
-      }
-      if (lower.includes('refund') && onLegalClick) { onLegalClick('disputes'); return;
-      } 
-      if (lower.includes('safety') && onLegalClick) { onLegalClick('parent_agreement'); return;
-      } 
+      if (lower.includes('privacy') && onLegalClick) { onLegalClick('privacy'); return; }
+      if (lower.includes('refund') && onLegalClick) { onLegalClick('disputes'); return; } 
+      if (lower === 'safety center' || lower === 'safety') { handleNav('safety'); return; } 
       
       handleNav(link);
   };
@@ -205,7 +210,8 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
 
            {/* Desktop Menu */}
            <div className="hidden md:flex items-center gap-8 text-sm font-bold uppercase tracking-wider">
-              {['Safety', 'How it Works'].map((item) => (
+              {/* ✅ Added Safety & FAQ to Desktop Navbar */}
+              {['About Us', 'How it Works', 'Safety', 'FAQ'].map((item) => (
                 <button key={item} onClick={() => handleNav(item)} className={`transition-colors hover-target ${darkMode ? 'text-gray-300 hover:text-[#ccff00]' : 'text-slate-600 hover:text-indigo-600'}`}>{item}</button>
               ))}
               <div className={`w-px h-4 ${darkMode ? 'bg-white/20' : 'bg-slate-200'}`}></div>
@@ -235,7 +241,8 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
             >
               <div className={`border rounded-2xl p-6 flex flex-col gap-6 shadow-2xl backdrop-blur-2xl ${darkMode ? 'bg-[#0a0a0a] border-white/15' : 'bg-white border-indigo-100'}`}>
                  <div className="flex flex-col gap-4">
-                   {['Safety', 'How it Works'].map((item) => (
+                   {/* ✅ Added Safety & FAQ to Mobile Navbar */}
+                   {['About Us', 'How it Works', 'Safety', 'FAQ'].map((item) => (
                      <button 
                        key={item} 
                        onClick={() => handleNav(item)} 
@@ -322,13 +329,20 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
       </section>
 
       {/* --- SKILLS GRID SECTION --- */}
-      <section className={`py-24 px-6 border-y ${darkMode ? 'bg-[#080808] border-white/5' : 'bg-white border-slate-100'}`}>
-        <div className="max-w-7xl mx-auto">
+      <section className={`relative py-24 px-6 border-y overflow-hidden ${darkMode ? 'bg-[#080808] border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+        <div className={`absolute top-0 right-0 w-[600px] h-[600px] rounded-full blur-[120px] opacity-20 pointer-events-none translate-x-1/3 -translate-y-1/3 ${darkMode ? 'bg-[#ccff00]' : 'bg-indigo-400'}`} />
+        <div className={`absolute bottom-0 left-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-20 pointer-events-none -translate-x-1/3 translate-y-1/3 ${darkMode ? 'bg-purple-900' : 'bg-pink-300'}`} />
+
+        <div className="max-w-7xl mx-auto relative z-10">
           <RevealOnScroll>
             <div className="flex flex-col md:flex-row justify-between items-end mb-16 gap-4">
               <div className="max-w-xl">
-                <h2 className={`text-3xl md:text-5xl font-black mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Skills in <span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>Demand.</span></h2>
-                <p className={darkMode ? "text-gray-400" : "text-slate-500"}>What are you good at? Start earning with these popular categories.</p>
+                <h2 className={`text-3xl md:text-5xl font-black mb-4 tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                  Skills in <span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>Demand.</span>
+                </h2>
+                <p className={`text-lg ${darkMode ? "text-gray-400" : "text-slate-600"}`}>
+                  What are you good at? Start earning with these popular categories.
+                </p>
               </div>
             </div>
           </RevealOnScroll>
@@ -346,13 +360,41 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
             ].map((item, i) => (
               <RevealOnScroll key={i} delay={i * 0.05}>
                 <motion.div 
-                  whileHover={{ y: -5 }}
-                  className={`p-6 rounded-2xl border transition-all ${darkMode ? 'bg-[#111] border-white/5 hover:border-[#ccff00]/50' : 'bg-slate-50 border-slate-100 hover:bg-white hover:shadow-xl hover:shadow-indigo-50'}`}
+                  whileHover="hover"
+                  initial="initial"
+                  variants={{
+                    initial: { y: 0, scale: 1 },
+                    hover: { y: -8, scale: 1.02, transition: { type: "spring", stiffness: 400, damping: 25 } }
+                  }}
+                  className={`group relative p-6 rounded-2xl border transition-colors overflow-hidden cursor-pointer ${
+                    darkMode ? 'bg-[#111] border-white/10 hover:border-white/20' : 'bg-white border-slate-200 shadow-sm hover:shadow-xl hover:shadow-indigo-500/10'
+                  }`}
                 >
-                  <div className={`w-12 h-12 ${item.color} rounded-xl mb-4 flex items-center justify-center text-white shadow-lg`}>
+                  <div className={`absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-500 pointer-events-none ${item.color}`} />
+                  
+                  <motion.div 
+                    variants={{
+                      initial: { rotate: 0, scale: 1 },
+                      hover: { rotate: [0, -15, 15, -5, 5, 0], scale: 1.1, transition: { duration: 0.6 } }
+                    }}
+                    className={`relative w-12 h-12 ${item.color} rounded-xl mb-6 flex items-center justify-center text-white shadow-lg z-10`}
+                  >
                     <item.icon size={24} />
-                  </div>
-                  <h4 className={`font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{item.label}</h4>
+                  </motion.div>
+                  
+                  <h4 className={`font-bold text-lg relative z-10 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                    {item.label}
+                  </h4>
+
+                  <motion.div
+                    variants={{
+                      initial: { x: -15, opacity: 0 },
+                      hover: { x: 0, opacity: 1, transition: { type: "spring", stiffness: 300 } }
+                    }}
+                    className={`absolute bottom-6 right-6 ${darkMode ? 'text-white/50' : 'text-slate-400'}`}
+                  >
+                    <ArrowRight size={20} />
+                  </motion.div>
                 </motion.div>
               </RevealOnScroll>
             ))}
@@ -361,38 +403,277 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
       </section>
 
       {/* --- HOW IT WORKS (Timeline) --- */}
-      <section id="how it works" className={`py-24 px-6 ${darkMode ? 'bg-[#0a0a0a]' : 'bg-slate-50'}`}>
-        <div className="max-w-7xl mx-auto">
-            <RevealOnScroll>
-                <div className="text-center mb-16">
-                    <h2 className={`text-3xl md:text-5xl font-black mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Safe Work, <span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>Secure Payments.</span></h2>
-                    <p className={darkMode ? 'text-gray-400' : 'text-slate-500'}>Our system ensures protected transactions.</p>
-                </div>
-            </RevealOnScroll>
+      <section id="how-it-works" className={`relative py-24 px-6 overflow-hidden ${darkMode ? 'bg-[#0a0a0a]' : 'bg-slate-50'}`}>
+        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl h-[400px] blur-[150px] opacity-20 pointer-events-none ${darkMode ? 'bg-[#ccff00]' : 'bg-indigo-300'}`} />
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-                {[
-                    { icon: Briefcase, title: "1. Post & Pitch", desc: "Clients post jobs. Verified creators pitch their skills." },
-                    { icon: Lock, title: "2. Secure Payments", desc: "Payments are processed securely through our trusted payment gateway partners.", active: true },
-                    { icon: Code, title: "3. Create", desc: "Work happens in our monitored, safe chat environment." },
-                    { icon: DollarSign, title: "4. Get Paid", desc: "Client approves. Funds are securely released." }
-                ].map((step, i) => (
-                    <RevealOnScroll key={i} delay={i * 0.1}>
-                        <div className={`relative p-8 rounded-3xl border transition-all h-full ${
-                          darkMode 
-                            ? (step.active ? 'bg-[#111] border-[#ccff00] shadow-[0_0_20px_rgba(204,255,0,0.1)]' : 'bg-black border-white/10') 
-                            : (step.active ? 'bg-white border-indigo-600 shadow-xl shadow-indigo-100' : 'bg-white border-slate-200 shadow-sm')
-                        }`}>
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-6 ${step.active ? (darkMode ? 'bg-[#ccff00] text-black' : 'bg-indigo-600 text-white') : (darkMode ? 'bg-white/10 text-white' : 'bg-indigo-50 text-indigo-600')}`}>
-                                <step.icon size={24} />
-                            </div>
-                            <h3 className={`text-xl font-bold mb-3 ${darkMode ? 'text-white' : 'text-slate-900'}`}>{step.title}</h3>
-                            <p className={`text-sm leading-relaxed ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>{step.desc}</p>
-                            {i < 3 && <div className={`hidden md:block absolute top-1/2 -right-4 w-8 h-px z-10 ${darkMode ? 'bg-white/20' : 'bg-slate-300'}`} />}
-                        </div>
-                    </RevealOnScroll>
-                ))}
+        <div className="max-w-7xl mx-auto relative z-10">
+          <RevealOnScroll>
+            <div className="text-center mb-16">
+              <h2 className={`text-3xl md:text-5xl font-black mb-4 tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                Safe Work, <span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>Secure Payments.</span>
+              </h2>
+              <p className={`text-lg ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
+                Our system ensures protected transactions from start to finish.
+              </p>
             </div>
+          </RevealOnScroll>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            {[
+              { icon: Briefcase, title: "1. Post & Pitch", desc: "Clients post jobs. Verified creators pitch their skills." },
+              { icon: Lock, title: "2. Secure Payments", desc: "Payments are processed securely through our trusted payment gateways.", active: true },
+              { icon: Code, title: "3. Create", desc: "Work happens in our monitored, safe chat environment." },
+              { icon: DollarSign, title: "4. Get Paid", desc: "Client approves. Funds are securely released." }
+            ].map((step, i) => (
+              <div key={i} className="relative h-full">
+                {i < 3 && (
+                  <div className="hidden md:block absolute top-14 -right-8 w-8 h-[2px] overflow-hidden rounded-full z-0">
+                    <div className={`absolute inset-0 ${darkMode ? 'bg-white/10' : 'bg-slate-200'}`} />
+                    <motion.div
+                      animate={{ x: ['-100%', '100%'] }}
+                      transition={{ duration: 1.5, repeat: Infinity, ease: "linear", delay: i * 0.4 }}
+                      className={`absolute inset-0 w-full h-full ${darkMode ? 'bg-gradient-to-r from-transparent via-[#ccff00] to-transparent' : 'bg-gradient-to-r from-transparent via-indigo-500 to-transparent'}`}
+                    />
+                  </div>
+                )}
+
+                <RevealOnScroll delay={i * 0.15}>
+                  <motion.div 
+                    whileHover="hover"
+                    initial="initial"
+                    animate={step.active ? "pulse" : "initial"}
+                    variants={{
+                      initial: { y: 0, scale: 1 },
+                      hover: { y: -10, transition: { type: "spring", stiffness: 300, damping: 20 } },
+                      pulse: { 
+                        boxShadow: darkMode 
+                          ? ["0px 0px 0px rgba(204,255,0,0)", "0px 0px 20px rgba(204,255,0,0.15)", "0px 0px 0px rgba(204,255,0,0)"]
+                          : ["0px 0px 0px rgba(79,70,229,0)", "0px 10px 30px rgba(79,70,229,0.15)", "0px 0px 0px rgba(79,70,229,0)"],
+                        transition: { duration: 3, repeat: Infinity, ease: "easeInOut" }
+                      }
+                    }}
+                    className={`group relative p-8 rounded-3xl border h-full overflow-hidden z-10 bg-clip-padding backdrop-filter backdrop-blur-sm ${
+                      darkMode 
+                        ? (step.active ? 'bg-[#1a1a1a] border-[#ccff00]/50' : 'bg-[#111] border-white/10 hover:border-white/20') 
+                        : (step.active ? 'bg-white border-indigo-400' : 'bg-white border-slate-200 hover:border-indigo-200')
+                    }`}
+                  >
+                    <div className={`absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-500 pointer-events-none ${darkMode ? 'bg-[#ccff00]' : 'bg-indigo-600'}`} />
+
+                    <motion.div 
+                      variants={{
+                        initial: { rotate: 0, scale: 1 },
+                        hover: { rotate: [0, -10, 10, -5, 5, 0], scale: 1.1, transition: { duration: 0.5 } }
+                      }}
+                      className={`relative w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-lg ${
+                        step.active 
+                          ? (darkMode ? 'bg-[#ccff00] text-black shadow-[#ccff00]/20' : 'bg-indigo-600 text-white shadow-indigo-500/30') 
+                          : (darkMode ? 'bg-white/5 text-white' : 'bg-indigo-50 text-indigo-600')
+                      }`}
+                    >
+                      <step.icon size={26} strokeWidth={step.active ? 2.5 : 2} />
+                    </motion.div>
+                    
+                    <h3 className={`relative z-10 text-xl font-bold mb-3 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                      {step.title}
+                    </h3>
+                    
+                    <p className={`relative z-10 text-sm leading-relaxed ${darkMode ? 'text-gray-400 group-hover:text-gray-300' : 'text-slate-500 group-hover:text-slate-700'} transition-colors`}>
+                      {step.desc}
+                    </p>
+                  </motion.div>
+                </RevealOnScroll>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* --- WHY TEENVERSEHUB IS DIFFERENT (Bento Box Layout) --- */}
+      <section className={`py-24 px-6 relative overflow-hidden ${darkMode ? 'bg-[#050505]' : 'bg-white'}`}>
+        <div className={`absolute top-0 right-0 w-[500px] h-[500px] rounded-full blur-[120px] opacity-10 pointer-events-none translate-x-1/2 -translate-y-1/2 ${darkMode ? 'bg-[#ccff00]' : 'bg-indigo-400'}`} />
+
+        <div className="max-w-7xl mx-auto relative z-10">
+          <RevealOnScroll>
+            <div className="text-center mb-16 max-w-3xl mx-auto">
+              <h2 className={`text-3xl md:text-5xl font-black mb-4 tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                Why TeenVerseHub is <span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>Built Differently</span>
+              </h2>
+              <p className={`text-lg ${darkMode ? "text-gray-400" : "text-slate-600"}`}>
+                Not just another freelance platform — built specifically for teenagers starting their journey.
+              </p>
+            </div>
+          </RevealOnScroll>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-min">
+            {[
+              { 
+                icon: ShieldCheck, title: "Designed for Teen Safety", desc: "Every feature is built keeping teens in mind — from secure chats to monitored interactions.", 
+                color: "text-emerald-500", bg: "bg-emerald-500/10", gridClass: "md:col-span-2", flexClass: "flex flex-col sm:flex-row items-start sm:items-center gap-6"
+              },
+              { 
+                icon: Sprout, title: "Beginner-Friendly Start", desc: "No experience? No problem. Start small, learn fast, and grow with real opportunities.", 
+                color: "text-blue-500", bg: "bg-blue-500/10", gridClass: "md:col-span-1 md:row-span-2", flexClass: "flex flex-col h-full justify-center gap-6"
+              },
+              { 
+                icon: Users, title: "Guardian Awareness", desc: "We ensure transparency so parents stay informed and confident.", 
+                color: "text-purple-500", bg: "bg-purple-500/10", gridClass: "md:col-span-1", flexClass: "flex flex-col gap-4"
+              },
+              { 
+                icon: Briefcase, title: "Real Opportunities", desc: "Get access to actual work — not just a profile sitting idle.", 
+                color: "text-orange-500", bg: "bg-orange-500/10", gridClass: "md:col-span-1", flexClass: "flex flex-col gap-4"
+              },
+              { 
+                icon: Zap, title: "No Overwhelming Competition", desc: "Unlike crowded marketplaces, you get a fair chance to grow without fighting veterans.", 
+                color: "text-pink-500", bg: "bg-pink-500/10", gridClass: "md:col-span-2 lg:col-span-3", flexClass: "flex flex-col md:flex-row items-start md:items-center gap-6"
+              }
+            ].map((feature, i) => (
+              <RevealOnScroll key={i} delay={i * 0.1} className={feature.gridClass}>
+                <motion.div 
+                  whileHover={{ y: -5, scale: 1.01 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  className={`p-8 rounded-3xl border h-full transition-all group overflow-hidden relative ${
+                    darkMode ? 'bg-[#111] border-white/5 hover:border-white/20' : 'bg-slate-50 border-slate-100 hover:shadow-xl hover:shadow-indigo-50 hover:bg-white'
+                  }`}
+                >
+                  <div className={`absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-500 pointer-events-none ${feature.bg.split('/')[0]}`} />
+                  
+                  <div className={`relative z-10 ${feature.flexClass}`}>
+                    <div className={`shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center shadow-sm ${feature.bg} ${feature.color}`}>
+                      <feature.icon size={32} />
+                    </div>
+                    <div>
+                      <h3 className={`text-xl font-bold mb-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}>{feature.title}</h3>
+                      <p className={`leading-relaxed ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>{feature.desc}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              </RevealOnScroll>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* --- PROBLEMS ON OTHER PLATFORMS --- */}
+      <section className={`py-24 px-6 border-t relative ${darkMode ? 'bg-[#0a0a0a] border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+        <div className="max-w-7xl mx-auto">
+          <RevealOnScroll>
+            <div className="mb-16">
+              <h2 className={`text-3xl md:text-5xl font-black mb-4 tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                Why Existing Platforms <br/><span className="text-rose-500">Don’t Work for Teens</span>
+              </h2>
+              <p className={`text-lg ${darkMode ? "text-gray-400" : "text-slate-600"}`}>
+                Most platforms are built for professionals — not beginners.
+              </p>
+            </div>
+          </RevealOnScroll>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+            {[
+              { icon: XCircle, title: "Too Competitive", desc: "Teens struggle to get their first client among experienced freelancers." },
+              { icon: AlertTriangle, title: "Lack of Safety", desc: "No dedicated protection layer or moderation for young users." },
+              { icon: HelpCircle, title: "No Guidance", desc: "Beginners are left confused without direction or support." },
+              { icon: Wallet, title: "Hard to Earn First", desc: "Getting started feels impossible without experience or ratings." },
+            ].map((problem, i) => (
+              <RevealOnScroll key={i} delay={i * 0.1}>
+                <div className={`p-6 rounded-2xl border-l-4 h-full ${darkMode ? 'bg-[#111] border-l-rose-500/50' : 'bg-white border-l-rose-400 shadow-sm'}`}>
+                  <problem.icon className="text-rose-500 mb-4" size={24} />
+                  <h4 className={`font-bold mb-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}>{problem.title}</h4>
+                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>{problem.desc}</p>
+                </div>
+              </RevealOnScroll>
+            ))}
+          </div>
+
+          <RevealOnScroll>
+            <motion.div 
+              whileHover={{ scale: 1.01 }}
+              className={`relative p-8 md:p-12 rounded-3xl overflow-hidden text-center flex flex-col md:flex-row items-center justify-center gap-6 ${darkMode ? 'bg-gradient-to-r from-[#1a1a1a] to-[#222] border border-white/10' : 'bg-indigo-600 text-white shadow-xl shadow-indigo-200'}`}
+            >
+              {darkMode && <div className="absolute inset-0 bg-gradient-to-r from-[#ccff00]/10 to-transparent pointer-events-none" />}
+              <ArrowRight className={darkMode ? 'text-[#ccff00]' : 'text-indigo-200'} size={40} />
+              <h3 className={`text-xl md:text-2xl font-medium max-w-3xl text-left ${darkMode ? 'text-white' : 'text-white'}`}>
+                That’s exactly why we built <span className={`font-black ${darkMode ? 'text-[#ccff00]' : 'text-white'}`}>TeenVerseHub</span> — a platform where teens can start safely, confidently, and successfully.
+              </h3>
+            </motion.div>
+          </RevealOnScroll>
+        </div>
+      </section>
+
+      {/* --- COMPARISON TABLE (Pro Upgrade) --- */}
+      <section className={`py-24 px-6 border-t relative overflow-hidden ${darkMode ? 'bg-[#050505] border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+        <div className="max-w-5xl mx-auto relative z-10">
+          <RevealOnScroll>
+            <div className="text-center mb-16">
+              <h2 className={`text-3xl md:text-5xl font-black mb-4 tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                The TeenVerseHub <span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>Advantage</span>
+              </h2>
+            </div>
+          </RevealOnScroll>
+
+          <RevealOnScroll>
+            <div className={`relative rounded-3xl border overflow-hidden ${darkMode ? 'bg-[#0a0a0a] border-white/10' : 'bg-white border-slate-200 shadow-2xl shadow-slate-200/50'}`}>
+              
+              <div className={`absolute top-0 bottom-0 left-1/3 w-1/3 pointer-events-none ${
+                darkMode ? 'bg-gradient-to-b from-[#ccff00]/10 via-[#ccff00]/5 to-transparent' : 'bg-gradient-to-b from-indigo-50 via-indigo-50/30 to-transparent'
+              }`} />
+
+              <div className={`grid grid-cols-3 p-6 md:p-8 border-b items-end ${darkMode ? 'border-white/10' : 'border-slate-100'}`}>
+                <div className={`text-sm md:text-base font-bold uppercase tracking-wider ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
+                  Platform Features
+                </div>
+                <div className="relative text-center flex flex-col items-center justify-center">
+                  <span className={`absolute -top-6 px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-widest shadow-lg ${
+                    darkMode ? 'bg-[#ccff00] text-black shadow-[#ccff00]/20' : 'bg-indigo-600 text-white shadow-indigo-500/30'
+                  }`}>
+                    Built for you
+                  </span>
+                  <div className={`text-xl md:text-2xl font-black ${darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}`}>
+                    TeenVerseHub
+                  </div>
+                </div>
+                <div className={`text-center text-sm md:text-base font-bold uppercase tracking-wider ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
+                  Other Platforms
+                </div>
+              </div>
+
+              <div className="flex flex-col">
+                {[
+                  { feature: "Built for Teens", tvh: "Yes", other: "No", tvhIcon: CheckCircle2, otherIcon: XCircle },
+                  { feature: "Beginner Friendly", tvh: "Easy Start", other: "Difficult", tvhIcon: CheckCircle2, otherIcon: AlertTriangle },
+                  { feature: "Safety Focus", tvh: "High Priority", other: "Limited", tvhIcon: CheckCircle2, otherIcon: AlertTriangle },
+                  { feature: "Guardian Transparency", tvh: "Available", other: "Not Available", tvhIcon: CheckCircle2, otherIcon: XCircle },
+                  { feature: "First Earning Support", tvh: "Guided", other: "Not Structured", tvhIcon: CheckCircle2, otherIcon: XCircle },
+                  { feature: "Competition Level", tvh: "Balanced", other: "Very High", tvhIcon: CheckCircle2, otherIcon: XCircle },
+                ].map((row, i) => (
+                  <div 
+                    key={i} 
+                    className={`grid grid-cols-3 p-5 md:p-6 items-center relative transition-colors group ${
+                      darkMode ? 'hover:bg-white/5 border-white/5' : 'hover:bg-slate-50/80 border-slate-100'
+                    } ${i !== 5 ? 'border-b' : ''}`}
+                  >
+                    <div className={`font-medium md:text-lg pl-2 md:pl-4 ${darkMode ? 'text-white' : 'text-slate-800'}`}>
+                      {row.feature}
+                    </div>
+                    <div className={`flex flex-row items-center justify-center gap-2 text-center font-bold relative z-10 ${darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}`}>
+                      <row.tvhIcon size={20} />
+                      <span className="text-sm md:text-base">{row.tvh}</span>
+                    </div>
+                    <div className={`flex flex-row items-center justify-center gap-2 text-center font-medium ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
+                      <row.otherIcon size={18} className="opacity-50" />
+                      <span className="text-sm md:text-base">{row.other}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </RevealOnScroll>
+
+          <RevealOnScroll delay={0.2}>
+            <p className={`mt-8 text-center text-sm md:text-base font-medium italic ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
+              “TeenVerseHub isn’t about competing with professionals — <span className={darkMode ? 'text-white not-italic' : 'text-slate-900 not-italic'}>it’s about helping you become one.</span>”
+            </p>
+          </RevealOnScroll>
         </div>
       </section>
 
@@ -400,27 +681,45 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
       <section className={`py-24 px-6 perspective-1000 border-t ${darkMode ? 'bg-[#050505] border-white/5' : 'bg-white border-slate-100'}`}>
          <RevealOnScroll>
            <div className="max-w-5xl mx-auto">
-              {/* Toggle Switch */}
+              
+              {/* Toggle Switch (FIXED LAYOUT) */}
               <div className="flex justify-center mb-16">
-                 <div className={`p-1 rounded-full border flex relative ${darkMode ? 'bg-black border-white/20' : 'bg-slate-100 border-slate-200'}`}>
-                    <motion.div 
-                        layout
+                <div className={`p-1 rounded-full border flex relative ${darkMode ? 'bg-black border-white/20' : 'bg-slate-100 border-slate-200'}`}>
+                  
+                  {/* Creators Button */}
+                  <button 
+                    onClick={() => setActiveTab('creators')} 
+                    className={`relative px-8 py-3 rounded-full font-bold uppercase tracking-wider text-sm transition-colors ${
+                      activeTab === 'creators' ? (darkMode ? 'text-black' : 'text-indigo-600') : (darkMode ? 'text-gray-400' : 'text-slate-500')
+                    }`}
+                  >
+                    {activeTab === 'creators' && (
+                      <motion.div 
+                        layoutId="active-tab-indicator"
                         transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                        className={`absolute top-1 bottom-1 ${activeTab === 'creators' ? 'left-1 w-[140px]' : 'left-[145px] w-[140px]'} rounded-full ${darkMode ? 'bg-[#ccff00]' : 'bg-white shadow-md'}`}
-                    />
-                    <button 
-                      onClick={() => setActiveTab('creators')} 
-                      className={`relative z-10 px-8 py-3 rounded-full font-bold uppercase tracking-wider text-sm transition-colors ${activeTab === 'creators' ? (darkMode ? 'text-black' : 'text-indigo-600') : (darkMode ? 'text-gray-400' : 'text-slate-500')}`}
-                    >
-                      For Creators
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab('parents')} 
-                      className={`relative z-10 px-8 py-3 rounded-full font-bold uppercase tracking-wider text-sm transition-colors ${activeTab === 'parents' ? (darkMode ? 'text-black' : 'text-indigo-600') : (darkMode ? 'text-gray-400' : 'text-slate-500')}`}
-                    >
-                      For Guardians
-                    </button>
-                 </div>
+                        className={`absolute inset-0 rounded-full ${darkMode ? 'bg-[#ccff00]' : 'bg-white shadow-md'}`}
+                      />
+                    )}
+                    <span className="relative z-10">For Creators</span>
+                  </button>
+
+                  {/* Guardians Button */}
+                  <button 
+                    onClick={() => setActiveTab('parents')} 
+                    className={`relative px-8 py-3 rounded-full font-bold uppercase tracking-wider text-sm transition-colors ${
+                      activeTab === 'parents' ? (darkMode ? 'text-black' : 'text-indigo-600') : (darkMode ? 'text-gray-400' : 'text-slate-500')
+                    }`}
+                  >
+                    {activeTab === 'parents' && (
+                      <motion.div 
+                        layoutId="active-tab-indicator"
+                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                        className={`absolute inset-0 rounded-full ${darkMode ? 'bg-[#ccff00]' : 'bg-white shadow-md'}`}
+                      />
+                    )}
+                    <span className="relative z-10">For Guardians</span>
+                  </button>
+                </div>
               </div>
 
               {/* Content Container */}
@@ -460,7 +759,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
                                     <li className={`flex items-center gap-3 text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}><ShieldCheck size={18} className="text-indigo-500"/> Curated, Safe Job Categories</li>
                                     <li className={`flex items-center gap-3 text-sm font-bold ${darkMode ? 'text-white' : 'text-slate-800'}`}><ShieldCheck size={18} className="text-indigo-500"/> No Personal Contact Details Shared</li>
                                 </ul>
-                                <button onClick={() => handleNav('auth')} className="mt-4 px-8 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg">View Safety Hub</button>
+                                <button onClick={() => handleNav('safety')} className="mt-4 px-8 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg">View Safety Hub</button>
                             </div>
                             <div className="flex-1">
                                 <img src="https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&q=80&w=800" alt="Guardian and Creator" className="rounded-3xl border border-white/10 shadow-2xl hover:scale-[1.02] transition-transform duration-500" />
@@ -471,6 +770,55 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
               </div>
            </div>
          </RevealOnScroll>
+      </section>
+
+      {/* --- ✅ NEW SECTION: SAFETY & FAQ TEASER --- */}
+      <section className={`py-24 px-6 border-t ${darkMode ? 'bg-[#0a0a0a] border-white/5' : 'bg-white border-slate-200'}`}>
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            {/* Safety Teaser Box */}
+            <RevealOnScroll>
+              <div className={`p-10 md:p-12 rounded-[2.5rem] border relative overflow-hidden flex flex-col justify-between h-full ${darkMode ? 'bg-[#111] border-emerald-500/20' : 'bg-emerald-50 border-emerald-100'}`}>
+                <div className={`absolute top-0 right-0 w-40 h-40 blur-[80px] opacity-30 pointer-events-none ${darkMode ? 'bg-emerald-500' : 'bg-emerald-400'}`} />
+                <div>
+                  <ShieldCheck size={40} className={`mb-6 ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                  <h3 className={`text-3xl font-black mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Trust & Safety</h3>
+                  <p className={`text-lg mb-8 ${darkMode ? 'text-gray-400' : 'text-slate-600'}`}>
+                    We've built TeenVerseHub with a secure, monitored, and parent-approved ecosystem from the ground up. Discover how we protect our community.
+                  </p>
+                </div>
+                <button 
+                  onClick={() => handleNav('safety')}
+                  className={`inline-flex items-center justify-center gap-2 font-bold w-fit px-6 py-3 rounded-xl transition-all ${darkMode ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : 'bg-emerald-200/50 text-emerald-700 hover:bg-emerald-200'}`}
+                >
+                  View Safety Hub <ArrowRight size={18} />
+                </button>
+              </div>
+            </RevealOnScroll>
+
+            {/* FAQ Teaser Box */}
+            <RevealOnScroll delay={0.2}>
+              <div className={`p-10 md:p-12 rounded-[2.5rem] border relative overflow-hidden flex flex-col justify-between h-full ${darkMode ? 'bg-[#111] border-blue-500/20' : 'bg-blue-50 border-blue-100'}`}>
+                <div className={`absolute top-0 right-0 w-40 h-40 blur-[80px] opacity-30 pointer-events-none ${darkMode ? 'bg-blue-500' : 'bg-blue-400'}`} />
+                <div>
+                  <HelpCircle size={40} className={`mb-6 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                  <h3 className={`text-3xl font-black mb-4 ${darkMode ? 'text-white' : 'text-slate-900'}`}>Got Questions?</h3>
+                  <p className={`text-lg mb-8 ${darkMode ? 'text-gray-400' : 'text-slate-600'}`}>
+                    How do payments work? Do I need experience? Find answers to all your questions and learn everything you need to know to get started.
+                  </p>
+                </div>
+                <button 
+                  onClick={() => handleNav('faq')}
+                  className={`inline-flex items-center justify-center gap-2 font-bold w-fit px-6 py-3 rounded-xl transition-all ${darkMode ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' : 'bg-blue-200/50 text-blue-700 hover:bg-blue-200'}`}
+                >
+                  Read the FAQ <ArrowRight size={18} />
+                </button>
+              </div>
+            </RevealOnScroll>
+
+          </div>
+        </div>
       </section>
 
       {/* --- TRUSTED PLATFORM FEATURES --- */}
@@ -546,7 +894,8 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
             <div className="md:pl-8">
               <h4 className={`font-bold uppercase tracking-widest text-xs mb-6 ${darkMode ? 'text-gray-400' : 'text-slate-900'}`}>Company</h4>
               <ul className={`space-y-3 text-sm ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
-                {['About Us', 'Careers', 'Blog', 'Contact'].map(l => (
+                {/* ✅ Updated Company Links to include FAQ */}
+                {['About Us', 'FAQ', 'Careers', 'Blog', 'Contact'].map(l => (
                   <li key={l}>
                     <button onClick={() => handleFooterLink(l)} className={`transition-colors ${darkMode ? 'hover:text-white' : 'hover:text-indigo-600'}`}>
                       {l}
@@ -560,7 +909,8 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
             <div className="md:pl-4">
               <h4 className={`font-bold uppercase tracking-widest text-xs mb-6 ${darkMode ? 'text-gray-400' : 'text-slate-900'}`}>Legal & Trust</h4>
               <ul className={`space-y-3 text-sm ${darkMode ? 'text-gray-500' : 'text-slate-500'}`}>
-                {['Terms of Service', 'Privacy Policy', 'Refund Policy', 'Safety Guidelines'].map(l => (
+                {/* ✅ Updated Legal Links to include Safety Center */}
+                {['Terms of Service', 'Privacy Policy', 'Refund Policy', 'Safety Center'].map(l => (
                   <li key={l}>
                     <button onClick={() => handleFooterLink(l)} className={`transition-colors ${darkMode ? 'hover:text-white' : 'hover:text-indigo-600'}`}>
                       {l}

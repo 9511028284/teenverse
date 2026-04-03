@@ -10,6 +10,9 @@ import { Loader2 } from 'lucide-react';
 
 // Pages
 import LandingPage from './pages/LandingPage';
+import AboutPage from './pages/AboutPage'; 
+import FaqPage from './pages/FaqPage'; 
+import SafetyPage from './pages/SafetyPage'; // ✅ Imported Safety Page
 import Auth from './pages/Auth'; 
 import Dashboard from './pages/Dashboard';
 import Legal from './pages/Legal';
@@ -57,6 +60,10 @@ export default function App() {
   const setView = (viewName) => {
       switch(viewName) {
           case 'home': navigate('/'); break;
+          case 'about': 
+          case 'about us': navigate('/about'); break; 
+          case 'faq': navigate('/faq'); break; 
+          case 'safety': navigate('/safety'); break; // ✅ Added Safety Route mapping
           case 'auth': navigate('/auth'); break;
           case 'dashboard': navigate('/dashboard'); break;
           case 'legal': navigate('/legal'); break;
@@ -92,7 +99,9 @@ export default function App() {
 
   const handleSession = async (session, attempts = 0) => {
     const currentPath = location.pathname;
-    const isPublic = ['/', '/auth', '/legal', '/termsagreement', '/parent-approval', '/parent-login'].some(path => currentPath.startsWith(path));
+    
+    // ✅ Added '/safety' alongside faq and about to isPublic paths
+    const isPublic = ['/', '/about', '/faq', '/safety', '/auth', '/legal', '/termsagreement', '/parent-approval', '/parent-login'].some(path => currentPath.startsWith(path));
     
     // Variable to check if they are currently trying to view the terms page
     const isTermsPage = currentPath.startsWith('/termsagreement');
@@ -120,7 +129,8 @@ export default function App() {
       let { data: c } = await supabase.from('clients').select('*').eq('id', u.id).maybeSingle();
       if (c) { 
           setUser({ ...c, type: 'client' }); 
-          if (!currentPath.startsWith('/dashboard') && !isTermsPage) navigate('/dashboard');
+          // Do not redirect if they are actively trying to view public pages while logged in
+          if (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic) navigate('/dashboard');
           setLoading(false);
           return;
       }
@@ -129,7 +139,7 @@ export default function App() {
       let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
       if (f) { 
           setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] });
-          if (!currentPath.startsWith('/dashboard') && !isTermsPage) navigate('/dashboard');
+          if (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic) navigate('/dashboard');
           setLoading(false);
           return;
       }
@@ -143,7 +153,7 @@ export default function App() {
 
       if (parentMatch) {
           setUser({ ...u, type: 'parent', teenId: parentMatch.user_id });
-          if (!currentPath.startsWith('/parent-dashboard')) navigate('/parent-dashboard');
+          if (!currentPath.startsWith('/parent-dashboard') && !isPublic) navigate('/parent-dashboard');
           setLoading(false);
           return;
       }
@@ -219,6 +229,34 @@ export default function App() {
             <LandingPage 
                 setView={setView} 
                 onFeedback={handleFeedback} 
+                darkMode={darkMode} 
+                toggleTheme={toggleTheme} 
+                onLegalClick={(page) => navigate(`/legal?page=${page}`)} 
+            />
+        } />
+
+        <Route path="/about" element={
+            <AboutPage 
+                setView={setView} 
+                darkMode={darkMode} 
+                toggleTheme={toggleTheme} 
+                onLegalClick={(page) => navigate(`/legal?page=${page}`)} 
+            />
+        } />
+
+        <Route path="/faq" element={
+            <FaqPage 
+                setView={setView} 
+                darkMode={darkMode} 
+                toggleTheme={toggleTheme} 
+                onLegalClick={(page) => navigate(`/legal?page=${page}`)} 
+            />
+        } />
+
+        {/* ✅ Safety Route */}
+        <Route path="/safety" element={
+            <SafetyPage 
+                setView={setView} 
                 darkMode={darkMode} 
                 toggleTheme={toggleTheme} 
                 onLegalClick={(page) => navigate(`/legal?page=${page}`)} 
