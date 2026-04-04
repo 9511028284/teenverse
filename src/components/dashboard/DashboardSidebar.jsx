@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Rocket, X, User, ShieldCheck, Maximize2, Minimize2, LogOut, ChevronRight,
   LayoutDashboard, Briefcase, ListChecks, Package, FileText, MessageSquare,
-  BookOpen, Sparkles, Share2, UserCircle, Settings, Zap, Crown
+  BookOpen, Sparkles, Share2, UserCircle, Settings, Zap, Crown, HelpCircle
 } from 'lucide-react';
 import BadgeItem from './BadgeItem'; // Ensure this path matches your project structure
 
@@ -36,6 +36,30 @@ const DashboardSidebar = ({
       )}
     </button>
   );
+
+  // 🚀 BADGE SORTING LOGIC: Rank by exclusivity/importance
+  const getTopBadges = () => {
+      const rankMap = {
+          'Elite': 100,
+          'Pro': 90,
+          'Starter': 80,
+          'Verified': 70,
+          'Verified Teen': 70,
+          'Parent Approved': 60,
+          'KYC Completed': 50,
+          'Night Owl': 40,
+          'Weekend Warrior': 40,
+          'Early Adopter': 40,
+          'First Gig': 30,
+          'Skill Certified': 10
+      };
+
+      return [...badges]
+          .sort((a, b) => (rankMap[b.name] || 0) - (rankMap[a.name] || 0)) // Sort by highest rank
+          .slice(0, 3); // Take top 3
+  };
+
+  const displayBadges = getTopBadges();
 
   return (
     <aside className={`fixed md:static inset-y-0 left-0 z-50 transform ${menuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-all duration-300 ease-in-out flex flex-col h-screen ${zenMode ? 'md:w-24' : 'md:w-80'}`}>
@@ -89,15 +113,16 @@ const DashboardSidebar = ({
               </div>
             )}
             
+            {/* 🚀 FILTERED BADGES SECTION */}
             <div className="flex flex-wrap gap-1.5 mb-3">
-               {badges.length > 0 ? (
-                 badges.slice(0, 3).map((b, i) => (
+               {displayBadges.length > 0 ? (
+                 displayBadges.map((b, i) => (
                    <BadgeItem key={i} name={b.name} iconName={b.icon} />
                  ))
                ) : (
                  <span className="text-[10px] text-slate-400 italic">No badges earned yet.</span>
                )}
-               {badges.length > 3 && <span className="text-[10px] text-slate-400">+{badges.length - 3} more</span>}
+               {badges.length > 3 && <span className="text-[10px] text-slate-400 font-bold ml-1 self-center">+{badges.length - 3}</span>}
             </div>
             
              <div className="space-y-1">
@@ -148,6 +173,8 @@ const DashboardSidebar = ({
                
                <div className="mt-6 mb-2 px-4 text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest">System</div>
                <SidebarItem id="records" icon={ShieldCheck} label="My Records" />
+               {/* 🚀 NEW SUPPORT TAB */}
+<SidebarItem id="support" icon={HelpCircle} label="Help & Community" color="text-indigo-500" />
                <SidebarItem id="settings" icon={Settings} label="Settings" />
              </>
            )}

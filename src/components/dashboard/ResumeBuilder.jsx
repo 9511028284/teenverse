@@ -66,6 +66,17 @@ const ResumeBuilder = ({ user, showToast }) => {
     }
   };
 
+  // Inside your ResumeBuilder component:
+const onDownloadClick = async () => {
+    // Check if they are allowed to use a resume
+    const isAllowed = await actions.handleUseResume();
+    
+    if (isAllowed) {
+        // Proceed with downloading or saving the PDF
+        generatePDF(); 
+    }
+};
+
   // --- 2. Download as PDF ---
   const handleDownloadPDF = async () => {
     if (!resumeRef.current) return;

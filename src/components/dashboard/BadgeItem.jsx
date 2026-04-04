@@ -1,13 +1,21 @@
 import React from 'react';
-import { ShieldCheck, FileCheck, Rocket, Award, Briefcase, Lock, Zap } from 'lucide-react';
+import { 
+  ShieldCheck, FileCheck, Rocket, Award, Briefcase, Lock, 
+  Zap, Gem, Crown, Moon, Swords 
+} from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const BadgeItem = ({ name, iconName }) => {
-  const IconMap = { ShieldCheck, FileCheck, Rocket, Award, Briefcase, Lock };
+  // Map string names from the DB to actual Lucide components
+  const IconMap = { 
+    ShieldCheck, FileCheck, Rocket, Award, Briefcase, Lock, 
+    Zap, Gem, Crown, Moon, Swords 
+  };
+  
   const Icon = IconMap[iconName] || Award;
 
   // --- CONFIGURATION ---
-  // We define deep color palettes for the "Cyber-Luxe" look
+  // Deep color palettes for the "Cyber-Luxe" look
   const styles = {
     trust: {
       bg: "from-blue-500/20 to-cyan-500/5",
@@ -48,15 +56,72 @@ const BadgeItem = ({ name, iconName }) => {
       glow: "shadow-[0_0_15px_rgba(255,255,255,0.1)]",
       icon: "text-gray-400",
       beam: "bg-white"
+    },
+    
+    // 🚀 NEW: SUBSCRIPTION BADGES
+    starter: {
+      bg: "from-cyan-500/20 via-blue-500/10 to-transparent",
+      border: "border-cyan-400/60",
+      text: "text-cyan-300",
+      glow: "shadow-[0_0_25px_rgba(6,182,212,0.6)]",
+      icon: "text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]",
+      beam: "bg-cyan-400"
+    },
+    pro: {
+      bg: "from-fuchsia-600/30 via-purple-500/10 to-transparent",
+      border: "border-fuchsia-400/60",
+      text: "text-fuchsia-300",
+      glow: "shadow-[0_0_25px_rgba(217,70,239,0.6)]",
+      icon: "text-fuchsia-400 drop-shadow-[0_0_8px_rgba(217,70,239,0.8)]",
+      beam: "bg-fuchsia-400"
+    },
+    elite: {
+      // 🔥 THE FIRE / VIP AESTHETIC 🔥
+      bg: "from-red-900/60 via-orange-600/30 to-yellow-500/10",
+      border: "border-orange-500/70 ring-1 ring-yellow-500/30",
+      text: "text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-red-500",
+      glow: "shadow-[0_0_30px_rgba(239,68,68,0.8)]",
+      icon: "text-yellow-400 drop-shadow-[0_0_12px_rgba(250,204,21,1)]",
+      beam: "bg-gradient-to-t from-red-500 to-yellow-400"
+    },
+
+    // 🐣 NEW: EASTER EGG BADGES
+    night: {
+      bg: "from-indigo-900/60 to-slate-900/40",
+      border: "border-indigo-400/50",
+      text: "text-indigo-300",
+      glow: "shadow-[0_0_20px_rgba(99,102,241,0.5)]",
+      icon: "text-indigo-400",
+      beam: "bg-indigo-400"
+    },
+    weekend: {
+      bg: "from-rose-500/20 to-orange-500/5",
+      border: "border-rose-400/50",
+      text: "text-rose-300",
+      glow: "shadow-[0_0_20px_rgba(244,63,94,0.5)]",
+      icon: "text-rose-400",
+      beam: "bg-rose-400"
     }
   };
 
   // Logic to determine category
-  let cat = 'fun';
+  let cat = 'fun'; // Default
+  
+  // Standard Categories
   if (['Verified Teen', 'Parent Approved', 'KYC Completed', 'Verified'].includes(name)) cat = 'trust';
   if (['First Gig', 'Rising Talent'].includes(name)) cat = 'work';
   if (['Skill Certified', 'Academy Graduate'].includes(name)) cat = 'skill';
   if (['Safe User', 'Community Safe'].includes(name)) cat = 'safety';
+
+  // Premium Subscription Categories
+  if (name === 'Starter') cat = 'starter';
+  if (name === 'Pro') cat = 'pro';
+  if (name === 'Elite') cat = 'elite';
+
+  // Time-Based Easter Egg Categories
+  if (name === 'Night Owl') cat = 'night';
+  if (name === 'Weekend Warrior') cat = 'weekend';
+  if (name === 'Early Adopter') cat = 'skill'; // Uses the amber styling
 
   const style = styles[cat];
 
@@ -71,7 +136,7 @@ const BadgeItem = ({ name, iconName }) => {
       {/* 1. NOISE TEXTURE OVERLAY */}
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none"></div>
 
-      {/* 2. SCANNING BEAM (The "Crazy" Part) */}
+      {/* 2. SCANNING BEAM */}
       <motion.div 
         variants={{
           rest: { x: '-150%', opacity: 0 },
@@ -93,7 +158,7 @@ const BadgeItem = ({ name, iconName }) => {
             rest: { rotate: 0, scale: 1 },
             hover: { rotate: 360, scale: 1.2, transition: { type: "spring", stiffness: 200 } }
           }}
-          className={`${style.icon} drop-shadow-[0_0_8px_currentColor]`}
+          className={`${style.icon}`}
         >
            <Icon size={14} strokeWidth={3} />
         </motion.div>
@@ -110,7 +175,7 @@ const BadgeItem = ({ name, iconName }) => {
         </motion.span>
 
         {/* Status Dot (Blinking) */}
-        <div className="flex h-1.5 w-1.5 relative">
+        <div className="flex h-1.5 w-1.5 relative ml-1">
            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${style.beam}`}></span>
            <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${style.beam}`}></span>
         </div>

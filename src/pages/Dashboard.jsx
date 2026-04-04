@@ -11,6 +11,7 @@ import { useDashboardLogic } from '../hooks/useDashboardLogic';
 // ✅ FIXED: Missing UI Imports
 import Button from '../components/ui/Button'; 
 import Modal from '../components/ui/Modal';   
+import SupportHub from '../components/dashboard/SupportHub'; // Adjust the path based on your folder structure!
 
 // Components
 import DashboardSidebar from '../components/dashboard/DashboardSidebar';
@@ -213,6 +214,14 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       onAction={actions.handleAppAction}
    />
 )}
+
+{/* 🚀 RENDER THE SUPPORT HUB */}
+{tab === 'support' && (
+    <SupportHub 
+        user={user} 
+        showToast={showToast} 
+    />
+)}
                   
                     {tab === 'academy' && !isClient && (
                       <Academy 
@@ -245,8 +254,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                       <Records applications={applications} onDownloadInvoice={actions.handleInvoiceDownload} />
                     )}
 
-                    {tab === 'pricing' && (
-  <Pricing isClient={isClient} />
+                     {tab === 'pricing' && (
+  <Pricing 
+    isClient={state.isClient} 
+    user={user} 
+    onSubscribe={actions.handleSubscribe} 
+  />
 )}
                     
                     {tab === 'settings' && (

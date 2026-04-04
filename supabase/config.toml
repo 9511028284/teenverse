@@ -468,3 +468,36 @@ entrypoint = "./functions/match-freelancers/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/match-freelancers/*.html" ]
+
+[functions.process-subscription]
+enabled = true
+verify_jwt = true
+import_map = "./functions/process-subscription/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/process-subscription/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/process-subscription/*.html" ]
+
+[functions.generate-discord-invite]
+enabled = true
+verify_jwt = true
+import_map = "./functions/generate-discord-invite/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/generate-discord-invite/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/generate-discord-invite/*.html" ]
+
+[functions.broadcast-discord-offer]
+enabled = true
+verify_jwt = true
+import_map = "./functions/broadcast-discord-offer/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/broadcast-discord-offer/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/broadcast-discord-offer/*.html" ]

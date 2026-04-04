@@ -23,6 +23,16 @@ const isSameDay = (dateString) => {
   );
 };
 
+// 🚀 NEW: Dynamic Commission Helper
+export const getCommissionRate = (planName) => {
+    switch(planName) {
+        case 'Elite': return 0.03;   // 3%
+        case 'Pro': return 0.035;    // 3.5%
+        case 'Starter': return 0.04; // 4%
+        default: return 0.05;        // 5% (Basic)
+    }
+};
+
 // Helper: Clean Cloudflare R2 Uploads
 const uploadFilesToR2 = async (files, userId, folderPrefix, maxSizeBytes, showToast) => {
     let uploadedUrls = [];
@@ -222,6 +232,58 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
   };
 
+  // ------------------------------------------
+  // 🏆 EXCLUSIVE TIME-BASED BADGE CHECKER
+  // ------------------------------------------
+  const checkAndAwardExclusiveBadges = async (currentBadges) => {
+      const currentHour = new Date().getHours();
+      const currentDay = new Date().getDay(); // 0 = Sunday, 6 = Saturday
+      
+      let newBadge = null;
+      let badgeIcon = '';
+      let energyBonus = 0;
+
+      // 1. Check Night Owl (12 AM to 5 AM)
+      if (currentHour >= 0 && currentHour < 5 && !currentBadges.some(b => b.name === 'Night Owl')) {
+          newBadge = 'Night Owl';
+          badgeIcon = 'Moon';
+          energyBonus = 15;
+      }
+      // 2. Check Weekend Warrior (Saturday or Sunday)
+      else if ((currentDay === 0 || currentDay === 6) && !currentBadges.some(b => b.name === 'Weekend Warrior')) {
+          newBadge = 'Weekend Warrior';
+          badgeIcon = 'Swords';
+          energyBonus = 20;
+      }
+      // 3. Check Early Adopter
+      else if (user?.created_at) {
+          const joinDate = new Date(user.created_at);
+          const cutoffDate = new Date('2026-12-31T23:59:59Z');
+          if (joinDate < cutoffDate && !currentBadges.some(b => b.name === 'Early Adopter')) {
+              newBadge = 'Early Adopter';
+              badgeIcon = 'Rocket';
+              energyBonus = 50;
+          }
+      }
+
+      if (newBadge) {
+          const { error } = await supabase.from('user_badges').insert({
+              user_id: user.id,
+              badge_name: newBadge
+          });
+
+          if (!error) {
+              setBadges(prev => [...prev, { name: newBadge, icon: badgeIcon }]);
+              showToast(`🎉 SECRET UNLOCKED: ${newBadge} Badge! +${energyBonus} Energy ⚡`, "success");
+              
+              await api.awardEnergy(user.id, energyBonus);
+              setEnergy(prev => prev + energyBonus);
+              
+              await logAction('EXCLUSIVE_BADGE_UNLOCKED', { badge: newBadge });
+          }
+      }
+  };
+
   // --- INITIALIZATION ---
   useEffect(() => {
     if (window.Cashfree) {
@@ -243,7 +305,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
             if (!isClient) {
                 const { data } = await supabase
                     .from('freelancers')
-                    .select('energy_points, last_login_date, qualification, specialty, resume_url, hourly_rate')
+                    .select('energy_points, last_login_date, qualification, specialty, resume_url, hourly_rate, current_plan')
                     .eq('id', user.id)
                     .single();
                 userProfileData = data;
@@ -276,6 +338,11 @@ export const useDashboardLogic = (user, setUser, showToast) => {
             })) || [];
             setBadges(formattedBadges);
 
+            // 🚀 Trigger the exclusive badge checker!
+            if (!isClient) {
+                checkAndAwardExclusiveBadges(formattedBadges);
+            }
+
             const { services, jobs, applications, notifications, referralCount, error } = dashboardRes;
             if (!error) {
                 setServices(services);
@@ -284,10 +351,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
                 setNotifications(notifications);
                 setReferralStats({ count: referralCount, earnings: referralCount * 50 });
                 
+                // 🚀 DYNAMIC COMMISSION CALCULATOR
+                const commissionRate = getCommissionRate(userProfileData?.current_plan || 'Basic');
+                
                 const total = applications.reduce((acc, curr) => {
                       if (curr.status === 'Paid') {
                           const amount = Number(curr.bid_amount) || 0;
-                          return isClient ? acc + amount : acc + (amount * 0.95); 
+                          return isClient ? acc + amount : acc + (amount * (1 - commissionRate)); 
                       }
                       return acc;
                 }, 0);
@@ -343,14 +413,12 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
     showToast("Verifying code...", "info");
     
-    // Step 1: Apply the code to their profile
     const applyRes = await api.applyReferralCode(user.id, referralCode.trim());
     
     if (applyRes.success) {
         setUser(prev => ({ ...prev, referred_by: referralCode }));
         const isKycDone = user?.is_kyc_verified || user?.kyc_status === 'verified';
         
-        // Step 2: Instantly claim reward if they ALREADY did KYC!
         if (isKycDone) {
             const claimRes = await api.claimReferralReward(user.id);
             if (claimRes.success) {
@@ -469,7 +537,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
         setModal(null);
         
-        // 🚀 SECURE REFERRAL UNLOCK: Try to unlock the referral reward now that KYC is done!
         const reward = await api.claimReferralReward(user.id);
         if (reward?.success) {
             setTimeout(() => {
@@ -605,6 +672,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       }
     }
 
+    // 🚀 SUBSCRIPTION CHECK
+    if (user?.current_plan !== 'Elite' && (user?.bids_remaining === undefined || user?.bids_remaining <= 0)) {
+        showToast("You're out of bids for this month! Upgrade your plan to apply for more gigs.", "warning");
+        setTab('pricing');
+        return;
+    }
+
     const parsedCost = Number(energyCost);
     if (isNaN(parsedCost) || parsedCost <= 0) {
         return showToast("System Error: Invalid energy cost detected.", "error");
@@ -632,6 +706,15 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         showToast(error.message, 'error'); 
     } else { 
         setEnergy(prev => prev - parsedCost);
+        
+        // 🚀 Deduct 1 bid locally so the UI updates immediately
+        if (user?.current_plan !== 'Elite') {
+            setUser(prev => ({ 
+                ...prev, 
+                bids_remaining: Math.max(0, (prev.bids_remaining || 0) - 1) 
+            }));
+        }
+
         showToast('W application! 🎯 Proposal sent.', 'success'); 
         
         const newApp = {
@@ -736,8 +819,10 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       const doc = new jsPDF();
       const invoiceId = `INV-${Date.now().toString().slice(-8)}`;
       
+      // 🚀 DYNAMIC COMMISSION RATE APPLIED TO INVOICE
+      const commissionRate = getCommissionRate(user?.current_plan || 'Basic');
       const isFreelancer = user.type !== 'client'; 
-      const fee = isFreelancer ? (baseAmount * 0.05) : 0;
+      const fee = isFreelancer ? (baseAmount * commissionRate) : 0;
       const finalAmount = baseAmount - fee;
 
       const billedToName = isFreelancer ? "TeenVerseHub Payouts" : (user.name || "Client");
@@ -784,7 +869,9 @@ export const useDashboardLogic = (user, setUser, showToast) => {
           doc.text(`₹${Number(baseAmount).toFixed(2)}`, 190, 108, { align: 'right' });
           
           doc.setTextColor(220, 50, 50); 
-          doc.text(`Platform Fee (5%):`, 120, 114); 
+          // Format dynamically (e.g. 5% or 3.5%)
+          const formattedRate = parseFloat((commissionRate * 100).toFixed(1)) + '%';
+          doc.text(`Platform Fee (${formattedRate}):`, 120, 114); 
           doc.text(`- ₹${fee.toFixed(2)}`, 190, 114, { align: 'right' });
           
           doc.setTextColor(0, 0, 0);
@@ -1120,57 +1207,127 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       } catch (err) { showToast(err.message, "error"); }
   };
 
-  const handleSubscribe = async (plan, isAnnual) => {
-    const cost = plan.priceAmount; // e.g., 299
+  // ------------------------------------------
+  // 💳 ACTION: SUBSCRIBE (SPLIT PAYMENT & BADGES)
+  // ------------------------------------------
+  const handleSubscribe = async (plan, isAnnual, walletDeduction, finalPayable) => {
     
-    // 1. Check if Wallet can cover it completely
-    if (user.wallet_balance >= cost) {
-        if (!window.confirm(`Use ₹${cost} from your wallet to buy the ${plan.name} plan?`)) return;
+    // Helper to instantly add the badge to UI
+    const awardBadgeLocally = (planName) => {
+        let icon = 'Gem'; // 💎 Pro Icon
+        if (planName === 'Starter') icon = 'Zap'; // ⚡ Starter Icon
+        if (planName === 'Elite') icon = 'Crown'; // 👑 Elite Icon
         
-        showToast("Upgrading plan...", "info");
-        // Create an Edge Function called 'process-subscription'
-        const { error } = await supabase.functions.invoke('process-subscription', {
-            body: { userId: user.id, planId: plan.planId, amount: cost, useWallet: true }
+        if (!badges.some(b => b.name === planName)) {
+            setBadges(prev => [...prev, { name: planName, icon }]);
+            setTimeout(() => showToast(`🏆 UNLOCKED: Premium ${planName} Status!`, "success"), 1000);
+        }
+    };
+
+    // SCENARIO 1: Paid entirely with Wallet
+    if (finalPayable === 0) {
+        showToast("Securing subscription via Wallet...", "info");
+        
+        const { data, error } = await supabase.functions.invoke('process-subscription', {
+            body: { 
+                planId: plan.planId, 
+                planName: plan.name, 
+                amount: walletDeduction, 
+                isAnnual, 
+                useWallet: true 
+            }
         });
 
-        if (error) return showToast(error.message, "error");
+        if (error || !data?.success) {
+            return showToast(data?.error || "Upgrade failed.", "error");
+        }
         
-        showToast(`🎉 Welcome to ${plan.name}!`, "success");
-        // Update local state
+        showToast(`🎉 Welcome to ${plan.name}! Limits updated.`, "success");
+        
         setUser(prev => ({ 
             ...prev, 
             current_plan: plan.name, 
-            wallet_balance: prev.wallet_balance - cost 
+            wallet_balance: Math.max(0, prev.wallet_balance - walletDeduction),
+            bids_remaining: plan.name === 'Elite' ? 99999 : (plan.name === 'Starter' ? 12 : 18)
         }));
+        
+        awardBadgeLocally(plan.name); // 🚀 Trigger Badge
         return;
     }
 
-    // 2. If Wallet isn't enough, open Cashfree Checkout
+    // SCENARIO 2: Gateway Payment Required (Split or Full)
     showToast("Opening Secure Checkout...", "info");
     
-    // Use your existing processCashfreePayment helper!
+    const tempOrderId = `SUB_${plan.planId}_${Date.now()}`;
+    
     await processCashfreePayment(
         {
-           amount: cost, // Note: You might want to subtract wallet_balance here if doing split pay
+           amount: finalPayable,
            customerPhone: user.phone,
            freelancerId: user.id,
-           appId: `SUB_${plan.planId}_${Date.now()}`, // Fake app ID for subscriptions
+           appId: tempOrderId, 
            userId: user.id
         },
         async (verifyData) => {
-            // After Cashfree success, hit your backend to upgrade the user
-            const { error } = await supabase.functions.invoke('process-subscription', {
-                body: { userId: user.id, planId: plan.planId, amount: cost, useWallet: false }
+            showToast("Payment received! Activating plan...", "info");
+            
+            const { data, error } = await supabase.functions.invoke('process-subscription', {
+                body: { 
+                    planId: plan.planId, 
+                    planName: plan.name, 
+                    amount: finalPayable,
+                    walletDeduction: walletDeduction,
+                    isAnnual, 
+                    useWallet: walletDeduction > 0,
+                    orderId: verifyData.order_id 
+                }
             });
-            if (!error) {
-                showToast(`🎉 Welcome to ${plan.name}!`, "success");
-                setUser(prev => ({ ...prev, current_plan: plan.name }));
+
+            if (error || !data?.success) {
+                 return showToast(data?.error || "Upgrade failed during verification.", "error");
             }
+
+            showToast(`🎉 Welcome to ${plan.name}! Limits updated.`, "success");
+            setUser(prev => ({ 
+                ...prev, 
+                current_plan: plan.name,
+                wallet_balance: Math.max(0, prev.wallet_balance - walletDeduction),
+                bids_remaining: plan.name === 'Elite' ? 99999 : (plan.name === 'Starter' ? 12 : 18)
+            }));
+            
+            awardBadgeLocally(plan.name); // 🚀 Trigger Badge
         },
         (errorMsg) => { showToast(errorMsg, "error"); }
     );
-};
+  };
 
+  // ------------------------------------------
+  // 📝 ACTION: SECURE RESUME LIMITER
+  // ------------------------------------------
+  const handleUseResume = async () => {
+      if (user?.current_plan !== 'Elite' && (user?.resumes_remaining === undefined || user?.resumes_remaining <= 0)) {
+          showToast("You've reached your monthly resume limit! Please upgrade your plan.", "warning");
+          setTab('pricing'); 
+          return false;
+      }
+
+      if (user?.current_plan !== 'Elite') {
+          const { data, error } = await supabase.rpc('decrement_resume_limit', { p_user_id: user.id });
+          
+          if (error || !data?.success) {
+              showToast(data?.error || "Failed to verify resume limits.", "error");
+              return false;
+          }
+          
+          setUser(prev => ({ 
+              ...prev, 
+              resumes_remaining: Math.max(0, (prev.resumes_remaining || 0) - 1) 
+          }));
+      }
+      
+      showToast("Resume slot used successfully!", "success");
+      return true;
+  };
 
   return {
     state: {
@@ -1184,7 +1341,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         isQuizLoading, 
         reportModal, activeChat,
         hourlyRate, 
-        needsProfileSetup 
+        needsProfileSetup, setSelectedJob 
     },
     setters: {
         setTab, setMenuOpen, setZenMode, setModal, setSelectedJob, setShowRewardModal,
@@ -1192,7 +1349,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         setSearchTerm, setProfileForm, setPaymentModal, setParentMode, setRawPortfolioText,
         setEditProfileModal, setViewProfileId, setPublicProfileData, setShowNotifications, setApplications,
         setReportModal, setActiveChat,
-        setHourlyRate 
+        setHourlyRate, setSelectedJob 
     },
     actions: {
         handlePostJob, 
@@ -1208,7 +1365,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         handleCompleteProfileSubmit,
         handleDigilockerSuccess,
         handleRedeemReferral,
-        handleSubscribe // 🚨 EXPORTED HERE
+        handleSubscribe,
+        handleUseResume
     }
   };
 };

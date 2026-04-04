@@ -1,18 +1,24 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Check, X, Crown, Zap, Star, Shield, Rocket, Sparkles, Building2, 
-  Lock, ArrowRight, HelpCircle, ChevronDown
+  Check, X, Crown, Zap, Gem, Shield, Sparkles, Building2, 
+  Lock, ArrowRight, ChevronDown, Wallet
 } from 'lucide-react';
-import Button from '../ui/Button'; // Adjust path if needed
+import Button from '../ui/Button';
+import Modal from '../ui/Modal'; 
 
 const Pricing = ({ isClient, user, onSubscribe }) => {
   const [isAnnual, setIsAnnual] = useState(true);
   const [openFaq, setOpenFaq] = useState(null);
 
-  const currentUserPlan = user?.current_plan || 'Basic';
+  // 🚀 Checkout Modal States
+  const [checkoutPlan, setCheckoutPlan] = useState(null);
+  const [useWallet, setUseWallet] = useState(true);
 
-  // --- FREELANCER PLANS ---
+  const currentUserPlan = user?.current_plan || 'Basic';
+  const walletBalance = Number(user?.wallet_balance) || 0;
+
+  // --- PREMIUM FREELANCER PLANS ---
   const freelancerPlans = [
     {
       name: 'Basic',
@@ -21,20 +27,22 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
       price: 'Free',
       monthlyPrice: 'Free',
       duration: 'Forever',
-      icon: <Shield className="text-gray-400" size={24} />,
+      icon: <Shield className="text-slate-400" size={26} strokeWidth={1.5} />,
       badge: null,
       commission: '5%',
       features: [
         { text: '5 bids / month', included: true },
         { text: '1 resume / month', included: true },
-        { text: 'Normal chat support', included: true },
+        { text: 'Standard support', included: true },
         { text: 'Early feature access', included: false },
         { text: 'Exclusive profile badge', included: false },
         { text: 'Higher profile visibility', included: false },
       ],
       cta: 'Current Plan',
-      style: 'border-gray-200 dark:border-gray-800 bg-white/50 dark:bg-[#0F172A]/50 backdrop-blur-xl',
-      btnStyle: 'bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-white/5'
+      style: 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0F172A]/50 backdrop-blur-xl',
+      btnStyle: 'bg-slate-200 text-slate-500 cursor-not-allowed dark:bg-white/5',
+      textColor: 'text-slate-900 dark:text-white',
+      mutedText: 'text-slate-500 dark:text-slate-400'
     },
     {
       name: 'Starter',
@@ -43,8 +51,8 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
       price: '₹99',
       monthlyPrice: '₹99',
       duration: 'for 2 Years',
-      icon: <Rocket className="text-blue-500" size={24} />,
-      badge: 'First 100 Users 🚀',
+      icon: <Zap className="text-cyan-500" size={26} strokeWidth={2} />,
+      badge: '100 users only ⚡',
       commission: '4%',
       features: [
         { text: '12 bids / month', included: true },
@@ -55,8 +63,10 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
         { text: 'Higher profile visibility', included: false },
       ],
       cta: 'Grab Starter',
-      style: 'border-blue-200 dark:border-blue-900/50 bg-gradient-to-b from-white to-blue-50/80 dark:from-[#0F172A] dark:to-blue-900/20 shadow-xl shadow-blue-500/10 hover:shadow-blue-500/20',
-      btnStyle: 'bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20'
+      style: 'border-cyan-200 dark:border-cyan-900/50 bg-gradient-to-br from-white to-cyan-50/80 dark:from-[#0F172A] dark:to-cyan-900/20 shadow-xl shadow-cyan-500/10 hover:shadow-cyan-500/20',
+      btnStyle: 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-md shadow-cyan-500/20',
+      textColor: 'text-slate-900 dark:text-white',
+      mutedText: 'text-slate-500 dark:text-slate-400'
     },
     {
       name: 'Pro',
@@ -65,8 +75,9 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
       price: '₹299',
       monthlyPrice: '₹29',
       duration: isAnnual ? '/ year' : '/ month',
-      icon: <Star className="text-indigo-500" size={24} />,
-      badge: 'Most Popular ⭐',
+      annualDiscount: '14%', 
+      icon: <Gem className="text-fuchsia-500" size={28} strokeWidth={2} />,
+      badge: 'Premium 💎',
       commission: '3.5%',
       features: [
         { text: '18 bids / month', included: true },
@@ -77,8 +88,10 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
         { text: 'Founder community access', included: true },
       ],
       cta: 'Go Pro',
-      style: 'border-indigo-500 ring-4 ring-indigo-500/20 bg-gradient-to-b from-indigo-50 to-white dark:from-indigo-900/30 dark:to-[#0F172A] shadow-2xl shadow-indigo-500/30 scale-105 z-10 relative overflow-hidden',
-      btnStyle: 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/40'
+      style: 'border-fuchsia-500 ring-4 ring-fuchsia-500/20 bg-gradient-to-b from-fuchsia-50 to-white dark:from-fuchsia-900/30 dark:to-[#0F172A] shadow-2xl shadow-fuchsia-500/30 scale-105 z-10 relative overflow-hidden',
+      btnStyle: 'bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-700 hover:to-purple-700 text-white shadow-xl shadow-fuchsia-500/40',
+      textColor: 'text-slate-900 dark:text-white',
+      mutedText: 'text-slate-500 dark:text-slate-400'
     },
     {
       name: 'Elite',
@@ -87,8 +100,9 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
       price: '₹599',
       monthlyPrice: '₹59',
       duration: isAnnual ? '/ year' : '/ month',
-      icon: <Crown className="text-amber-500" size={24} />,
-      badge: 'Royal Tier 👑',
+      annualDiscount: '15%', 
+      icon: <Crown className="text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]" size={30} strokeWidth={2} />,
+      badge: 'VIP Black 👑',
       commission: '3%',
       features: [
         { text: 'Unlimited bids', included: true },
@@ -98,9 +112,12 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
         { text: 'Profile appears on TOP', included: true },
         { text: 'Access to Elite Jobs', included: true },
       ],
-      cta: 'Become Elite',
-      style: 'border-amber-200 dark:border-amber-900/50 bg-gradient-to-b from-white to-amber-50/80 dark:from-[#0F172A] dark:to-amber-900/20 shadow-xl shadow-amber-500/10 hover:shadow-amber-500/20',
-      btnStyle: 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-amber-500/30'
+      cta: 'Claim VIP Status',
+      // 🔥 THE VIP BLACK CARD LOOK
+      style: 'border-amber-500/50 ring-1 ring-amber-500/30 bg-gradient-to-br from-slate-900 via-black to-slate-900 shadow-2xl shadow-amber-900/50 hover:shadow-amber-600/40 transition-all',
+      btnStyle: 'bg-gradient-to-r from-amber-400 to-yellow-600 hover:from-amber-500 hover:to-yellow-700 text-black font-black shadow-lg shadow-amber-500/30',
+      textColor: 'text-white',
+      mutedText: 'text-amber-100/70'
     }
   ];
 
@@ -110,7 +127,6 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
     { q: "What does 'Higher visibility' mean?", a: "The algorithm pushes Pro and Elite profiles to the top of client search results and job application lists, meaning you get hired faster." }
   ];
 
-  // --- ANIMATION VARIANTS ---
   const containerVariants = {
     hidden: { opacity: 0 },
     show: { opacity: 1, transition: { staggerChildren: 0.1 } }
@@ -122,7 +138,7 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
   };
 
   // ==========================================
-  // CLIENT VIEW (Professional & Trustworthy)
+  // CLIENT VIEW
   // ==========================================
   if (isClient) {
     return (
@@ -198,41 +214,40 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
   // ==========================================
   return (
     <div className="py-8 relative min-h-screen">
-      {/* Animated Background Orbs */}
-      <div className="absolute top-20 left-10 w-72 h-72 bg-purple-500/20 rounded-full blur-[100px] -z-10 animate-[pulse_6s_ease-in-out_infinite]"></div>
-      <div className="absolute bottom-40 right-10 w-96 h-96 bg-indigo-500/20 rounded-full blur-[120px] -z-10 animate-[pulse_8s_ease-in-out_infinite_reverse]"></div>
+      <div className="absolute top-20 left-10 w-72 h-72 bg-fuchsia-500/10 rounded-full blur-[100px] -z-10 animate-[pulse_6s_ease-in-out_infinite]"></div>
+      <div className="absolute bottom-40 right-10 w-96 h-96 bg-amber-500/10 rounded-full blur-[120px] -z-10 animate-[pulse_8s_ease-in-out_infinite_reverse]"></div>
 
       {/* HEADER SECTION */}
       <div className="text-center mb-12 relative z-10">
         <motion.div 
           initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-indigo-100 to-purple-100 dark:from-indigo-900/40 dark:to-purple-900/40 text-indigo-800 dark:text-indigo-200 text-sm font-bold mb-6 border border-indigo-200 dark:border-indigo-500/30 shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/40 text-amber-800 dark:text-amber-200 text-sm font-bold mb-6 border border-amber-200 dark:border-amber-500/30 shadow-sm"
         >
-          <Sparkles size={16} className="text-amber-500" /> Invest in Your Hustle
+          <Crown size={16} className="text-amber-500" /> Premium Upgrades
         </motion.div>
         <h2 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mb-4 tracking-tight">
-          Unlock Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">Full Potential</span>
+          Unlock Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-500 to-purple-600">Full Potential</span>
         </h2>
         <p className="text-slate-500 dark:text-gray-400 max-w-xl mx-auto text-lg mb-8">
-          Get exclusive badges, rank higher in search, and keep more of your hard-earned money with lower commission rates. 
+          Get exclusive VIP badges, rank higher in search, and keep more of your hard-earned money with lower commission rates. 
         </p>
 
         {/* BILLING TOGGLE */}
         <div className="flex items-center justify-center gap-4">
-           <span className={`text-sm font-bold ${!isAnnual ? 'text-indigo-600 dark:text-white' : 'text-slate-400'}`}>Monthly</span>
+           <span className={`text-sm font-bold ${!isAnnual ? 'text-fuchsia-600 dark:text-white' : 'text-slate-400'}`}>Monthly</span>
            <button 
              onClick={() => setIsAnnual(!isAnnual)}
              className="w-14 h-7 bg-slate-200 dark:bg-gray-700 rounded-full relative p-1 transition-colors hover:bg-slate-300 dark:hover:bg-gray-600 focus:outline-none"
            >
               <motion.div 
                  layout
-                 className="w-5 h-5 bg-indigo-600 rounded-full shadow-md"
+                 className="w-5 h-5 bg-fuchsia-600 rounded-full shadow-md"
                  animate={{ x: isAnnual ? 28 : 0 }}
                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
               />
            </button>
-           <span className={`text-sm font-bold flex items-center gap-2 ${isAnnual ? 'text-indigo-600 dark:text-white' : 'text-slate-400'}`}>
-             Annually <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">Save 20%</span>
+           <span className={`text-sm font-bold flex items-center gap-2 ${isAnnual ? 'text-fuchsia-600 dark:text-white' : 'text-slate-400'}`}>
+             Annually
            </span>
         </div>
       </div>
@@ -244,7 +259,7 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
         animate="show" 
         className="grid md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-7xl mx-auto px-4 items-end z-10 relative"
       >
-        {freelancerPlans.map((plan, index) => {
+        {freelancerPlans.map((plan) => {
           const isCurrentPlan = currentUserPlan === plan.name;
           
           return (
@@ -254,35 +269,53 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
               whileHover={{ y: -8, transition: { duration: 0.2 } }}
               className={`relative rounded-3xl p-6 border ${plan.style} transition-all duration-300 flex flex-col ${plan.name === 'Pro' ? 'md:h-[105%]' : 'h-full'}`}
             >
-              {/* GLOW EFFECT FOR PRO */}
+              {/* GLOW EFFECT FOR PRO & ELITE */}
               {plan.name === 'Pro' && (
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-fuchsia-500 via-purple-500 to-pink-500"></div>
+              )}
+              {plan.name === 'Elite' && (
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600"></div>
               )}
 
               {/* BADGE */}
               {plan.badge && (
-                <div className={`absolute -top-4 left-1/2 -translate-x-1/2 w-max px-3 py-1 text-white text-xs font-black uppercase tracking-wider rounded-full shadow-lg ${plan.name === 'Pro' ? 'bg-gradient-to-r from-indigo-500 to-purple-500' : 'bg-slate-800 dark:bg-white dark:text-black'}`}>
+                <div className={`absolute -top-4 left-1/2 -translate-x-1/2 w-max px-4 py-1 text-white text-xs font-black uppercase tracking-wider rounded-full shadow-lg ${
+                  plan.name === 'Pro' ? 'bg-gradient-to-r from-fuchsia-500 to-purple-600' : 
+                  plan.name === 'Elite' ? 'bg-gradient-to-r from-amber-400 to-yellow-600 text-black' : 
+                  'bg-slate-800 dark:bg-white dark:text-black'
+                }`}>
                   {plan.badge}
                 </div>
               )}
 
               {/* CARD HEADER */}
               <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className={`p-2 rounded-xl shadow-sm border ${plan.name === 'Elite' ? 'bg-black/50 border-white/10' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700'}`}>
                   {plan.icon}
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white">{plan.name}</h3>
+                <h3 className={`text-xl font-bold ${plan.textColor}`}>{plan.name}</h3>
               </div>
 
               {/* PRICE */}
-              <div className="mb-6 pb-6 border-b border-gray-200/60 dark:border-gray-800/60">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-black text-slate-900 dark:text-white">
-                    {isAnnual ? plan.price : plan.monthlyPrice}
-                  </span>
-                  <span className="text-sm font-bold text-gray-400">{plan.duration}</span>
+              <div className={`mb-6 pb-6 border-b ${plan.name === 'Elite' ? 'border-white/10' : 'border-gray-200/60 dark:border-gray-800/60'}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-baseline gap-1">
+                    <span className={`text-4xl font-black ${plan.textColor}`}>
+                      {isAnnual ? plan.price : plan.monthlyPrice}
+                    </span>
+                    <span className={`text-sm font-bold ${plan.mutedText}`}>{plan.duration}</span>
+                  </div>
+                  {isAnnual && plan.annualDiscount && (
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider border ${
+                        plan.name === 'Elite' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50'
+                    }`}>
+                      Save {plan.annualDiscount}
+                    </span>
+                  )}
                 </div>
-                <div className="mt-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 w-fit px-2.5 py-1 rounded-md border border-emerald-100 dark:border-emerald-800/50 flex items-center gap-1.5">
+                <div className={`mt-3 text-xs font-bold w-fit px-2.5 py-1 rounded-md border flex items-center gap-1.5 ${
+                    plan.name === 'Elite' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/50'
+                }`}>
                   <Zap size={12} fill="currentColor" /> Only {plan.commission} Comm. Rate
                 </div>
               </div>
@@ -292,13 +325,15 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
                 {plan.features.map((feature, i) => (
                   <li key={i} className="flex items-start gap-3 text-sm">
                     {feature.included ? (
-                      <div className="mt-0.5 p-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+                      <div className={`mt-0.5 p-0.5 rounded-full ${
+                          plan.name === 'Elite' ? 'bg-amber-500/20 text-amber-400' : 'bg-fuchsia-50 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400'
+                      }`}>
                          <Check size={14} strokeWidth={3} />
                       </div>
                     ) : (
-                      <X size={16} className="text-gray-300 dark:text-gray-600 shrink-0 mt-0.5" />
+                      <X size={16} className={`shrink-0 mt-0.5 ${plan.name === 'Elite' ? 'text-white/20' : 'text-gray-300 dark:text-gray-600'}`} />
                     )}
-                    <span className={feature.included ? 'text-slate-700 dark:text-gray-200 font-semibold' : 'text-gray-400 dark:text-gray-600 font-medium'}>
+                    <span className={feature.included ? `${plan.textColor} font-semibold` : `${plan.mutedText} font-medium`}>
                       {feature.text}
                     </span>
                   </li>
@@ -307,9 +342,18 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
 
               {/* CALL TO ACTION */}
               <Button 
-                onClick={() => !isCurrentPlan && plan.planId !== 'basic' && onSubscribe(plan, isAnnual)}
+                onClick={() => {
+                  if (!isCurrentPlan && plan.planId !== 'basic') {
+                    setCheckoutPlan({ plan, isAnnual });
+                    setUseWallet(walletBalance > 0);
+                  }
+                }}
                 disabled={isCurrentPlan || plan.planId === 'basic'}
-                className={`w-full py-4 rounded-xl font-black tracking-wide uppercase text-sm flex items-center justify-center gap-2 group ${isCurrentPlan ? 'bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-white/5 border border-gray-200 dark:border-white/10' : plan.btnStyle}`}
+                className={`w-full py-4 rounded-xl font-black tracking-wide uppercase text-sm flex items-center justify-center gap-2 group ${
+                    isCurrentPlan 
+                    ? (plan.name === 'Elite' ? 'bg-white/10 text-white/50 cursor-not-allowed border border-white/10' : 'bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-white/5 border border-gray-200 dark:border-white/10') 
+                    : plan.btnStyle
+                }`}
               >
                 {isCurrentPlan ? 'Current Plan' : plan.cta} 
                 {!isCurrentPlan && plan.name !== 'Basic' && <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />}
@@ -319,7 +363,7 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
         })}
       </motion.div>
 
-      {/* FAQ SECTION (Lightweight & Sleek) */}
+      {/* FAQ SECTION */}
       <div className="max-w-2xl mx-auto mt-24 mb-12 px-4 relative z-10">
         <h3 className="text-xl font-bold text-center text-slate-400 dark:text-gray-500 uppercase tracking-widest mb-8 flex items-center justify-center gap-2">
            Frequently Asked Questions
@@ -331,10 +375,10 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
                 onClick={() => setOpenFaq(openFaq === i ? null : i)}
                 className="w-full flex justify-between items-center py-4 text-left focus:outline-none group"
               >
-                <span className={`font-semibold transition-colors duration-300 ${openFaq === i ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-800 dark:text-gray-200 group-hover:text-indigo-500 dark:group-hover:text-indigo-300'}`}>
+                <span className={`font-semibold transition-colors duration-300 ${openFaq === i ? 'text-fuchsia-600 dark:text-fuchsia-400' : 'text-slate-800 dark:text-gray-200 group-hover:text-fuchsia-500 dark:group-hover:text-fuchsia-300'}`}>
                   {faq.q}
                 </span>
-                <div className={`ml-4 p-1.5 rounded-full transition-all duration-300 flex-shrink-0 ${openFaq === i ? 'rotate-180 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500' : 'bg-slate-100 dark:bg-white/5 text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-white/10'}`}>
+                <div className={`ml-4 p-1.5 rounded-full transition-all duration-300 flex-shrink-0 ${openFaq === i ? 'rotate-180 bg-fuchsia-50 dark:bg-fuchsia-900/30 text-fuchsia-500' : 'bg-slate-100 dark:bg-white/5 text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-white/10'}`}>
                   <ChevronDown size={16} />
                 </div>
               </button>
@@ -357,6 +401,82 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
           ))}
         </div>
       </div>
+
+      {/* 🚀 CUSTOM CHECKOUT MODAL */}
+      {checkoutPlan && (() => {
+         const { plan, isAnnual } = checkoutPlan;
+         const totalCost = plan.priceAmount;
+         const applicableWallet = Math.min(walletBalance, totalCost);
+         const walletDeduction = useWallet ? applicableWallet : 0;
+         const finalPayable = totalCost - walletDeduction;
+
+         const handleConfirm = () => {
+             onSubscribe(plan, isAnnual, walletDeduction, finalPayable);
+             setCheckoutPlan(null);
+         };
+
+         return (
+           <Modal title={`Upgrade to ${plan.name}`} onClose={() => setCheckoutPlan(null)}>
+             <div className="space-y-5">
+               <div className="bg-slate-50 dark:bg-gray-800/50 p-5 rounded-2xl border border-slate-100 dark:border-gray-700">
+                 <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Subscription Summary</h4>
+                 
+                 <div className="flex justify-between items-center text-sm text-slate-600 dark:text-gray-400 mb-3">
+                   <span>{plan.name} Plan ({isAnnual && plan.name !== 'Starter' ? 'Annually' : plan.name === 'Starter' ? '2 Years' : 'Monthly'})</span>
+                   <span className="font-bold text-slate-900 dark:text-white">₹{totalCost.toFixed(2)}</span>
+                 </div>
+                 
+                 {/* Wallet Toggle Section */}
+                 <div className="flex items-center justify-between p-3 mt-4 bg-fuchsia-50 dark:bg-fuchsia-900/20 border border-fuchsia-100 dark:border-fuchsia-800/50 rounded-xl transition-all">
+                   <div className="flex items-center gap-3">
+                     <div className="p-2 bg-fuchsia-100 dark:bg-fuchsia-800/50 rounded-lg">
+                        <Wallet size={16} className="text-fuchsia-600 dark:text-fuchsia-400" />
+                     </div>
+                     <div>
+                       <p className="text-sm font-bold text-fuchsia-900 dark:text-fuchsia-300">Wallet Balance</p>
+                       <p className="text-xs text-fuchsia-600 dark:text-fuchsia-400">Available: ₹{walletBalance.toFixed(2)}</p>
+                     </div>
+                   </div>
+                   
+                   <label className="relative inline-flex items-center cursor-pointer">
+                     <input 
+                       type="checkbox" 
+                       className="sr-only peer" 
+                       checked={useWallet} 
+                       onChange={() => setUseWallet(!useWallet)}
+                       disabled={walletBalance <= 0}
+                     />
+                     <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-600 peer-checked:bg-fuchsia-600"></div>
+                   </label>
+                 </div>
+
+                 {useWallet && walletDeduction > 0 && (
+                   <div className="flex justify-between items-center text-sm text-emerald-600 dark:text-emerald-400 mt-4 font-bold">
+                     <span>Wallet Applied</span>
+                     <span>- ₹{walletDeduction.toFixed(2)}</span>
+                   </div>
+                 )}
+
+                 <div className="h-px bg-slate-200 dark:bg-slate-700 my-4"></div>
+                 
+                 <div className="flex justify-between items-center text-base">
+                   <span className="font-bold text-slate-900 dark:text-white">Amount to Pay</span>
+                   <span className="font-black text-fuchsia-600 dark:text-fuchsia-400 text-2xl">
+                     ₹{finalPayable.toFixed(2)}
+                   </span>
+                 </div>
+               </div>
+
+               <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
+                 <Button variant="ghost" type="button" onClick={() => setCheckoutPlan(null)}>Cancel</Button>
+                 <Button onClick={handleConfirm} className="bg-fuchsia-600 hover:bg-fuchsia-700 text-white shadow-xl shadow-fuchsia-500/20 font-bold">
+                   {finalPayable === 0 ? 'Pay entirely with Wallet' : `Proceed to Pay (₹${finalPayable})`}
+                 </Button>
+               </div>
+             </div>
+           </Modal>
+         );
+      })()}
 
     </div>
   );
