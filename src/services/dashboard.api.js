@@ -628,3 +628,17 @@ export const submitReport = async (reportData) => {
     return { error: err };
   }
 };
+
+// 1. Link code
+export const applyReferralCode = async (userId, referralCode) => {
+    const { data, error } = await supabase.rpc('apply_referral_code', { p_user_id: userId, p_code: referralCode });
+    if (error) return { success: false, error: error.message };
+    return data;
+};
+
+// 2. Claim money
+export const claimReferralReward = async (userId) => {
+    const { data, error } = await supabase.rpc('claim_referral_reward', { p_user_id: userId });
+    if (error) return { success: false, error: error.message };
+    return data;
+};

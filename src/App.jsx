@@ -12,7 +12,7 @@ import { Loader2 } from 'lucide-react';
 import LandingPage from './pages/LandingPage';
 import AboutPage from './pages/AboutPage'; 
 import FaqPage from './pages/FaqPage'; 
-import SafetyPage from './pages/SafetyPage'; // ✅ Imported Safety Page
+import SafetyPage from './pages/SafetyPage'; 
 import Auth from './pages/Auth'; 
 import Dashboard from './pages/Dashboard';
 import Legal from './pages/Legal';
@@ -63,7 +63,7 @@ export default function App() {
           case 'about': 
           case 'about us': navigate('/about'); break; 
           case 'faq': navigate('/faq'); break; 
-          case 'safety': navigate('/safety'); break; // ✅ Added Safety Route mapping
+          case 'safety': navigate('/safety'); break;
           case 'auth': navigate('/auth'); break;
           case 'dashboard': navigate('/dashboard'); break;
           case 'legal': navigate('/legal'); break;
@@ -100,7 +100,7 @@ export default function App() {
   const handleSession = async (session, attempts = 0) => {
     const currentPath = location.pathname;
     
-    // ✅ Added '/safety' alongside faq and about to isPublic paths
+    // ✅ Public paths
     const isPublic = ['/', '/about', '/faq', '/safety', '/auth', '/legal', '/termsagreement', '/parent-approval', '/parent-login'].some(path => currentPath.startsWith(path));
     
     // Variable to check if they are currently trying to view the terms page
@@ -120,7 +120,9 @@ export default function App() {
       const { data: adminCheck } = await supabase.from('admins').select('*').eq('email', u.email).maybeSingle();
       if (adminCheck) {
         setUser({ ...u, type: "admin" });
-        if (currentPath !== '/admin') navigate('/admin');
+        if (currentPath === '/' || currentPath.toLowerCase().startsWith('/auth') || (!currentPath.startsWith('/admin') && !isPublic)) {
+            navigate('/admin');
+        }
         setLoading(false);
         return;
       }
@@ -129,8 +131,9 @@ export default function App() {
       let { data: c } = await supabase.from('clients').select('*').eq('id', u.id).maybeSingle();
       if (c) { 
           setUser({ ...c, type: 'client' }); 
-          // Do not redirect if they are actively trying to view public pages while logged in
-          if (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic) navigate('/dashboard');
+          if (currentPath === '/' || currentPath.toLowerCase().startsWith('/auth') || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
+              navigate('/dashboard');
+          }
           setLoading(false);
           return;
       }
@@ -139,7 +142,9 @@ export default function App() {
       let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
       if (f) { 
           setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] });
-          if (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic) navigate('/dashboard');
+          if (currentPath === '/' || currentPath.toLowerCase().startsWith('/auth') || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
+              navigate('/dashboard');
+          }
           setLoading(false);
           return;
       }
@@ -153,7 +158,9 @@ export default function App() {
 
       if (parentMatch) {
           setUser({ ...u, type: 'parent', teenId: parentMatch.user_id });
-          if (!currentPath.startsWith('/parent-dashboard') && !isPublic) navigate('/parent-dashboard');
+          if (currentPath === '/' || currentPath.toLowerCase().startsWith('/auth') || (!currentPath.startsWith('/parent-dashboard') && !isPublic)) {
+              navigate('/parent-dashboard');
+          }
           setLoading(false);
           return;
       }
@@ -274,7 +281,8 @@ export default function App() {
                 setView={setView} 
                 onLogin={(msg) => showToast(msg)} 
                 onSignUpSuccess={() => {
-                    supabase.auth.getUser().then(({ data }) => {
+                    // ✅ Using getSession() instead of getUser()
+                    supabase.auth.getSession().then(({ data }) => {
                         if(data?.session) handleSession(data.session);
                     });
                 }} 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   DollarSign, Briefcase, Award, ArrowRight, 
-  Gift, Copy, Users, Zap, 
+  Gift, Copy, Users, Zap, ShieldAlert, ShieldCheck, Wallet
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
@@ -30,7 +30,7 @@ const GlassCard = ({ children, className, onClick, delay = 0 }) => (
   >
     {/* Hover Gradient Overlay */}
     <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-transparent dark:from-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-    <div className="relative z-10">{children}</div>
+    <div className="relative z-10 h-full">{children}</div>
   </motion.div>
 );
 
@@ -54,10 +54,13 @@ const TickerItem = ({ label, value, trend }) => (
 
 const Overview = ({ 
   user, isClient, totalEarnings, showToast, jobsCount, 
-  badgesCount, setTab, referralCount, referralEarnings, energy 
+  badgesCount, setTab, referralCount, referralEarnings, energy, setModal 
 }) => {
   
   const [greeting, setGreeting] = useState('Welcome back');
+  
+  // Check KYC Status
+  const isKycVerified = user?.is_kyc_verified || user?.kyc_status === 'verified';
   
   useEffect(() => {
     const hour = new Date().getHours();
@@ -75,11 +78,18 @@ const Overview = ({
 
   const stats = [
     {
+      title: "Wallet Balance",
+      value: `₹${(user?.wallet_balance || 0).toLocaleString()}`,
+      subtitle: !isClient ? "Usable for subscriptions only" : "Available for checkout",
+      icon: Wallet,
+      colorClass: "bg-pink-100 text-pink-700 dark:bg-gradient-to-br dark:from-pink-400 dark:to-rose-500 dark:text-white",
+      action: null
+    },
+    {
       title: isClient ? "Total Investment" : "Total Earnings",
       value: `₹${totalEarnings.toLocaleString()}`,
       subtitle: isClient ? "Lifetime Spend" : "+12% this month",
       icon: DollarSign,
-      // LIGHT: Soft colorful bg, DARK: Neon gradient
       colorClass: "bg-emerald-100 text-emerald-700 dark:bg-gradient-to-br dark:from-emerald-400 dark:to-teal-500 dark:text-white",
       action: null
     },
@@ -109,6 +119,22 @@ const Overview = ({
     }
   ].filter(Boolean);
 
+  // 🚀 BENTO GRID LOGIC
+  const getBentoClass = (index, total) => {
+    if (total === 5) {
+      const classes = [
+        "sm:col-span-2 lg:col-span-6", // 1. Wallet (Half width top row)
+        "sm:col-span-2 lg:col-span-6", // 2. Earnings (Half width top row)
+        "sm:col-span-1 lg:col-span-4", // 3. Missions (1/3 bottom row)
+        "sm:col-span-1 lg:col-span-4", // 4. Reputation (1/3 bottom row)
+        "sm:col-span-2 lg:col-span-4"  // 5. Network (1/3 bottom row, full width on tablets)
+      ];
+      return classes[index];
+    }
+    // Fallback for 4 Cards (Client View) -> Side by side beautifully
+    return "sm:col-span-1 lg:col-span-3";
+  };
+
   return (
     <div className="space-y-8 pb-10 max-w-7xl mx-auto">
       
@@ -137,23 +163,58 @@ const Overview = ({
              </motion.h1>
           </div>
 
-          {!isClient && (
-            <motion.div 
-              initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              className="p-1 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 shadow-xl dark:shadow-none"
-            >
-              <div className="bg-white dark:bg-gray-900 rounded-xl px-5 py-3 flex items-center gap-3">
-                 <div className="relative">
-                   <div className="absolute inset-0 bg-yellow-400 blur-lg opacity-40 animate-pulse"></div>
-                   <Zap size={24} className="text-yellow-500 dark:text-yellow-400 relative z-10 fill-yellow-500 dark:fill-yellow-400" />
-                 </div>
-                 <div>
-                   <div className="text-2xl font-black text-gray-900 dark:text-white leading-none">{energy}</div>
-                   <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Energy Points</div>
-                 </div>
-              </div>
-            </motion.div>
-          )}
+          <div className="flex items-center gap-3">
+            {/* ACTIONABLE KYC CARD */}
+            {!isClient && (
+              <motion.div 
+                initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.2 }}
+                onClick={() => !isKycVerified && setModal('kyc_verification')}
+                className={cn(
+                  "p-1 rounded-2xl shadow-xl dark:shadow-none transition-transform duration-300",
+                  isKycVerified 
+                    ? "bg-gradient-to-r from-green-500 to-emerald-600 cursor-default" 
+                    : "bg-gradient-to-r from-amber-500 to-orange-600 cursor-pointer hover:scale-105"
+                )}
+              >
+                <div className="bg-white dark:bg-gray-900 rounded-xl px-4 py-3 flex items-center gap-3 h-full">
+                   <div className="relative">
+                     {!isKycVerified && <div className="absolute inset-0 bg-amber-400 blur-md opacity-40 animate-pulse"></div>}
+                     {isKycVerified 
+                       ? <ShieldCheck size={24} className="text-green-500 relative z-10" />
+                       : <ShieldAlert size={24} className="text-amber-500 relative z-10" />
+                     }
+                   </div>
+                   <div>
+                     <div className="text-sm font-black text-gray-900 dark:text-white leading-none">
+                       {isKycVerified ? "Verified" : "Action Required"}
+                     </div>
+                     <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mt-1">
+                       {isKycVerified ? "Identity Secured" : "Complete KYC"}
+                     </div>
+                   </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ENERGY POINTS CARD */}
+            {!isClient && (
+              <motion.div 
+                initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.3 }}
+                className="p-1 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 shadow-xl dark:shadow-none"
+              >
+                <div className="bg-white dark:bg-gray-900 rounded-xl px-5 py-3 flex items-center gap-3 h-full">
+                   <div className="relative">
+                     <div className="absolute inset-0 bg-yellow-400 blur-lg opacity-40 animate-pulse"></div>
+                     <Zap size={24} className="text-yellow-500 dark:text-yellow-400 relative z-10 fill-yellow-500 dark:fill-yellow-400" />
+                   </div>
+                   <div>
+                     <div className="text-2xl font-black text-gray-900 dark:text-white leading-none">{energy}</div>
+                     <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mt-1">Energy</div>
+                   </div>
+                </div>
+              </motion.div>
+            )}
+          </div>
         </div>
 
         {/* Live Ticker Bar */}
@@ -176,10 +237,15 @@ const Overview = ({
         </div>
       </div>
 
-      {/* 2. BENTO GRID STATS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 2. DYNAMIC BENTO GRID STATS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
         {stats.map((stat, i) => (
-          <GlassCard key={i} delay={i * 0.1} onClick={stat.action} className="p-6">
+          <GlassCard 
+            key={i} 
+            delay={i * 0.1} 
+            onClick={stat.action} 
+            className={cn("p-6 flex flex-col justify-between h-full", getBentoClass(i, stats.length))}
+          >
             <div className="flex justify-between items-start mb-6">
               <div className={cn("p-3 rounded-2xl shadow-sm", stat.colorClass)}>
                 <stat.icon size={20} />
@@ -188,7 +254,7 @@ const Overview = ({
             </div>
             <div>
               <p className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">{stat.title}</p>
-              <p className="text-3xl font-black text-gray-900 dark:text-white tracking-tight mb-1">{stat.value}</p>
+              <p className="text-3xl lg:text-4xl font-black text-gray-900 dark:text-white tracking-tight mb-1">{stat.value}</p>
               <p className="text-xs font-medium text-gray-500 group-hover:text-indigo-500 dark:group-hover:text-indigo-300 transition-colors">{stat.subtitle}</p>
             </div>
           </GlassCard>
@@ -218,11 +284,11 @@ const Overview = ({
                </span>
              </div>
              <h3 className="text-3xl md:text-4xl font-black text-gray-900 dark:text-white mb-3">
-               Invite Friends, <br/>Get <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 to-amber-600 dark:from-yellow-300 dark:to-amber-500">Infinite Energy ⚡</span>
-             </h3>
-             <p className="text-gray-600 dark:text-gray-400 text-lg leading-relaxed">
-               Share your unique code. When a friend joins, you BOTH get <span className="text-gray-900 dark:text-white font-bold">+50 Energy</span>. It's a win-win for the squad.
-             </p>
+  Invite Friends, <br/>Get <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-emerald-600 dark:from-green-400 dark:to-emerald-400">Wallet Cash 💰</span>
+</h3>
+<p className="text-gray-600 dark:text-gray-400 text-lg leading-relaxed">
+  Share your unique code. When a friend signs up <span className="text-gray-900 dark:text-white font-bold underline decoration-green-400 decoration-2 underline-offset-2">and completes KYC</span>, they get <span className="font-bold text-gray-900 dark:text-white">₹5</span> and you get <span className="font-bold text-gray-900 dark:text-white">₹10</span> added straight to your wallets!
+</p>
           </div>
 
           <div className="w-full md:w-auto">

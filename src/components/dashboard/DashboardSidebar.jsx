@@ -139,7 +139,7 @@ const DashboardSidebar = ({
                 <>
                   <div className="mt-6 mb-2 px-4 text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest">Growth</div>
                   <SidebarItem id="profile" icon={UserCircle} label="My Profile" color="text-pink-500" />
-                  <SidebarItem id="pricing" icon={Crown} label="Level Up (Pro)" color="text-amber-500" badge="Hot" />
+                  <SidebarItem id="pricing" icon={Crown} label="Level Up" color="text-amber-500" />
                   <SidebarItem id="academy" icon={BookOpen} label="Academy" />
                   <SidebarItem id="resume" icon={FileText} label="Resume Builder" color="text-pink-500" badge="New" /> 
                   <SidebarItem id="profile-card" icon={Share2} label="Share Profile" />

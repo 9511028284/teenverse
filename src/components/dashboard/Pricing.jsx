@@ -6,14 +6,18 @@ import {
 } from 'lucide-react';
 import Button from '../ui/Button'; // Adjust path if needed
 
-const Pricing = ({ isClient }) => {
+const Pricing = ({ isClient, user, onSubscribe }) => {
   const [isAnnual, setIsAnnual] = useState(true);
   const [openFaq, setOpenFaq] = useState(null);
+
+  const currentUserPlan = user?.current_plan || 'Basic';
 
   // --- FREELANCER PLANS ---
   const freelancerPlans = [
     {
       name: 'Basic',
+      planId: 'basic',
+      priceAmount: 0,
       price: 'Free',
       monthlyPrice: 'Free',
       duration: 'Forever',
@@ -34,6 +38,8 @@ const Pricing = ({ isClient }) => {
     },
     {
       name: 'Starter',
+      planId: 'starter',
+      priceAmount: 99,
       price: '₹99',
       monthlyPrice: '₹99',
       duration: 'for 2 Years',
@@ -54,6 +60,8 @@ const Pricing = ({ isClient }) => {
     },
     {
       name: 'Pro',
+      planId: 'pro',
+      priceAmount: isAnnual ? 299 : 29,
       price: '₹299',
       monthlyPrice: '₹29',
       duration: isAnnual ? '/ year' : '/ month',
@@ -74,6 +82,8 @@ const Pricing = ({ isClient }) => {
     },
     {
       name: 'Elite',
+      planId: 'elite',
+      priceAmount: isAnnual ? 599 : 59,
       price: '₹599',
       monthlyPrice: '₹59',
       duration: isAnnual ? '/ year' : '/ month',
@@ -234,70 +244,79 @@ const Pricing = ({ isClient }) => {
         animate="show" 
         className="grid md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-7xl mx-auto px-4 items-end z-10 relative"
       >
-        {freelancerPlans.map((plan, index) => (
-          <motion.div 
-            key={plan.name} 
-            variants={itemVariants}
-            whileHover={{ y: -8, transition: { duration: 0.2 } }}
-            className={`relative rounded-3xl p-6 border ${plan.style} transition-all duration-300 flex flex-col ${plan.name === 'Pro' ? 'md:h-[105%]' : 'h-full'}`}
-          >
-            {/* GLOW EFFECT FOR PRO */}
-            {plan.name === 'Pro' && (
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
-            )}
+        {freelancerPlans.map((plan, index) => {
+          const isCurrentPlan = currentUserPlan === plan.name;
+          
+          return (
+            <motion.div 
+              key={plan.name} 
+              variants={itemVariants}
+              whileHover={{ y: -8, transition: { duration: 0.2 } }}
+              className={`relative rounded-3xl p-6 border ${plan.style} transition-all duration-300 flex flex-col ${plan.name === 'Pro' ? 'md:h-[105%]' : 'h-full'}`}
+            >
+              {/* GLOW EFFECT FOR PRO */}
+              {plan.name === 'Pro' && (
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+              )}
 
-            {/* BADGE */}
-            {plan.badge && (
-              <div className={`absolute -top-4 left-1/2 -translate-x-1/2 w-max px-3 py-1 text-white text-xs font-black uppercase tracking-wider rounded-full shadow-lg ${plan.name === 'Pro' ? 'bg-gradient-to-r from-indigo-500 to-purple-500' : 'bg-slate-800 dark:bg-white dark:text-black'}`}>
-                {plan.badge}
-              </div>
-            )}
+              {/* BADGE */}
+              {plan.badge && (
+                <div className={`absolute -top-4 left-1/2 -translate-x-1/2 w-max px-3 py-1 text-white text-xs font-black uppercase tracking-wider rounded-full shadow-lg ${plan.name === 'Pro' ? 'bg-gradient-to-r from-indigo-500 to-purple-500' : 'bg-slate-800 dark:bg-white dark:text-black'}`}>
+                  {plan.badge}
+                </div>
+              )}
 
-            {/* CARD HEADER */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                {plan.icon}
+              {/* CARD HEADER */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                  {plan.icon}
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">{plan.name}</h3>
               </div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white">{plan.name}</h3>
-            </div>
 
-            {/* PRICE */}
-            <div className="mb-6 pb-6 border-b border-gray-200/60 dark:border-gray-800/60">
-              <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-black text-slate-900 dark:text-white">
-                  {isAnnual ? plan.price : plan.monthlyPrice}
-                </span>
-                <span className="text-sm font-bold text-gray-400">{plan.duration}</span>
-              </div>
-              <div className="mt-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 w-fit px-2.5 py-1 rounded-md border border-emerald-100 dark:border-emerald-800/50 flex items-center gap-1.5">
-                <Zap size={12} fill="currentColor" /> Only {plan.commission} Comm. Rate
-              </div>
-            </div>
-
-            {/* FEATURES LIST */}
-            <ul className="space-y-4 mb-8 flex-1">
-              {plan.features.map((feature, i) => (
-                <li key={i} className="flex items-start gap-3 text-sm">
-                  {feature.included ? (
-                    <div className="mt-0.5 p-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
-                       <Check size={14} strokeWidth={3} />
-                    </div>
-                  ) : (
-                    <X size={16} className="text-gray-300 dark:text-gray-600 shrink-0 mt-0.5" />
-                  )}
-                  <span className={feature.included ? 'text-slate-700 dark:text-gray-200 font-semibold' : 'text-gray-400 dark:text-gray-600 font-medium'}>
-                    {feature.text}
+              {/* PRICE */}
+              <div className="mb-6 pb-6 border-b border-gray-200/60 dark:border-gray-800/60">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-black text-slate-900 dark:text-white">
+                    {isAnnual ? plan.price : plan.monthlyPrice}
                   </span>
-                </li>
-              ))}
-            </ul>
+                  <span className="text-sm font-bold text-gray-400">{plan.duration}</span>
+                </div>
+                <div className="mt-3 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 w-fit px-2.5 py-1 rounded-md border border-emerald-100 dark:border-emerald-800/50 flex items-center gap-1.5">
+                  <Zap size={12} fill="currentColor" /> Only {plan.commission} Comm. Rate
+                </div>
+              </div>
 
-            {/* CALL TO ACTION */}
-            <Button className={`w-full py-4 rounded-xl font-black tracking-wide uppercase text-sm flex items-center justify-center gap-2 group ${plan.btnStyle}`}>
-              {plan.cta} {plan.name !== 'Basic' && <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />}
-            </Button>
-          </motion.div>
-        ))}
+              {/* FEATURES LIST */}
+              <ul className="space-y-4 mb-8 flex-1">
+                {plan.features.map((feature, i) => (
+                  <li key={i} className="flex items-start gap-3 text-sm">
+                    {feature.included ? (
+                      <div className="mt-0.5 p-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+                         <Check size={14} strokeWidth={3} />
+                      </div>
+                    ) : (
+                      <X size={16} className="text-gray-300 dark:text-gray-600 shrink-0 mt-0.5" />
+                    )}
+                    <span className={feature.included ? 'text-slate-700 dark:text-gray-200 font-semibold' : 'text-gray-400 dark:text-gray-600 font-medium'}>
+                      {feature.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* CALL TO ACTION */}
+              <Button 
+                onClick={() => !isCurrentPlan && plan.planId !== 'basic' && onSubscribe(plan, isAnnual)}
+                disabled={isCurrentPlan || plan.planId === 'basic'}
+                className={`w-full py-4 rounded-xl font-black tracking-wide uppercase text-sm flex items-center justify-center gap-2 group ${isCurrentPlan ? 'bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-white/5 border border-gray-200 dark:border-white/10' : plan.btnStyle}`}
+              >
+                {isCurrentPlan ? 'Current Plan' : plan.cta} 
+                {!isCurrentPlan && plan.name !== 'Basic' && <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />}
+              </Button>
+            </motion.div>
+          );
+        })}
       </motion.div>
 
       {/* FAQ SECTION (Lightweight & Sleek) */}

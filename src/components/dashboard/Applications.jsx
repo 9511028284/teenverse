@@ -21,6 +21,11 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
   const [chatApp, setChatApp] = useState(null);
   const [chatInitialMessage, setChatInitialMessage] = useState("");
 
+  // --- PREMIUM CHECKOUT STATES ---
+  const [checkoutApp, setCheckoutApp] = useState(null); 
+  const [useWallet, setUseWallet] = useState(false);
+  const walletBalance = user?.wallet_balance || 150.00; // Mock or pull from user state
+
   // --- HANDLERS ---
   const handleReviewSubmit = async (rating, tags) => {
      onAction('review', reviewApp, { rating, tags });
@@ -150,7 +155,8 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
         return (
           <div className="flex gap-2 justify-end">
             <Button size="sm" variant="outline" onClick={() => onAction('reject', app)} className="text-red-500 border-red-200 hover:bg-red-50">Reject</Button>
-            <Button size="sm" onClick={() => onAction('initiate_payment', app)} className="bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1 shadow-md shadow-indigo-200">
+            {/* 🔥 triggers Custom Wallet Checkout instead of immediate action */}
+            <Button size="sm" onClick={() => setCheckoutApp(app)} className="bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1 shadow-md shadow-indigo-200">
               <ShieldCheck size={14}/> Hire & Pay
             </Button>
           </div>
@@ -383,7 +389,79 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
          </div>
        )}
 
-       {/* 2. Release Modal */}
+       {/* 2. Premium Checkout Modal (Wallet Split Support) */}
+       {checkoutApp && (() => {
+         const totalAmount = Number(checkoutApp.bid_amount);
+         const applicableWallet = Math.min(walletBalance, totalAmount);
+         const walletDeduction = useWallet ? applicableWallet : 0;
+         const finalPayable = totalAmount - walletDeduction;
+
+         const handleConfirmCheckout = () => {
+           onAction('accept', checkoutApp, { finalPayable, walletDeduction });
+           setCheckoutApp(null);
+           setUseWallet(false);
+         };
+
+         return (
+           <Modal title="Secure Escrow Checkout" onClose={() => { setCheckoutApp(null); setUseWallet(false); }}>
+             <div className="space-y-5">
+               <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+                 <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3">Order Summary</h4>
+                 <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
+                   <span>Gig Total</span>
+                   <span className="font-semibold text-gray-900 dark:text-white">₹{totalAmount.toFixed(2)}</span>
+                 </div>
+                 
+                 {/* Wallet Toggle Section */}
+                 <div className="flex items-center justify-between p-3 mt-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 rounded-lg">
+                   <div className="flex items-center gap-2">
+                     <Wallet size={16} className="text-indigo-600 dark:text-indigo-400" />
+                     <div>
+                       <p className="text-sm font-bold text-indigo-900 dark:text-indigo-300">Wallet Balance</p>
+                       <p className="text-xs text-indigo-600 dark:text-indigo-400">Available: ₹{walletBalance.toFixed(2)}</p>
+                     </div>
+                   </div>
+                   <label className="relative inline-flex items-center cursor-pointer">
+                     <input 
+                       type="checkbox" 
+                       className="sr-only peer" 
+                       checked={useWallet} 
+                       onChange={() => setUseWallet(!useWallet)}
+                       disabled={walletBalance <= 0}
+                     />
+                     <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                   </label>
+                 </div>
+
+                 {useWallet && walletDeduction > 0 && (
+                   <div className="flex justify-between text-sm text-green-600 dark:text-green-400 mt-3 font-medium">
+                     <span>Wallet Applied</span>
+                     <span>- ₹{walletDeduction.toFixed(2)}</span>
+                   </div>
+                 )}
+
+                 <div className="h-px bg-gray-200 dark:bg-gray-700 my-3"></div>
+                 
+                 <div className="flex justify-between items-center text-base">
+                   <span className="font-bold text-gray-900 dark:text-white">To Pay</span>
+                   <span className="font-black text-gray-900 dark:text-white text-lg">
+                     ₹{finalPayable.toFixed(2)}
+                   </span>
+                 </div>
+               </div>
+
+               <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
+                 <Button variant="ghost" type="button" onClick={() => { setCheckoutApp(null); setUseWallet(false); }}>Cancel</Button>
+                 <Button onClick={handleConfirmCheckout} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
+                   {finalPayable === 0 ? 'Pay with Wallet' : `Proceed to Pay ₹${finalPayable.toFixed(2)}`}
+                 </Button>
+               </div>
+             </div>
+           </Modal>
+         );
+       })()}
+
+       {/* 3. Release Modal */}
        {releaseModal && (
          <Modal title="Confirm Payment Release" onClose={() => setReleaseModal(null)}>
            <div className="space-y-6">
@@ -423,7 +501,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
          </Modal>
        )}
 
-       {/* 3. Reject Modal */}
+       {/* 4. Reject Modal */}
        {rejectModal && (
         <Modal title="Reject & Refund" onClose={() => setRejectModal(null)}>
             <form onSubmit={handleRejectConfirm} className="space-y-4">
@@ -446,7 +524,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
         </Modal>
        )}
        
-       {/* 4. Report Modal */}
+       {/* 5. Report Modal */}
        {reportModal && (
         <Modal title="Submit a Report" onClose={() => setReportModal(null)}>
             <form onSubmit={handleReportSubmit} className="space-y-4">

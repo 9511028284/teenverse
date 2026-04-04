@@ -199,43 +199,28 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   };
 
   // ------------------------------------------
-  // 🔄 DIGILOCKER REDIRECT CATCHER & DOB FETCH
+  // ⚡ ACTION: FETCH DIGILOCKER DATA (SDK SUCCESS)
   // ------------------------------------------
-  useEffect(() => {
-    if (typeof window === 'undefined' || !user) return;
+  const handleDigilockerSuccess = async (verificationId) => {
+    showToast("Fetching Aadhaar details securely...", "info");
+    try {
+        const { data, error } = await supabase.functions.invoke('digilocker', {
+            body: { action: 'GET_DOCUMENT', verification_id: verificationId, user_id: user.id }
+        });
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const dlSuccess = urlParams.get('dl_success');
+        if (error || !data?.success) throw new Error(data?.error || "DigiLocker failed.");
 
-    if (dlSuccess === 'true') {
-      window.history.replaceState({}, document.title, window.location.pathname);
-      const verificationId = localStorage.getItem('cf_verification_id');
-      
-      if (verificationId) {
-          showToast("Fetching Aadhaar details securely...", "info");
-          setModal('kyc_verification'); 
-          
-          supabase.functions.invoke('digilocker', {
-              body: { action: 'GET_DOCUMENT', verification_id: verificationId, user_id: user.id }
-          }).then(({ data, error }) => {
-              if (error || !data?.success) {
-                  console.error("DIGILOCKER BACKEND ERROR:", error || data?.error);
-                  const errorMessage = data?.error || "DigiLocker failed or consent was denied.";
-                  showToast(errorMessage, "error");
-              } else {
-                  setUser(prev => ({ 
-                      ...prev, 
-                      digilocker_verified: true, 
-                      kyc_status: 'age_verified', 
-                      dob: data.dob 
-                  }));
-                  showToast(`Age Verified! Please enter your PAN.`, "success");
-              }
-              localStorage.removeItem('cf_verification_id'); 
-          });
-      }
+        setUser(prev => ({ 
+            ...prev, 
+            digilocker_verified: true, 
+            kyc_status: 'age_verified', 
+            dob: data.dob 
+        }));
+        showToast(`Age Verified! Please enter your PAN.`, "success");
+    } catch (err) {
+        showToast(err.message, "error");
     }
-  }, [user?.id]);
+  };
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -256,7 +241,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
             let userProfileData = null;
             if (!isClient) {
-                // 🚀 FETCH NEW FIELDS
                 const { data } = await supabase
                     .from('freelancers')
                     .select('energy_points, last_login_date, qualification, specialty, resume_url, hourly_rate')
@@ -272,7 +256,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
                 setEnergy(userProfileData.energy_points || 20);
                 if (userProfileData.hourly_rate) setHourlyRate(userProfileData.hourly_rate);
 
-                // 🚀 CHECK IF PROFILE NEEDS SETUP
                 if (!userProfileData.qualification || !userProfileData.specialty) {
                     setNeedsProfileSetup(true);
                 }
@@ -323,7 +306,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
   // 🚀 SMART TRIGGER FOR PROFILE MODAL
   useEffect(() => {
-     // Waits until: Page Loaded AND No Reward Modal showing AND Profile is incomplete AND it hasn't popped up yet
      if (!isLoading && !isClient && needsProfileSetup && !showRewardModal && !modal && !hasPromptedProfile.current) {
          hasPromptedProfile.current = true;
          setTimeout(() => setModal('complete_profile'), 1000);
@@ -348,6 +330,40 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     setShowRewardModal(false);
     hasCheckedReward.current = true;
     setIsClaiming(false);
+  };
+
+  // ------------------------------------------
+  // 💰 ACTION: REDEEM REFERRAL (2-STEP WALLET SYSTEM)
+  // ------------------------------------------
+  const handleRedeemReferral = async (referralCode) => {
+    if (!referralCode || referralCode.trim() === "") {
+        showToast("Please enter a valid code.", "warning");
+        return;
+    }
+
+    showToast("Verifying code...", "info");
+    
+    // Step 1: Apply the code to their profile
+    const applyRes = await api.applyReferralCode(user.id, referralCode.trim());
+    
+    if (applyRes.success) {
+        setUser(prev => ({ ...prev, referred_by: referralCode }));
+        const isKycDone = user?.is_kyc_verified || user?.kyc_status === 'verified';
+        
+        // Step 2: Instantly claim reward if they ALREADY did KYC!
+        if (isKycDone) {
+            const claimRes = await api.claimReferralReward(user.id);
+            if (claimRes.success) {
+                showToast("Code applied & verified! ₹5 added to wallet 💰", "success");
+                setUser(prev => ({ ...prev, wallet_balance: (Number(prev.wallet_balance) || 0) + 5 }));
+            }
+        } else {
+            showToast("Code linked! Complete KYC to unlock your ₹5 reward 💰", "success");
+        }
+        setModal(null);
+    } else {
+        showToast(applyRes.error, "error");
+    }
   };
 
   // ------------------------------------------
@@ -452,6 +468,16 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         }
 
         setModal(null);
+        
+        // 🚀 SECURE REFERRAL UNLOCK: Try to unlock the referral reward now that KYC is done!
+        const reward = await api.claimReferralReward(user.id);
+        if (reward?.success) {
+            setTimeout(() => {
+                showToast("🎉 Referral Bonus Unlocked! ₹5 added to wallet.", "success");
+                setUser(prev => ({ ...prev, wallet_balance: (Number(prev.wallet_balance) || 0) + 5 }));
+            }, 2000);
+        }
+
         return true; 
 
     } catch (err) {
@@ -1094,6 +1120,58 @@ export const useDashboardLogic = (user, setUser, showToast) => {
       } catch (err) { showToast(err.message, "error"); }
   };
 
+  const handleSubscribe = async (plan, isAnnual) => {
+    const cost = plan.priceAmount; // e.g., 299
+    
+    // 1. Check if Wallet can cover it completely
+    if (user.wallet_balance >= cost) {
+        if (!window.confirm(`Use ₹${cost} from your wallet to buy the ${plan.name} plan?`)) return;
+        
+        showToast("Upgrading plan...", "info");
+        // Create an Edge Function called 'process-subscription'
+        const { error } = await supabase.functions.invoke('process-subscription', {
+            body: { userId: user.id, planId: plan.planId, amount: cost, useWallet: true }
+        });
+
+        if (error) return showToast(error.message, "error");
+        
+        showToast(`🎉 Welcome to ${plan.name}!`, "success");
+        // Update local state
+        setUser(prev => ({ 
+            ...prev, 
+            current_plan: plan.name, 
+            wallet_balance: prev.wallet_balance - cost 
+        }));
+        return;
+    }
+
+    // 2. If Wallet isn't enough, open Cashfree Checkout
+    showToast("Opening Secure Checkout...", "info");
+    
+    // Use your existing processCashfreePayment helper!
+    await processCashfreePayment(
+        {
+           amount: cost, // Note: You might want to subtract wallet_balance here if doing split pay
+           customerPhone: user.phone,
+           freelancerId: user.id,
+           appId: `SUB_${plan.planId}_${Date.now()}`, // Fake app ID for subscriptions
+           userId: user.id
+        },
+        async (verifyData) => {
+            // After Cashfree success, hit your backend to upgrade the user
+            const { error } = await supabase.functions.invoke('process-subscription', {
+                body: { userId: user.id, planId: plan.planId, amount: cost, useWallet: false }
+            });
+            if (!error) {
+                showToast(`🎉 Welcome to ${plan.name}!`, "success");
+                setUser(prev => ({ ...prev, current_plan: plan.name }));
+            }
+        },
+        (errorMsg) => { showToast(errorMsg, "error"); }
+    );
+};
+
+
   return {
     state: {
         isClient, tab, menuOpen, zenMode, isLoading, jobs, services, applications, notifications,
@@ -1105,8 +1183,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         userLevel, filteredJobs,
         isQuizLoading, 
         reportModal, activeChat,
-        hourlyRate, // 🚀 ADDED HERE
-        needsProfileSetup // 🚀 ADDED HERE
+        hourlyRate, 
+        needsProfileSetup 
     },
     setters: {
         setTab, setMenuOpen, setZenMode, setModal, setSelectedJob, setShowRewardModal,
@@ -1114,7 +1192,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         setSearchTerm, setProfileForm, setPaymentModal, setParentMode, setRawPortfolioText,
         setEditProfileModal, setViewProfileId, setPublicProfileData, setShowNotifications, setApplications,
         setReportModal, setActiveChat,
-        setHourlyRate // 🚀 ADDED HERE
+        setHourlyRate 
     },
     actions: {
         handlePostJob, 
@@ -1127,7 +1205,10 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         handleBankSubmit,
         startAiQuiz,
         handleReportSubmit,
-        handleCompleteProfileSubmit
+        handleCompleteProfileSubmit,
+        handleDigilockerSuccess,
+        handleRedeemReferral,
+        handleSubscribe // 🚨 EXPORTED HERE
     }
   };
 };

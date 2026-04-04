@@ -600,11 +600,11 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
         </div>
       </section>
 
-      {/* --- COMPARISON TABLE (Pro Upgrade) --- */}
-      <section className={`py-24 px-6 border-t relative overflow-hidden ${darkMode ? 'bg-[#050505] border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+{/* --- COMPARISON TABLE (Pro Upgrade & Mobile Optimized) --- */}
+      <section className={`py-16 md:py-24 px-4 sm:px-6 border-t relative overflow-hidden ${darkMode ? 'bg-[#050505] border-white/5' : 'bg-slate-50 border-slate-200'}`}>
         <div className="max-w-5xl mx-auto relative z-10">
           <RevealOnScroll>
-            <div className="text-center mb-16">
+            <div className="text-center mb-12 md:mb-16">
               <h2 className={`text-3xl md:text-5xl font-black mb-4 tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
                 The TeenVerseHub <span className={darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}>Advantage</span>
               </h2>
@@ -612,56 +612,66 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
           </RevealOnScroll>
 
           <RevealOnScroll>
-            <div className={`relative rounded-3xl border overflow-hidden ${darkMode ? 'bg-[#0a0a0a] border-white/10' : 'bg-white border-slate-200 shadow-2xl shadow-slate-200/50'}`}>
+            <div className={`relative rounded-2xl md:rounded-3xl border overflow-hidden ${darkMode ? 'bg-[#0a0a0a] border-white/10' : 'bg-white border-slate-200 shadow-2xl shadow-slate-200/50'}`}>
               
+              {/* Continuous Highlight Pillar */}
               <div className={`absolute top-0 bottom-0 left-1/3 w-1/3 pointer-events-none ${
                 darkMode ? 'bg-gradient-to-b from-[#ccff00]/10 via-[#ccff00]/5 to-transparent' : 'bg-gradient-to-b from-indigo-50 via-indigo-50/30 to-transparent'
               }`} />
 
-              <div className={`grid grid-cols-3 p-6 md:p-8 border-b items-end ${darkMode ? 'border-white/10' : 'border-slate-100'}`}>
-                <div className={`text-sm md:text-base font-bold uppercase tracking-wider ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
-                  Platform Features
+              {/* Table Header */}
+              <div className={`grid grid-cols-3 p-4 sm:p-6 md:p-8 border-b items-end ${darkMode ? 'border-white/10' : 'border-slate-100'}`}>
+                <div className={`text-[10px] sm:text-sm md:text-base font-bold uppercase tracking-wider ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
+                  Features
                 </div>
+                
                 <div className="relative text-center flex flex-col items-center justify-center">
-                  <span className={`absolute -top-6 px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-widest shadow-lg ${
+                  <span className={`absolute -top-5 md:-top-6 px-2 py-0.5 md:px-3 md:py-1 rounded-full text-[8px] sm:text-[10px] md:text-xs font-bold uppercase tracking-widest shadow-lg whitespace-nowrap ${
                     darkMode ? 'bg-[#ccff00] text-black shadow-[#ccff00]/20' : 'bg-indigo-600 text-white shadow-indigo-500/30'
                   }`}>
                     Built for you
                   </span>
-                  <div className={`text-xl md:text-2xl font-black ${darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}`}>
+                  <div className={`text-sm sm:text-xl md:text-2xl font-black ${darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}`}>
                     TeenVerseHub
                   </div>
                 </div>
-                <div className={`text-center text-sm md:text-base font-bold uppercase tracking-wider ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
-                  Other Platforms
+                
+                <div className={`text-center text-[10px] sm:text-sm md:text-base font-bold uppercase tracking-wider ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
+                  Other <span className="hidden sm:inline">Platforms</span>
                 </div>
               </div>
 
+              {/* Table Rows */}
               <div className="flex flex-col">
                 {[
                   { feature: "Built for Teens", tvh: "Yes", other: "No", tvhIcon: CheckCircle2, otherIcon: XCircle },
                   { feature: "Beginner Friendly", tvh: "Easy Start", other: "Difficult", tvhIcon: CheckCircle2, otherIcon: AlertTriangle },
                   { feature: "Safety Focus", tvh: "High Priority", other: "Limited", tvhIcon: CheckCircle2, otherIcon: AlertTriangle },
                   { feature: "Guardian Transparency", tvh: "Available", other: "Not Available", tvhIcon: CheckCircle2, otherIcon: XCircle },
-                  { feature: "First Earning Support", tvh: "Guided", other: "Not Structured", tvhIcon: CheckCircle2, otherIcon: XCircle },
+                  { feature: "First Earning Support", tvh: "Guided", other: "None", tvhIcon: CheckCircle2, otherIcon: XCircle },
                   { feature: "Competition Level", tvh: "Balanced", other: "Very High", tvhIcon: CheckCircle2, otherIcon: XCircle },
                 ].map((row, i) => (
                   <div 
                     key={i} 
-                    className={`grid grid-cols-3 p-5 md:p-6 items-center relative transition-colors group ${
+                    className={`grid grid-cols-3 p-3 sm:p-5 md:p-6 items-center relative transition-colors group ${
                       darkMode ? 'hover:bg-white/5 border-white/5' : 'hover:bg-slate-50/80 border-slate-100'
                     } ${i !== 5 ? 'border-b' : ''}`}
                   >
-                    <div className={`font-medium md:text-lg pl-2 md:pl-4 ${darkMode ? 'text-white' : 'text-slate-800'}`}>
+                    {/* Feature Name */}
+                    <div className={`text-xs sm:text-sm md:text-lg font-medium pl-1 sm:pl-2 md:pl-4 pr-2 leading-tight ${darkMode ? 'text-white' : 'text-slate-800'}`}>
                       {row.feature}
                     </div>
-                    <div className={`flex flex-row items-center justify-center gap-2 text-center font-bold relative z-10 ${darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}`}>
-                      <row.tvhIcon size={20} />
-                      <span className="text-sm md:text-base">{row.tvh}</span>
+                    
+                    {/* TeenVerseHub Column - Stacks icon and text on mobile */}
+                    <div className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 text-center font-bold relative z-10 ${darkMode ? 'text-[#ccff00]' : 'text-indigo-600'}`}>
+                      <row.tvhIcon className="w-4 h-4 md:w-5 md:h-5" />
+                      <span className="text-[10px] sm:text-sm md:text-base leading-none">{row.tvh}</span>
                     </div>
-                    <div className={`flex flex-row items-center justify-center gap-2 text-center font-medium ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
-                      <row.otherIcon size={18} className="opacity-50" />
-                      <span className="text-sm md:text-base">{row.other}</span>
+                    
+                    {/* Other Platforms Column - Stacks icon and text on mobile */}
+                    <div className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 text-center font-medium ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
+                      <row.otherIcon className="w-4 h-4 md:w-[18px] md:h-[18px] opacity-50" />
+                      <span className="text-[10px] sm:text-sm md:text-base leading-none">{row.other}</span>
                     </div>
                   </div>
                 ))}
@@ -670,7 +680,7 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
           </RevealOnScroll>
 
           <RevealOnScroll delay={0.2}>
-            <p className={`mt-8 text-center text-sm md:text-base font-medium italic ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
+            <p className={`mt-6 md:mt-8 px-4 text-center text-xs sm:text-sm md:text-base font-medium italic ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
               “TeenVerseHub isn’t about competing with professionals — <span className={darkMode ? 'text-white not-italic' : 'text-slate-900 not-italic'}>it’s about helping you become one.</span>”
             </p>
           </RevealOnScroll>
@@ -952,4 +962,5 @@ const LandingPage = ({ setView, darkMode, toggleTheme, onLegalClick }) => {
   );
 };
 
-export default LandingPage;
+export default
+LandingPage;
