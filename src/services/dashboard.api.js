@@ -642,3 +642,59 @@ export const claimReferralReward = async (userId) => {
     if (error) return { success: false, error: error.message };
     return data;
 };
+
+// 1. Fetch user's active tickets
+export const fetchUserTickets = async (userId) => {
+    const { data, error } = await supabase
+        .from('support_tickets')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false });
+    return { data, error };
+};
+
+// 2. Create a new ticket & initial message
+export const createTicket = async (userId, subject, initialMessage) => {
+    // Create Ticket
+    const { data: ticket, error: ticketErr } = await supabase
+        .from('support_tickets')
+        .insert({ user_id: userId, subject: subject })
+        .select()
+        .single();
+
+    if (ticketErr) return { error: ticketErr };
+
+    // Insert First Message
+    const { error: msgErr } = await supabase
+        .from('support_messages')
+        .insert({
+            ticket_id: ticket.id,
+            sender_id: userId,
+            is_admin: false,
+            message: initialMessage
+        });
+
+    return { ticket, error: msgErr };
+};
+
+// 3. Send a message in an existing ticket
+export const sendSupportMessage = async (ticketId, userId, message, isAdmin = false) => {
+    const { error } = await supabase
+        .from('support_messages')
+        .insert({ ticket_id: ticketId, sender_id: userId, is_admin: isAdmin, message });
+        
+    // Update ticket 'updated_at' to bump it to the top of the admin list
+    await supabase.from('support_tickets').update({ updated_at: new Date() }).eq('id', ticketId);
+
+    return { error };
+};
+
+// 4. Fetch messages for a specific ticket
+export const fetchTicketMessages = async (ticketId) => {
+    const { data, error } = await supabase
+        .from('support_messages')
+        .select('*')
+        .eq('ticket_id', ticketId)
+        .order('created_at', { ascending: true });
+    return { data, error };
+};

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Search, MapPin, ArrowUpRight, Sparkles, Filter, Briefcase, 
   ChevronDown, ChevronUp, Clock, Calendar, DollarSign, Flag, AlertTriangle,
-  Loader2, Flame, Zap
+  Loader2, Flame, Zap, Crown
 } from 'lucide-react';
 import { supabase } from '../../supabase'; 
 import Button from '../ui/Button';
@@ -70,40 +70,81 @@ const AiResultCard = ({ title, icon, freelancer, colorClass, setActiveChat, setT
     );
 };
 
-// --- STANDARD CARD COMPONENT ---
+// --- STANDARD & ELITE CARD COMPONENT ---
 const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setTab, setSelectedJob }) => {
     const [isExpanded, setIsExpanded] = useState(false);
-    
-    const gradients = [
-        "from-pink-500/80 via-rose-500/80 to-yellow-500/80", 
-        "from-blue-400/80 via-indigo-500/80 to-purple-500/80", 
-        "from-emerald-400/80 via-teal-500/80 to-cyan-500/80", 
-    ];
-    const gradient = gradients[(data.id || 0) % gradients.length];
     
     // Safety Fallbacks
     const description = data?.description || "No description provided.";
     const isLongText = description.length > 120;
     const displayName = isClient ? (data.freelancer_name || 'Freelancer') : (data.client_name || 'Client');
 
+    // Elite Mode Check
+    const isElite = data.is_elite && !isClient;
+
+    // Standard Gradients
+    const gradients = [
+        "from-pink-500/80 via-rose-500/80 to-yellow-500/80", 
+        "from-blue-400/80 via-indigo-500/80 to-purple-500/80", 
+        "from-emerald-400/80 via-teal-500/80 to-cyan-500/80", 
+    ];
+    
+    // Dynamic Styling Variables
+    const headerGradient = isElite 
+        ? "from-amber-600/60 via-yellow-500/40 to-orange-700/60" 
+        : gradients[(data.id || 0) % gradients.length];
+        
+    const cardBg = isElite 
+        ? "bg-gradient-to-br from-[#1a1a1a] via-[#111111] to-[#000000] border-amber-500/30 hover:border-amber-400 shadow-[0_4px_20px_rgba(0,0,0,0.5)] hover:shadow-[0_8px_30px_rgba(245,158,11,0.25)]" 
+        : "bg-white dark:bg-[#09090b] border-gray-200 dark:border-white/10 hover:border-indigo-500/30 dark:hover:border-indigo-500/50 hover:shadow-xl";
+        
+    const titleColor = isElite 
+        ? "text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 drop-shadow-sm" 
+        : "text-gray-900 dark:text-white";
+        
+    const pillBg = isElite 
+        ? "bg-amber-500/10 border-amber-500/20" 
+        : "bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/5";
+        
+    const pillText = isElite ? "text-amber-100" : "text-gray-700 dark:text-gray-200";
+    const subText = isElite ? "text-amber-200/50" : "text-gray-400 uppercase";
+    const iconColor = isElite ? "text-amber-400" : "text-indigo-500 dark:text-indigo-400";
+    const typeIconColor = isElite ? "text-amber-400" : "text-purple-500 dark:text-purple-400";
+    const descriptionColor = isElite ? "text-gray-300" : "text-gray-600 dark:text-gray-300";
+    const tagBg = isElite ? "bg-amber-500/20 border-amber-500/30 text-amber-200" : "bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/5 text-gray-600 dark:text-gray-300";
+    const priceColor = isElite ? "text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-500" : "text-gray-900 dark:text-white";
+
     return (
-      <div className="group relative bg-white dark:bg-[#09090b] rounded-[24px] border border-gray-200 dark:border-white/10 hover:border-indigo-500/30 dark:hover:border-indigo-500/50 transition-all duration-500 hover:-translate-y-1 hover:shadow-xl overflow-hidden flex flex-col h-full">
-        <div className={`h-28 w-full relative overflow-hidden bg-gradient-to-br ${gradient}`}>
+      <div className={`group relative rounded-[24px] border transition-all duration-500 hover:-translate-y-1 overflow-hidden flex flex-col h-full ${cardBg}`}>
+        
+        {/* ELITE BADGE - ENHANCED */}
+        {isElite && (
+            <div className="absolute top-4 left-4 bg-gradient-to-r from-yellow-400 via-amber-500 to-orange-500 text-black px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] font-black shadow-[0_0_15px_rgba(245,158,11,0.6)] z-20 overflow-hidden ring-1 ring-white/30">
+                <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-white/60 to-transparent -translate-x-full animate-shimmer skew-x-12"></div>
+                <Crown size={12} className="fill-black relative z-10" /> 
+                <span className="relative z-10 tracking-wider">ELITE</span>
+            </div>
+        )}
+
+        <div className={`h-28 w-full relative overflow-hidden bg-gradient-to-br ${headerGradient}`}>
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-30 mix-blend-overlay"></div>
-            <div className="absolute bottom-0 left-0 w-full h-2/3 bg-gradient-to-t from-white dark:from-[#09090b] to-transparent"></div>
-            <div className="absolute top-4 right-4 bg-white/90 dark:bg-black/40 backdrop-blur-md border border-gray-200 dark:border-white/10 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                <span className="text-[10px] font-bold text-gray-800 dark:text-white uppercase tracking-wider">{type}</span>
+            
+            {/* Smooth transition from gradient to card bg */}
+            <div className={`absolute bottom-0 left-0 w-full h-2/3 bg-gradient-to-t ${isElite ? 'from-[#1a1a1a]' : 'from-white dark:from-[#09090b]'} to-transparent`}></div>
+            
+            <div className={`absolute top-4 right-4 ${isElite ? 'bg-black/60 border-amber-500/30 text-amber-300' : 'bg-white/90 dark:bg-black/40 border-gray-200 dark:border-white/10 text-gray-800 dark:text-white'} backdrop-blur-md border px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm z-20`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isElite ? 'bg-amber-400' : 'bg-green-500'} animate-pulse shadow-[0_0_8px_currentColor]`}></span>
+                <span className="text-[10px] font-bold uppercase tracking-wider">{type}</span>
             </div>
         </div>
 
         <div className="p-6 pt-0 flex flex-col flex-grow relative z-10 -mt-2">
             <div className="mb-4">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white leading-tight mb-2 line-clamp-2 transition-all">
+              <h3 className={`text-xl font-bold leading-tight mb-2 transition-all ${isExpanded ? '' : 'line-clamp-2'} ${titleColor}`}>
                   {data.title || 'Untitled Operation'}
               </h3>
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center text-[10px] text-gray-600 dark:text-gray-300">
+              <p className={`text-xs font-medium flex items-center gap-2 ${isElite ? 'text-gray-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${isElite ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300'}`}>
                     {displayName.charAt(0)}
                   </span>
                   {isClient ? `Freelancer: ${displayName}` : `Client: ${displayName}`}
@@ -111,34 +152,36 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
             </div>
 
             <div className="grid grid-cols-2 gap-2 mb-5">
-                <div className="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl p-2.5 flex items-center gap-2">
-                    <Clock size={14} className="text-indigo-500 dark:text-indigo-400"/>
+                <div className={`border rounded-xl p-2.5 flex items-center gap-2 transition-colors ${pillBg}`}>
+                    <Clock size={14} className={iconColor}/>
                     <div>
-                        <p className="text-[9px] text-gray-400 uppercase font-bold">Duration</p>
-                        <p className="text-xs font-bold text-gray-700 dark:text-gray-200">{data.duration || "Flexible"}</p>
+                        <p className={`text-[9px] font-bold ${subText}`}>Duration</p>
+                        <p className={`text-xs font-bold ${pillText}`}>{data.duration || "Flexible"}</p>
                     </div>
                 </div>
-                <div className="bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl p-2.5 flex items-center gap-2">
-                    <Briefcase size={14} className="text-purple-500 dark:text-purple-400"/>
+                <div className={`border rounded-xl p-2.5 flex items-center gap-2 transition-colors ${pillBg}`}>
+                    <Briefcase size={14} className={typeIconColor}/>
                     <div>
-                        <p className="text-[9px] text-gray-400 uppercase font-bold">Type</p>
-                        <p className="text-xs font-bold text-gray-700 dark:text-gray-200">{data.job_type || "Fixed Price"}</p>
+                        <p className={`text-[9px] font-bold ${subText}`}>Type</p>
+                        <p className={`text-xs font-bold ${pillText}`}>{data.job_type || "Fixed Price"}</p>
                     </div>
                 </div>
-                <div className="col-span-2 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl p-2 flex items-center gap-2 justify-center">
-                    <Calendar size={12} className="text-gray-400"/>
-                    <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">Posted {getTimeAgo(data.created_at)}</span>
+                <div className={`col-span-2 border rounded-xl p-2 flex items-center gap-2 justify-center transition-colors ${pillBg}`}>
+                    <Calendar size={12} className={isElite ? "text-amber-500/50" : "text-gray-400"}/>
+                    <span className={`text-[10px] font-medium ${isElite ? 'text-amber-200/70' : 'text-gray-500 dark:text-gray-400'}`}>
+                        Posted {getTimeAgo(data.created_at)}
+                    </span>
                 </div>
             </div>
 
             <div className="mb-6 relative">
-                <p className={`text-sm text-gray-600 dark:text-gray-300 leading-relaxed ${isExpanded ? '' : 'line-clamp-3'}`}>
+                <p className={`text-sm leading-relaxed ${isExpanded ? '' : 'line-clamp-3'} ${descriptionColor}`}>
                     {description}
                 </p>
                 {isLongText && (
                     <button 
                         onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
-                        className="mt-2 text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 transition-colors"
+                        className={`mt-2 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors hover:underline ${isElite ? 'text-amber-400 hover:text-amber-300' : 'text-indigo-600 dark:text-indigo-400'}`}
                     >
                         {isExpanded ? <>Collapse Details <ChevronUp size={12} /></> : <>Read Full Details <ChevronDown size={12} /></>}
                     </button>
@@ -147,17 +190,18 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
 
             <div className="flex flex-wrap gap-2 mb-6 mt-auto">
                 {(data.tags ? data.tags.split(',') : [data.category || 'Gig']).slice(0,3).map((t,i) => (
-                    <span key={i} className="px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/5 text-[10px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                    <span key={i} className={`px-2.5 py-1 rounded-lg border text-[10px] font-semibold uppercase tracking-wide ${tagBg}`}>
                         {t}
                     </span>
                 ))}
             </div>
 
-            <div className="pt-4 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
+            <div className={`pt-4 border-t flex items-center justify-between ${isElite ? 'border-amber-500/20' : 'border-gray-100 dark:border-white/5'}`}>
                 <div>
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-bold mb-0.5">Budget</p>
-                    <div className="flex items-center text-gray-900 dark:text-white font-black text-lg">
-                        <span className="text-sm text-gray-400 font-medium mr-0.5">₹</span>{data.price || data.budget || 0}
+                    <p className={`text-[10px] uppercase tracking-widest font-bold mb-0.5 ${isElite ? 'text-amber-500/70' : 'text-gray-400 dark:text-gray-500'}`}>Budget</p>
+                    <div className={`flex items-center font-black text-lg ${priceColor}`}>
+                        <span className={`text-sm font-medium mr-0.5 ${isElite ? 'text-amber-600' : 'text-gray-400'}`}>₹</span>
+                        {data.price || data.budget || 0}
                     </div>
                     <button 
                       onClick={(e) => {
@@ -166,7 +210,7 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
                          if (onAction) onAction('report', reportPayload);
                          else if (setModal) setModal(reportPayload); 
                       }}
-                      className="text-[10px] text-gray-300 hover:text-red-500 flex items-center gap-1 mt-1 transition-colors"
+                      className={`text-[10px] flex items-center gap-1 mt-1 transition-colors ${isElite ? 'text-gray-500 hover:text-red-400' : 'text-gray-300 hover:text-red-500'}`}
                     >
                       <Flag size={10} /> Report
                     </button>
@@ -177,10 +221,14 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
                      (setActiveChat({ id: data.freelancer_id, name: data.freelancer_name, application_id: data.id }), setTab('messages')) : 
                      (setSelectedJob(data), setModal('apply-job'))
                    }
-                   className="h-10 px-5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black font-bold text-sm flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg"
+                   className={`h-10 px-5 rounded-xl font-bold text-sm flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg ${
+                     isElite 
+                     ? 'bg-gradient-to-r from-amber-400 to-yellow-600 text-black hover:shadow-[0_0_20px_rgba(245,158,11,0.4)] border border-amber-300' 
+                     : 'bg-gray-900 dark:bg-white text-white dark:text-black'
+                   }`}
                 >
                     {isClient ? 'Chat' : 'Apply'}
-                    <ArrowUpRight size={16} strokeWidth={2.5}/>
+                    <ArrowUpRight size={16} strokeWidth={isElite ? 3 : 2.5}/>
                 </button>
             </div>
         </div>
@@ -189,24 +237,39 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
 }
 
 // --- MAIN JOBS COMPONENT ---
-const Jobs = ({ isClient, services = [], filteredJobs = [], searchTerm, setSearchTerm, setModal, setActiveChat, setTab, setSelectedJob, onAction }) => {
+const Jobs = ({ 
+    user, showToast, isClient, services = [], filteredJobs = [], 
+    searchTerm, setSearchTerm, setModal, setActiveChat, setTab, setSelectedJob, onAction 
+}) => {
   
   const [reportModal, setReportModal] = useState(null);
   const [isAiSearching, setIsAiSearching] = useState(false);
   const [aiResults, setAiResults] = useState(null);
   const [parsedData, setParsedData] = useState(null);
+  
+  const [jobView, setJobView] = useState('normal'); 
 
-  // 🛡️ SECURITY FILTER: Prevent Direct Hire jobs and Accepted/Closed jobs from showing on the public board
   const publicMissions = filteredJobs.filter(job => {
-      // Hide jobs that were created purely for a 1-on-1 chat
       if (job.category === 'Direct Hire') return false;
-      
-      // Hide jobs that are no longer accepting proposals (They have an active status)
-      // If job.status doesn't exist on your joined query, it will fall back to showing it.
       if (job.status && !['Pending', 'Open'].includes(job.status)) return false;
+
+      if (jobView === 'elite' && !job.is_elite) return false; 
+      if (jobView === 'normal' && job.is_elite) return false; 
 
       return true;
   });
+
+  const handleToggle = (view) => {
+      if (view === 'elite' && user?.current_plan !== 'Elite') {
+          if (showToast) {
+              showToast("You have to subscribe to Elite to access elite jobs.", "error");
+          } else {
+              alert("You have to subscribe to Elite to access elite jobs.");
+          }
+          return;
+      }
+      setJobView(view);
+  };
 
   const handleReportSubmit = (e) => {
     e.preventDefault();
@@ -246,15 +309,15 @@ const Jobs = ({ isClient, services = [], filteredJobs = [], searchTerm, setSearc
   };
 
   return (
-    <div className="min-h-screen space-y-8 animate-fade-in pb-20">
+    <div className="min-h-screen space-y-8 animate-fade-in pb-20 relative">
       
       {/* --- COMMAND BAR --- */}
-      <div className="sticky top-6 z-40 mx-auto max-w-3xl px-4">
+      <div className="sticky top-6 z-[100] mx-auto max-w-3xl px-4">
         {isClient ? (
           <>
             <form onSubmit={handleAiSearch} className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full blur opacity-10 group-hover:opacity-30 transition-opacity"></div>
-                <div className="relative bg-white/90 dark:bg-[#0F172A]/90 backdrop-blur-xl border border-gray-200 dark:border-white/10 rounded-full p-2 flex items-center shadow-xl">
+                <div className="relative bg-white/90 dark:bg-[#0F172A]/90 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-full p-2 flex items-center shadow-xl">
                     {isAiSearching ? <Loader2 className="ml-4 text-indigo-500 animate-spin" size={20} /> : <Sparkles className={`ml-4 ${searchTerm ? 'text-indigo-500 animate-pulse' : 'text-gray-400'}`} size={20}/>}
                     <input 
                         type="text" 
@@ -275,10 +338,10 @@ const Jobs = ({ isClient, services = [], filteredJobs = [], searchTerm, setSearc
             </form>
             {parsedData && (
               <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 flex items-center gap-2 whitespace-nowrap animate-fade-in-up">
-                  <span className="px-3 py-1 bg-white/80 dark:bg-black/80 backdrop-blur border border-gray-200 dark:border-white/10 text-[10px] font-bold text-gray-600 dark:text-gray-300 rounded-full flex items-center gap-1 shadow-sm">
+                  <span className="px-3 py-1 bg-white/90 dark:bg-black/90 backdrop-blur border border-gray-200 dark:border-white/10 text-[10px] font-bold text-gray-600 dark:text-gray-300 rounded-full flex items-center gap-1 shadow-sm">
                     <DollarSign size={12} className="text-emerald-500"/> Max: ₹{parsedData.budget || 'Open'}
                   </span>
-                  <span className="px-3 py-1 bg-white/80 dark:bg-black/80 backdrop-blur border border-gray-200 dark:border-white/10 text-[10px] font-bold text-gray-600 dark:text-gray-300 rounded-full flex items-center gap-1 shadow-sm">
+                  <span className="px-3 py-1 bg-white/90 dark:bg-black/90 backdrop-blur border border-gray-200 dark:border-white/10 text-[10px] font-bold text-gray-600 dark:text-gray-300 rounded-full flex items-center gap-1 shadow-sm">
                     <Clock size={12} className="text-rose-500"/> {parsedData.urgency || 'Normal'} priority
                   </span>
               </div>
@@ -287,7 +350,7 @@ const Jobs = ({ isClient, services = [], filteredJobs = [], searchTerm, setSearc
         ) : (
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full blur opacity-10 transition-opacity"></div>
-            <div className="relative bg-white/90 dark:bg-[#0F172A]/90 backdrop-blur-xl border border-gray-200 dark:border-white/10 rounded-full p-2 flex items-center shadow-xl">
+            <div className="relative bg-white/95 dark:bg-[#0F172A]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-full p-2 flex items-center shadow-2xl">
                 <Search className="ml-4 text-gray-400" size={20}/>
                 <input 
                     type="text" 
@@ -298,7 +361,7 @@ const Jobs = ({ isClient, services = [], filteredJobs = [], searchTerm, setSearc
                 />
                 <div className="pr-1 flex gap-2">
                     <button type="button" className="w-10 h-10 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center text-gray-400 transition-all"><Filter size={18}/></button>
-                    <Button type="button" className="rounded-full px-6 bg-gray-900 dark:bg-white text-white dark:text-black font-bold tracking-tight">SEARCH</Button>
+                    <Button type="button" className="rounded-full px-6 bg-gray-900 dark:bg-white text-white dark:text-black font-bold tracking-tight shadow-md">SEARCH</Button>
                 </div>
             </div>
           </div>
@@ -325,11 +388,32 @@ const Jobs = ({ isClient, services = [], filteredJobs = [], searchTerm, setSearc
       )}
 
       {/* --- MAIN FEED --- */}
-      <div className="px-4">
-          <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight uppercase italic mb-6">
-             {isClient ? 'Talent Catalog' : 'Mission Board'}
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="px-4 mt-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+              <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight uppercase italic">
+                 {isClient ? 'Talent Catalog' : 'Mission Board'}
+              </h2>
+              
+              {/* ELITE TOGGLE FOR FREELANCERS ONLY */}
+              {!isClient && (
+                  <div className="bg-gray-100 dark:bg-white/5 p-1 rounded-full flex items-center border border-gray-200 dark:border-white/10 w-fit shrink-0">
+                      <button 
+                          onClick={() => handleToggle('normal')}
+                          className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${jobView === 'normal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                      >
+                          Normal
+                      </button>
+                      <button 
+                          onClick={() => handleToggle('elite')}
+                          className={`px-5 py-2 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${jobView === 'elite' ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-white shadow-md shadow-amber-500/20' : 'text-gray-500 hover:text-amber-500'}`}
+                      >
+                          <Crown size={14} className={jobView === 'elite' ? 'fill-white' : ''}/> Elite
+                      </button>
+                  </div>
+              )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative z-10">
             {isClient 
                 ? services.map(s => <JobCard key={s.id} data={s} type="Gig" isClient={isClient} onAction={onAction} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} />)
                 : publicMissions.map(j => <JobCard key={j.id} data={j} type="Mission" isClient={isClient} onAction={onAction} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} />)
@@ -342,11 +426,13 @@ const Jobs = ({ isClient, services = [], filteredJobs = [], searchTerm, setSearc
         <div className="flex flex-col items-center justify-center py-32 border-2 border-dashed border-gray-200 dark:border-white/5 rounded-[40px] bg-gray-50 dark:bg-white/5 m-4 text-center">
            <Briefcase size={48} className="text-gray-300 mb-4"/>
            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Void Detected</h3>
-           <p className="text-gray-500 dark:text-gray-400 text-sm max-w-xs mx-auto">No signals matching your query. Try adjusting your search terms.</p>
+           <p className="text-gray-500 dark:text-gray-400 text-sm max-w-xs mx-auto">
+               {jobView === 'elite' ? "No Elite Missions currently available. Check back later!" : "No signals matching your query. Try adjusting your search terms."}
+           </p>
         </div>
       )}
 
-      {/* --- REPORT MODAL (Local) --- */}
+      {/* --- REPORT MODAL --- */}
       {reportModal && (
         <Modal title="Report Post" onClose={() => setReportModal(null)}>
             <form onSubmit={handleReportSubmit} className="space-y-4">
@@ -369,7 +455,17 @@ const Jobs = ({ isClient, services = [], filteredJobs = [], searchTerm, setSearc
             </form>
         </Modal>
       )}
-      <style dangerouslySetInnerHTML={{__html: `.hide-scrollbar::-webkit-scrollbar{display:none;} .hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none;}`}} />
+      <style dangerouslySetInnerHTML={{__html: `
+        .hide-scrollbar::-webkit-scrollbar{display:none;} 
+        .hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none;}
+        @keyframes shimmer {
+            0% { transform: translateX(-150%) skewX(12deg); }
+            100% { transform: translateX(150%) skewX(12deg); }
+        }
+        .animate-shimmer {
+            animation: shimmer 2.5s infinite linear;
+        }
+      `}} />
     </div>
   );
 };

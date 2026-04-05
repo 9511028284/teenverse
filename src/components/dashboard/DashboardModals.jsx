@@ -11,6 +11,7 @@ import Button from '../ui/Button';
 
 // Modals
 import PostJobModal from '../modals/PostJobModal';
+import SupportChatModal from '../modals/SupportChatModal';
 import CreateServiceModal from '../modals/CreateServiceModal';
 import ApplyJobModal from '../modals/ApplyJobModal';
 import PaymentModal from '../modals/PaymentModal';
@@ -33,7 +34,7 @@ const DashboardModals = ({ user, logic, showToast }) => {
     setModal, setShowRewardModal, setKycFile, setTimelineApp, 
     setViewWorkApp, setScore, setCurrentQuestionIndex, 
     setViewProfileId, setPublicProfileData, setEditProfileModal, 
-    setPaymentModal, setTab 
+    setPaymentModal, setTab, setSelectedJob 
   } = setters;
 
   // 💅 Premium Shared Styles
@@ -74,6 +75,15 @@ const DashboardModals = ({ user, logic, showToast }) => {
           onClose={() => setModal(null)}
         />
       )}
+
+      {/* IN-APP SUPPORT CHAT */}
+{modal === 'support-chat' && (
+    <SupportChatModal 
+        user={user} 
+        showToast={showToast} 
+        onClose={() => setModal(null)} 
+    />
+)}
 
         {/* JOBS & SERVICES */}
         {modal === 'post-job' && <PostJobModal onClose={() => setModal(null)} onSubmit={actions.handlePostJob} />}

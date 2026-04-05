@@ -215,11 +215,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
    />
 )}
 
-{/* 🚀 RENDER THE SUPPORT HUB */}
 {tab === 'support' && (
     <SupportHub 
         user={user} 
         showToast={showToast} 
+        setModal={setters.setModal} // <-- MAKE SURE THIS IS HERE! (Use setters.setModal or just setModal depending on your setup)
     />
 )}
                   

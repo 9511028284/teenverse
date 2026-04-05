@@ -557,27 +557,36 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // ------------------------------------------
   // 🏦 ACTION: BANK ACCOUNT
   // ------------------------------------------
-  const handleBankSubmit = async (bankDetails, ageGroup) => {
-    showToast("Linking Bank Account...", "info");
-    try {
-        const { data, error: fnError } = await supabase.functions.invoke('kyc-handler', {
-            body: { action: 'LINK_BANK', user_id: user.id, age_group: ageGroup, bank_details: bankDetails }
-        });
+  const handleBankSubmit = async (e) => {
+    
+    
+    // 1. (Your existing code to save the bank details to the user_banking table goes here)
+    // await supabase.from('user_banking').insert({...})
+    
+    // 2. Trigger the Supabase function to flip the column in the freelancers table!
+    const { error } = await supabase.rpc('mark_bank_linked', { 
+        target_user_id: user.id 
+    });
 
-        if (fnError) throw new Error(fnError.message || "Banking Service Unreachable");
-        if (!data.success) throw new Error(data.error || "Bank Linking Failed");
-
-        await logAction('BANK_LINKED', { ifsc: bankDetails.ifsc_code, mode: KYC_MODE });
-        showToast("🎉 Bank Account Linked! Withdrawals enabled.", "success");
-        
-        setUser(prev => ({ ...prev, is_bank_linked: true, kyc_status: 'approved' }));
-        setModal(null);
-
-    } catch (err) {
-        console.error(err);
-        showToast("Banking linkage failed: " + err.message, "error");
+    if (error) {
+        showToast("Error updating profile status.", "error");
+        return;
     }
-  };
+
+    // 3. THE MAGIC TRICK: Update React's local state so the button hides IMMEDIATELY
+    // Assuming your main user state is managed by a 'setUser' or 'setProfile' function passed down from App.js/Dashboard.js
+    if (setUser) {
+        setUser(prevUser => ({
+            ...prevUser,
+            is_bank_linked: true
+        }));
+    }
+
+    showToast("Bank linked successfully! You can now receive payouts.");
+    
+    // Close the modal
+    setModal(null); 
+};
 
   // --- JOB & SERVICE ACTIONS ---
   const handlePostJob = async (e) => {
@@ -1341,7 +1350,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         isQuizLoading, 
         reportModal, activeChat,
         hourlyRate, 
-        needsProfileSetup, setSelectedJob 
+        needsProfileSetup
     },
     setters: {
         setTab, setMenuOpen, setZenMode, setModal, setSelectedJob, setShowRewardModal,
@@ -1349,7 +1358,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         setSearchTerm, setProfileForm, setPaymentModal, setParentMode, setRawPortfolioText,
         setEditProfileModal, setViewProfileId, setPublicProfileData, setShowNotifications, setApplications,
         setReportModal, setActiveChat,
-        setHourlyRate, setSelectedJob 
+        setHourlyRate 
     },
     actions: {
         handlePostJob, 

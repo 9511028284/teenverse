@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, Users, Briefcase, CheckCircle, XCircle, 
   Trash2, DollarSign, LogOut, Shield, Flag, Package,
   Clock, AlertTriangle, ShieldCheck, Landmark, Eye, MessageSquare, 
-  Activity, Copy, CreditCard 
+  Activity, Copy, CreditCard, Send, LifeBuoy
 } from 'lucide-react';
 import { supabase } from '../supabase'; 
 import * as api from '../services/dashboard.api'; 
@@ -33,6 +33,13 @@ const AdminDashboard = ({ onLogout }) => {
   const [escrowOrders, setEscrowOrders] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]); 
   
+  // 🆕 SUPPORT SYSTEM STATES
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [activeTicket, setActiveTicket] = useState(null);
+  const [ticketMessages, setTicketMessages] = useState([]);
+  const [replyText, setReplyText] = useState('');
+  const messagesEndRef = useRef(null);
+  
   // PAGINATION STATES
   const [page, setPage] = useState(0);          
   const [totalPages, setTotalPages] = useState(0);
@@ -43,7 +50,7 @@ const AdminDashboard = ({ onLogout }) => {
   const [stats, setStats] = useState({ 
     totalUsers: 0, totalJobs: 0, totalServices: 0, 
     totalRevenue: 0, activeReports: 0, heldInEscrow: 0,
-    pendingKyc: 0 
+    pendingKyc: 0, activeTickets: 0 
   });
   
   // MODAL STATES
@@ -51,9 +58,8 @@ const AdminDashboard = ({ onLogout }) => {
   const [evidence, setEvidence] = useState(null); 
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   
-  // 🆕 PAYOUT MODAL STATE
   const [payoutModalOpen, setPayoutModalOpen] = useState(false);
-  const [payoutData, setPayoutData] = useState(null); // { order, bankDetails }
+  const [payoutData, setPayoutData] = useState(null); 
   const [payoutLoading, setPayoutLoading] = useState(false);
   const [utrInput, setUtrInput] = useState('');
 
@@ -79,13 +85,125 @@ const AdminDashboard = ({ onLogout }) => {
     else if (tab === 'reports') await fetchReports();
     else if (tab === 'financials') await fetchFinancials();
     else if (tab === 'logs') await fetchLogsPaginated(logsPage);
+    else if (tab === 'support') await fetchSupportTickets();
   };
+
+  // --- 🚀 SUPPORT SYSTEM LOGIC ---
+  const fetchSupportTickets = async () => {
+      const { data, error } = await supabase
+          .from('support_tickets')
+          .select('*')
+          .order('updated_at', { ascending: false });
+          
+      if (!error && data) {
+          setSupportTickets(data);
+          setStats(prev => ({ ...prev, activeTickets: data.filter(t => t.status !== 'resolved').length }));
+      }
+  };
+
+  const openTicketChat = async (ticket) => {
+      setActiveTicket(ticket);
+      const { data } = await supabase
+          .from('support_messages')
+          .select('*')
+          .eq('ticket_id', ticket.id)
+          .order('created_at', { ascending: true });
+      
+      setTicketMessages(data || []);
+  };
+
+  const handleSendAdminReply = async (e) => {
+      e.preventDefault();
+      if (!replyText.trim() || !activeTicket) return;
+
+      const text = replyText.trim();
+      setReplyText(''); 
+
+      const adminUser = (await supabase.auth.getUser()).data.user;
+
+      await supabase.from('support_messages').insert({
+          ticket_id: activeTicket.id,
+          sender_id: adminUser.id,
+          is_admin: true,
+          message: text
+      });
+
+      await supabase.from('support_tickets').update({ 
+          updated_at: new Date().toISOString(),
+          status: 'in_progress' 
+      }).eq('id', activeTicket.id);
+
+      fetchSupportTickets(); 
+  };
+
+  // 🚀 UPDATED: Resolves the ticket AND triggers the Brevo Email
+  const handleResolveTicket = async () => {
+      if (!activeTicket) return;
+      
+      // 1. Mark as resolved in database
+      await supabase.from('support_tickets').update({ status: 'resolved' }).eq('id', activeTicket.id);
+      
+      // 2. Fetch User Email to send notification
+      let userEmail = '';
+      let userName = 'User';
+      
+      const { data: fData } = await supabase.from('freelancers').select('email, name').eq('id', activeTicket.user_id).maybeSingle();
+      if (fData) {
+          userEmail = fData.email;
+          userName = fData.name;
+      } else {
+          const { data: cData } = await supabase.from('clients').select('email, name').eq('id', activeTicket.user_id).maybeSingle();
+          if (cData) {
+              userEmail = cData.email;
+              userName = cData.name;
+          }
+      }
+
+      // 3. Trigger Edge Function Email
+      if (userEmail) {
+          supabase.functions.invoke('send-parent-otp', {
+              body: {
+                  type: "ticket",
+                  action: "resolved",
+                  userEmail: userEmail,
+                  userName: userName,
+                  ticketId: activeTicket.id,
+                  subject: activeTicket.subject
+              }
+          }).catch(err => console.error("Email trigger failed:", err));
+      }
+
+      showToast("Ticket Resolved & Email Sent!");
+      setActiveTicket(null);
+      fetchSupportTickets();
+  };
+
+  // 🚀 REAL-TIME ADMIN CHAT LISTENER
+  useEffect(() => {
+      if (!activeTicket) return;
+
+      const channel = supabase
+          .channel(`admin_ticket_${activeTicket.id}`)
+          .on('postgres_changes', { 
+              event: 'INSERT', 
+              schema: 'public', 
+              table: 'support_messages', 
+              filter: `ticket_id=eq.${activeTicket.id}` 
+          }, (payload) => {
+              setTicketMessages(prev => [...prev, payload.new]);
+          })
+          .subscribe();
+
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+
+      return () => { supabase.removeChannel(channel); };
+  }, [activeTicket, ticketMessages]);
 
   // --- 1. OPTIMIZED OVERVIEW FETCH ---
   const fetchOverviewData = async () => {
     const [
         clientsCount, freelancersCount, jobsCount, servicesCount, 
-        pendingReports, paymentsRes, escrowsRes, pendingKycRes
+        pendingReports, paymentsRes, escrowsRes, pendingKycRes, activeTicketsRes
     ] = await Promise.all([
         supabase.from('clients').select('id', { count: 'exact', head: true }),
         supabase.from('freelancers').select('id', { count: 'exact', head: true }),
@@ -97,10 +215,10 @@ const AdminDashboard = ({ onLogout }) => {
         Promise.all([
              supabase.from('clients').select('id', { count: 'exact', head: true }).eq('kyc_status', 'pending'),
              supabase.from('freelancers').select('id', { count: 'exact', head: true }).eq('kyc_status', 'pending')
-        ])
+        ]),
+        supabase.from('support_tickets').select('id', { count: 'exact', head: true }).neq('status', 'resolved')
     ]);
 
-    // 5% Platform Fee Calculation
     const totalRevenue = (paymentsRes.data || []).reduce((acc, curr) => acc + (Number(curr.bid_amount) * 0.05), 0);
     const heldOrders = (escrowsRes.data || []).filter(order => order.status === 'Funded');
     const totalHeld = heldOrders.reduce((acc, curr) => acc + (Number(curr.bid_amount) || 0), 0);
@@ -113,7 +231,8 @@ const AdminDashboard = ({ onLogout }) => {
         totalRevenue,
         activeReports: pendingReports.count || 0,
         heldInEscrow: totalHeld,
-        pendingKyc: totalPendingKyc
+        pendingKyc: totalPendingKyc,
+        activeTickets: activeTicketsRes.count || 0
     });
   };
 
@@ -176,31 +295,6 @@ const AdminDashboard = ({ onLogout }) => {
   const fetchFinancials = async () => {
     const { data } = await api.fetchAdminEscrowOrders(0, 100);
     setEscrowOrders(data || []);
-  };
-
-  // --- SECURE FILE VIEWING ---
-  const handleViewId = async (pathOrUrl) => {
-    if (!pathOrUrl) return;
-    showToast("Generating secure link...", "info");
-    if (pathOrUrl.startsWith('http')) {
-        const match = pathOrUrl.split('/id_proofs/')[1];
-        if (match) {
-             const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(match, 60);
-             if (error) { showToast("Error signing legacy URL", "error"); return; }
-             await logAction('ADMIN', 'VIEW_ID_PROOF_LEGACY', { path: match });
-             window.open(data.signedUrl, '_blank');
-        } else {
-             window.open(pathOrUrl, '_blank');
-        }
-    } else {
-        const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(pathOrUrl, 60);
-        if (error || !data) { 
-            showToast("Could not access file. Check bucket permissions.", "error"); 
-            return; 
-        }
-        await logAction('ADMIN', 'VIEW_ID_PROOF', { path: pathOrUrl });
-        window.open(data.signedUrl, '_blank');
-    }
   };
 
   // --- ACTION HANDLERS ---
@@ -270,22 +364,17 @@ const AdminDashboard = ({ onLogout }) => {
        }
   };
 
-  // --- 🆕 PREPARE PAYOUT MODAL ---
   const initiatePayout = async (order) => {
     setPayoutLoading(true);
     setPayoutModalOpen(true);
-    
-    // 🛠️ FIX: Direct DB Query instead of API wrapper to avoid context errors
-    // We check for user banking details in the 'user_banking' table
     try {
         const { data: bankData, error } = await supabase
             .from('user_banking')
             .select('*')
             .eq('user_id', order.freelancer_id)
-            .maybeSingle(); // Use maybeSingle to avoid 0 row errors
+            .maybeSingle(); 
         
         if (error) {
-            console.error("Bank Fetch Error:", error);
             setPayoutData({ order, bankDetails: null });
             showToast("Error fetching bank details.", "error");
         } else if (!bankData) {
@@ -295,37 +384,46 @@ const AdminDashboard = ({ onLogout }) => {
             setPayoutData({ order, bankDetails: bankData });
         }
     } catch (err) {
-        console.error("Critical Bank Fetch Error:", err);
         setPayoutData({ order, bankDetails: null });
     }
-    
     setPayoutLoading(false);
   };
 
-  // --- 🆕 SUBMIT PAYOUT (Manual UTR) ---
   const confirmManualPayout = async () => {
-    if (!utrInput) {
-        showToast("Please enter the UTR/Transaction ID", "error");
-        return;
-    }
-    if (!payoutData?.order) return;
-
+    if (!utrInput || !payoutData?.order) return;
     const { order } = payoutData;
-
-    // Call API with UTR
+    
     const { error } = await api.adminForceRelease(order.id, order.bid_amount, order.freelancer_id, utrInput);
     
     if(error) {
         showToast(error.message, 'error');
     } else { 
         showToast("Payout Recorded Successfully");
-        await logAction('ADMIN', 'MANUAL_PAYOUT', { 
-            appId: order.id, 
-            amount: order.bid_amount,
-            utr: utrInput 
-        });
+        await logAction('ADMIN', 'MANUAL_PAYOUT', { appId: order.id, amount: order.bid_amount, utr: utrInput });
+
+        // 🚀 TRIGGER FREELANCER PAYOUT EMAIL
+        const netPayable = (order.bid_amount * 0.95).toFixed(0); // Calculate their cut
         
-        // Close Modal & Refresh
+        // Fetch freelancer email to send the receipt
+        const { data: freelancerData } = await supabase
+            .from('freelancers')
+            .select('email')
+            .eq('id', order.freelancer_id)
+            .single();
+
+        if (freelancerData?.email) {
+            supabase.functions.invoke('send-parent-otp', {
+                body: {
+                    type: "payout_released",
+                    freelancerName: order.freelancer_name,
+                    freelancerEmail: freelancerData.email,
+                    amount: netPayable,
+                    jobTitle: order.jobs?.title || "Freelance Gig",
+                    utr: utrInput
+                }
+            }).catch(e => console.error("Email failed:", e));
+        }
+
         setPayoutModalOpen(false);
         setUtrInput('');
         setPayoutData(null);
@@ -365,10 +463,30 @@ const AdminDashboard = ({ onLogout }) => {
         ) || [];
         setEvidence({ job: jobData, chats: relevantChats });
     } catch (err) {
-        console.error("Evidence Error:", err);
         showToast("Failed to load case context", "error");
     } finally {
         setEvidenceLoading(false);
+    }
+  };
+
+  const handleViewId = async (pathOrUrl) => {
+    if (!pathOrUrl) return;
+    showToast("Generating secure link...", "info");
+    if (pathOrUrl.startsWith('http')) {
+        const match = pathOrUrl.split('/id_proofs/')[1];
+        if (match) {
+             const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(match, 60);
+             if (error) return showToast("Error signing legacy URL", "error");
+             await logAction('ADMIN', 'VIEW_ID_PROOF_LEGACY', { path: match });
+             window.open(data.signedUrl, '_blank');
+        } else {
+             window.open(pathOrUrl, '_blank');
+        }
+    } else {
+        const { data, error } = await supabase.storage.from('id_proofs').createSignedUrl(pathOrUrl, 60);
+        if (error || !data) return showToast("Could not access file.", "error"); 
+        await logAction('ADMIN', 'VIEW_ID_PROOF', { path: pathOrUrl });
+        window.open(data.signedUrl, '_blank');
     }
   };
 
@@ -394,10 +512,11 @@ const AdminDashboard = ({ onLogout }) => {
         <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2 font-bold text-xl text-red-600">
           <Shield size={24} /> Admin Panel
         </div>
-        <nav className="flex-1 p-4 space-y-2">
-          {['overview', 'financials', 'reports', 'users', 'jobs', 'services', 'logs'].map((t) => (
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          {['overview', 'support', 'financials', 'reports', 'users', 'jobs', 'services', 'logs'].map((t) => (
              <button key={t} onClick={() => setTab(t)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors capitalize ${tab === t ? 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
                 {t === 'overview' && <LayoutDashboard size={18} />}
+                {t === 'support' && <LifeBuoy size={18} />}
                 {t === 'financials' && <Landmark size={18} />}
                 {t === 'reports' && <Flag size={18} />}
                 {t === 'users' && <Users size={18} />}
@@ -406,6 +525,7 @@ const AdminDashboard = ({ onLogout }) => {
                 {t === 'logs' && <Activity size={18} />} 
                 {t}
                 {t === 'reports' && stats.activeReports > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{stats.activeReports}</span>}
+                {t === 'support' && stats.activeTickets > 0 && <span className="ml-auto bg-indigo-500 text-white text-[10px] px-2 py-0.5 rounded-full">{stats.activeTickets}</span>}
                 {t === 'financials' && stats.heldInEscrow > 0 && <span className="ml-auto bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-full">₹</span>}
                 {t === 'users' && stats.pendingKyc > 0 && <span className="ml-auto bg-blue-500 text-white text-[10px] px-2 py-0.5 rounded-full">{stats.pendingKyc}</span>}
              </button>
@@ -437,12 +557,59 @@ const AdminDashboard = ({ onLogout }) => {
                <p className="text-3xl font-black text-amber-500">{stats.pendingKyc}</p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
-               <div className="flex justify-between mb-2"><h3 className="text-gray-500 font-bold text-xs uppercase">Total Users</h3><Users className="text-purple-500"/></div>
-               <p className="text-3xl font-black">{stats.totalUsers}</p>
+               <div className="flex justify-between mb-2"><h3 className="text-gray-500 font-bold text-xs uppercase">Active Tickets</h3><LifeBuoy className="text-indigo-500"/></div>
+               <p className="text-3xl font-black text-indigo-600">{stats.activeTickets}</p>
             </div>
           </div>
         )}
 
+        {/* --- 🚀 SUPPORT TAB --- */}
+        {tab === 'support' && (
+            <div className="space-y-4">
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-50 dark:bg-gray-700/50 uppercase text-xs font-bold text-gray-500">
+                            <tr>
+                                <th className="p-4">User ID</th>
+                                <th className="p-4">Subject</th>
+                                <th className="p-4">Status</th>
+                                <th className="p-4">Last Updated</th>
+                                <th className="p-4 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {supportTickets.map(ticket => (
+                                <tr key={ticket.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                                    <td className="p-4 font-mono text-xs text-gray-400">{ticket.user_id.slice(0,8)}...</td>
+                                    <td className="p-4 font-medium text-gray-900 dark:text-gray-100">{ticket.subject}</td>
+                                    <td className="p-4">
+                                        <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase ${
+                                            ticket.status === 'open' ? 'bg-red-100 text-red-600 animate-pulse' : 
+                                            ticket.status === 'in_progress' ? 'bg-amber-100 text-amber-600' : 
+                                            'bg-gray-100 text-gray-500'
+                                        }`}>
+                                            {ticket.status.replace('_', ' ')}
+                                        </span>
+                                    </td>
+                                    <td className="p-4 text-xs text-gray-500">{new Date(ticket.updated_at).toLocaleString()}</td>
+                                    <td className="p-4 text-right">
+                                        <button 
+                                            onClick={() => openTicketChat(ticket)} 
+                                            className="px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-colors"
+                                        >
+                                            Open Chat
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {supportTickets.length === 0 && <div className="p-10 text-center text-gray-400">No support tickets found. Inbox Zero!</div>}
+                </div>
+            </div>
+        )}
+
+        {/* --- FINANCIALS TAB --- */}
         {tab === 'financials' && (
           <div className="space-y-6">
             <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-700 flex items-center gap-3">
@@ -475,7 +642,6 @@ const AdminDashboard = ({ onLogout }) => {
                                     <div className="flex flex-col gap-1">
                                         <span className="text-xs text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded w-fit">Client: {order.client_name}</span>
                                         <span className="text-xs text-purple-600 font-bold bg-purple-50 px-2 py-0.5 rounded w-fit">Teen: {order.freelancer_name}</span>
-                                        <span className="text-[10px] text-gray-400 mt-1 italic">{order.jobs?.title}</span>
                                     </div>
                                 </td>
                                 <td className="p-4">
@@ -486,9 +652,6 @@ const AdminDashboard = ({ onLogout }) => {
                                         'bg-blue-100 text-blue-700'}`}>
                                         {order.status === 'Processing' ? '⚠️ Client Approved' : order.status}
                                      </span>
-                                     {order.status === 'Processing' && (
-                                         <div className="text-[10px] text-amber-600 font-bold mt-1">Action Required</div>
-                                     )}
                                 </td>
                                 <td className="p-4 text-right">
                                      <div className="flex justify-end gap-2">
@@ -499,13 +662,9 @@ const AdminDashboard = ({ onLogout }) => {
                                                 ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 ring-2 ring-emerald-400 ring-offset-1' 
                                                 : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
                                             }`} 
-                                            title="Process Payout"
                                         >
                                             <CreditCard size={14}/> 
                                             {order.status === 'Processing' ? 'Approve Payout' : 'Force Pay'}
-                                        </button>
-                                        <button onClick={() => handleForceRefund(order)} className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1" title="Refund Client">
-                                             <XCircle size={14}/>
                                         </button>
                                      </div>
                                 </td>
@@ -513,12 +672,11 @@ const AdminDashboard = ({ onLogout }) => {
                         ))}
                     </tbody>
                 </table>
-                {escrowOrders.length === 0 && <div className="p-10 text-center text-gray-400">No active funds held in escrow. System Clear.</div>}
             </div>
           </div>
         )}
-        
-        {/* ... Reports Tab, Users Tab, etc. (No changes needed, kept for context) ... */}
+
+        {/* --- REPORTS TAB --- */}
         {tab === 'reports' && (
             <div className="space-y-6">
                 <div className="flex bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 w-fit">
@@ -644,6 +802,7 @@ const AdminDashboard = ({ onLogout }) => {
           </div>
         )}
         
+        {/* --- JOBS & SERVICES TAB --- */}
         {(tab === 'jobs' || tab === 'services') && (
           <div className="grid gap-4">
              {(tab === 'jobs' ? jobs : services).map(item => (
@@ -670,7 +829,7 @@ const AdminDashboard = ({ onLogout }) => {
           </div>
         )}
 
-        {/* LOGS WITH PAGINATION */}
+        {/* --- LOGS TAB --- */}
         {tab === 'logs' && (
              <div className="flex flex-col gap-4">
                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -714,6 +873,69 @@ const AdminDashboard = ({ onLogout }) => {
              </div>
         )}
       </main>
+
+      {/* --- 🚀 ADMIN LIVE CHAT MODAL --- */}
+      {activeTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-gray-900 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[80vh]">
+                <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 shrink-0">
+                    <div>
+                        <h2 className="font-bold text-lg dark:text-white flex items-center gap-2">
+                           <MessageSquare className="text-indigo-600" size={20}/> Support Session
+                        </h2>
+                        <p className="text-xs text-gray-500 font-mono mt-1">User ID: {activeTicket.user_id}</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={handleResolveTicket} className="px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-colors">Mark Resolved</button>
+                        <button onClick={() => setActiveTicket(null)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"><XCircle className="text-gray-400" /></button>
+                    </div>
+                </div>
+
+                {/* Chat Messages Area */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-black/20 custom-scrollbar">
+                    {ticketMessages.map((msg, idx) => {
+                        const isAdmin = msg.is_admin;
+                        return (
+                            <div key={idx} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[80%] p-3 rounded-2xl text-sm shadow-sm ${
+                                    isAdmin 
+                                    ? 'bg-indigo-600 text-white rounded-tr-sm' 
+                                    : 'bg-white dark:bg-gray-800 text-slate-800 dark:text-gray-200 rounded-tl-sm border border-slate-200 dark:border-gray-700'
+                                }`}>
+                                    {!isAdmin && <span className="block text-[10px] font-black text-gray-400 mb-1 uppercase tracking-wider">Freelancer / Client</span>}
+                                    <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
+                                    <span className="block text-right text-[9px] mt-1 opacity-60">
+                                        {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    </span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    <div ref={messagesEndRef} />
+                </div>
+
+                {/* Reply Input Area */}
+                <form onSubmit={handleSendAdminReply} className="p-4 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
+                    <div className="relative flex items-center">
+                        <input 
+                            type="text" 
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                            placeholder="Type your reply to the user..."
+                            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl py-3 pl-4 pr-14 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 text-sm dark:text-white transition-all"
+                        />
+                        <button 
+                            type="submit" 
+                            disabled={!replyText.trim() || activeTicket.status === 'resolved'}
+                            className="absolute right-2 p-2 bg-indigo-600 text-white rounded-xl disabled:opacity-50 hover:bg-indigo-700 transition-colors"
+                        >
+                            <Send size={16} />
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+      )}
 
       {/* --- EVIDENCE MODAL OVERLAY --- */}
       {selectedReport && (

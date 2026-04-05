@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../ui/Modal';
 import { 
   ChevronRight, Sparkles, Briefcase, Clock, 
-  DollarSign, AlignLeft, Tags, Paperclip 
+  DollarSign, AlignLeft, Tags, Paperclip, Crown 
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -48,10 +48,14 @@ const PostJobModal = ({ onClose, onSubmit }) => {
   const [duration, setDuration] = useState('');
   const durationOptions = ["1-3 Days", "1 Week", "2 Weeks", "1 Month"];
   
-  // 🚀 FIX: Intercept form submission to guarantee no accidental mobile refreshes
+  // 🚀 NEW: Budget and Elite States
+  const [baseBudget, setBaseBudget] = useState('');
+  const [isElite, setIsElite] = useState(false);
+  
+  // Intercept form submission to guarantee no accidental mobile refreshes
   const handleSafeSubmit = (e) => {
       e.preventDefault();
-      // Ensure the duration input updates the hidden or state logic correctly
+      // The actual budget value and is_elite flag are passed via hidden inputs below
       if(onSubmit) onSubmit(e);
   };
   
@@ -62,6 +66,11 @@ const PostJobModal = ({ onClose, onSubmit }) => {
         {/* Decorative Background Blur */}
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
 
+        {/* HIDDEN INPUTS for Backend Parsing */}
+        {/* We calculate the final budget here so the parent component gets the exact total! */}
+        <input type="hidden" name="budget" value={Number(baseBudget || 0) + (isElite ? 20 : 0)} />
+        <input type="hidden" name="is_elite" value={isElite} />
+
         {/* 1. Job Title */}
         <div className="space-y-2">
            <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Mission Title</label>
@@ -71,8 +80,16 @@ const PostJobModal = ({ onClose, onSubmit }) => {
         {/* 2. Budget & Category Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
            <div className="space-y-2">
-              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Bounty (Budget)</label>
-              <GlowInput name="budget" type="number" icon={DollarSign} placeholder="5000" required />
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Bounty (Min ₹500)</label>
+              <GlowInput 
+                type="number" 
+                icon={DollarSign} 
+                placeholder="500" 
+                min="500" 
+                value={baseBudget}
+                onChange={(e) => setBaseBudget(e.target.value)}
+                required 
+              />
            </div>
            
            <div className="space-y-2">
@@ -96,7 +113,40 @@ const PostJobModal = ({ onClose, onSubmit }) => {
            </div>
         </div>
 
-        {/* 3. Duration Selector */}
+        {/* 🚀 3. ELITE JOB UPGRADE TOGGLE */}
+        <div 
+            onClick={() => setIsElite(!isElite)}
+            className={cn(
+                "p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all duration-300",
+                isElite 
+                ? "bg-amber-500/10 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.15)]" 
+                : "bg-gray-50/50 dark:bg-black/40 border-gray-200 dark:border-white/10 hover:border-amber-500/50"
+            )}
+        >
+           <div className="flex items-center gap-3">
+               <div className={cn("p-2 rounded-xl transition-colors duration-300", isElite ? "bg-amber-500 text-white" : "bg-gray-200 dark:bg-gray-800 text-gray-500")}>
+                   <Crown size={18} />
+               </div>
+               <div>
+                   <h4 className={cn("text-sm font-bold transition-colors", isElite ? "text-amber-600 dark:text-amber-400" : "text-gray-800 dark:text-white")}>
+                       Upgrade to Elite Job
+                   </h4>
+                   <p className="text-[10px] text-gray-500">Highlight listing & alert VIP freelancers (+₹20)</p>
+               </div>
+           </div>
+           <div className="flex flex-col items-end gap-1">
+               <div className={cn("w-10 h-6 rounded-full p-1 transition-colors duration-300 shrink-0", isElite ? "bg-amber-500" : "bg-gray-300 dark:bg-gray-700")}>
+                   <div className={cn("w-4 h-4 rounded-full bg-white transition-transform duration-300", isElite ? "translate-x-4 shadow-sm" : "translate-x-0")} />
+               </div>
+               {isElite && baseBudget && (
+                   <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 animate-in fade-in slide-in-from-top-1">
+                       Total: ₹{Number(baseBudget) + 20}
+                   </span>
+               )}
+           </div>
+        </div>
+
+        {/* 4. Duration Selector */}
         <div className="space-y-2">
            <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Timeline</label>
            <div className="flex flex-wrap gap-2 mb-2">
@@ -114,7 +164,7 @@ const PostJobModal = ({ onClose, onSubmit }) => {
            />
         </div>
 
-        {/* 4. Description */}
+        {/* 5. Description */}
         <div className="space-y-2">
            <div className="flex justify-between items-end">
              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Mission Brief</label>
@@ -134,7 +184,7 @@ const PostJobModal = ({ onClose, onSubmit }) => {
            </div>
         </div>
 
-        {/* 5. 🚀 FIXED: Mobile-Safe File Uploads */}
+        {/* 6. Mobile-Safe File Uploads */}
         <div className="space-y-2">
            <div className="flex justify-between items-end">
              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Reference Files (Optional)</label>
@@ -149,7 +199,7 @@ const PostJobModal = ({ onClose, onSubmit }) => {
                name="attachments"
                multiple
                accept="image/*,.pdf,.doc,.docx,.mp3"
-               onClick={(e) => e.stopPropagation()} // 🚀 Prevents mobile event bubbling crash
+               onClick={(e) => e.stopPropagation()}
                className="w-full pl-12 pr-4 py-3 bg-gray-50/50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-2xl outline-none transition-all duration-300 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 dark:file:bg-indigo-500/20 dark:file:text-indigo-300 dark:hover:file:bg-indigo-500/30 text-gray-600 dark:text-gray-300 cursor-pointer"
              />
            </div>

@@ -3,32 +3,19 @@ import { MessageSquare, Mail, ShieldAlert, Phone, Users, ExternalLink } from 'lu
 import Button from '../ui/Button'; // Adjust path if needed
 import { supabase } from '../../supabase'; // Adjust path to your supabase client
 
-const SupportHub = ({ user, showToast }) => {
+// 🚀 ADDED setModal to the props!
+const SupportHub = ({ user, showToast, setModal }) => {
   const plan = user?.current_plan || 'Basic';
 
-  // 🚀 UPDATED: Mailto link points exactly to your .in domain!
+  // 🚀 Mailto link points exactly to your .in domain!
   const handleEmailSupport = () => {
       window.location.href = 'mailto:support@teenversehub.in';
   };
   
-  // 🚀 TAWK.TO INTEGRATION
+  // 🚀 IN-HOUSE CUSTOM CHAT INTEGRATION
   const handleOpenChat = () => {
-    if (window.Tawk_API) {
-        // 1. Tell Tawk.to exactly who is messaging you
-        window.Tawk_API.setAttributes({
-            name: user?.name || 'TeenVerseHub User',
-            email: user?.email || 'No email provided',
-            plan: plan
-        }, function (error) {
-            if (error) console.error("Tawk.to attributes error:", error);
-        });
-
-        // 2. Show the widget and pop it open!
-        window.Tawk_API.showWidget();
-        window.Tawk_API.maximize();
-    } else {
-        showToast("Live chat is still loading or blocked by an adblocker. Please try again in a moment.", "warning");
-    }
+      // Tells DashboardModals.jsx to open your custom chat UI
+      setModal('support-chat'); 
   };
 
   // 🚀 DISCORD VIP INVITE INTEGRATION
@@ -56,7 +43,6 @@ const SupportHub = ({ user, showToast }) => {
 
   const handleWhatsApp = () => {
     if (plan !== 'Elite') return showToast("WhatsApp support is for Elite members only.", "error");
-    // Replace with your actual WhatsApp Business Number
     window.open('https://wa.me/+919511028284', '_blank'); 
   };
 
@@ -73,7 +59,7 @@ const SupportHub = ({ user, showToast }) => {
           
           <div className="space-y-4">
             
-            {/* 🚀 EVERYONE GETS EMAIL (Updated with your exact email) */}
+            {/* EVERYONE GETS EMAIL */}
             <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-white/5">
               <div className="flex items-center gap-3">
                  <Mail className="text-slate-400" />
@@ -85,7 +71,7 @@ const SupportHub = ({ user, showToast }) => {
               <Button variant="ghost" onClick={handleEmailSupport}>Email Us</Button>
             </div>
 
-            {/* STARTER & ABOVE GET IN-APP CHAT (TAWK.TO) */}
+            {/* STARTER & ABOVE GET IN-APP CHAT (Custom UI) */}
             <div className={`flex items-center justify-between p-4 rounded-xl transition-all ${plan === 'Basic' ? 'opacity-50 grayscale select-none' : 'bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-500/30'}`}>
               <div className="flex items-center gap-3">
                  <MessageSquare className="text-indigo-500" />

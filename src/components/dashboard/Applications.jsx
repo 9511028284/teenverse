@@ -90,12 +90,12 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
     if (app.status === 'Processing') {
         if (isClient) {
             return (
-                <div className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md">
+                <div className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-100">
                     <Hourglass size={12} className="animate-pulse"/> Processing Payout
                 </div>
             );
         } else {
-            // If they HAVEN'T linked a bank, show the bouncing button
+            // 🚀 CHECK IF BANK IS LINKED HERE
             if (!user?.is_bank_linked) {
                 return (
                     <div className="flex flex-col items-end gap-1">
@@ -107,14 +107,14 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                 );
             }
             
-            // If they HAVE linked a bank, hide the button and show this locked state
+            // If they HAVE linked a bank, show this locked processing state instead
             return (
                 <div className="flex flex-col items-end gap-1">
                     <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
                         <CheckCircle size={10} /> Bank Linked
                     </div>
                     <span className="text-amber-600 text-xs font-bold flex items-center gap-1 mt-1">
-                        <Hourglass size={12}/> Payment in Queue
+                        <Hourglass size={12} className="animate-pulse" /> Payment in Queue
                     </span>
                     <span className="text-[10px] text-gray-400">Processing payout (24hrs)</span>
                 </div>
@@ -155,7 +155,6 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
         return (
           <div className="flex gap-2 justify-end">
             <Button size="sm" variant="outline" onClick={() => onAction('reject', app)} className="text-red-500 border-red-200 hover:bg-red-50">Reject</Button>
-            {/* 🔥 triggers Custom Wallet Checkout instead of immediate action */}
             <Button size="sm" onClick={() => setCheckoutApp(app)} className="bg-indigo-600 hover:bg-indigo-700 flex items-center gap-1 shadow-md shadow-indigo-200">
               <ShieldCheck size={14}/> Hire & Pay
             </Button>
@@ -208,7 +207,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                 <Button size="sm" variant="outline" onClick={() => setRejectModal(app)} className="text-red-500 border-red-200 hover:bg-red-50 flex items-center gap-1" title="Reject & Refund">
                     <XCircle size={14}/> Reject
                 </Button>
-                <Button size="sm" onClick={() => onAction('approve', app)} className="bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200 shadow-md">Approve</Button>
+                <Button size="sm" onClick={() => onAction('approve', app)} className="bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200 shadow-md text-white">Approve</Button>
               </div>
           </div>
         );
@@ -250,14 +249,14 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
               <Button size="sm" variant="outline" onClick={() => handleOpenChat(app)} className="text-blue-500 border-blue-200 hover:bg-blue-50">
                   <MessageSquare size={14}/> Chat
               </Button>
-              <Button size="sm" onClick={() => onAction('submit', app)} className="bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-200">
+              <Button size="sm" onClick={() => onAction('submit', app)} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-200">
                   <Package size={14} className="mr-1"/> Deliver Work
               </Button>
           </div>
       );
       if (app.status === 'Submitted') return (
           <div className="flex flex-col items-end gap-2">
-              <span className="text-amber-500 text-xs font-medium bg-amber-50 px-2 py-1 rounded-md">Under Review</span>
+              <span className="text-amber-500 text-xs font-medium bg-amber-50 px-2 py-1 rounded-md border border-amber-100">Under Review</span>
               <Button size="sm" variant="outline" onClick={() => handleOpenChat(app)} className="text-blue-500 border-blue-200 hover:bg-blue-50">
                   <MessageSquare size={14}/> Chat
               </Button>
@@ -304,11 +303,11 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                   
                   <td className="p-4 text-gray-600 dark:text-gray-300">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-400 to-purple-400 text-white flex items-center justify-center text-xs font-bold">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-400 to-purple-400 text-white flex items-center justify-center text-xs font-bold shadow-sm">
                             {(isClient ? app.freelancer_name : app.client_name)?.[0] || 'U'}
                         </div>
                         <div>
-                            <div className="font-bold text-sm">
+                            <div className="font-bold text-sm text-gray-900 dark:text-white">
                               {isClient ? app.freelancer_name : app.client_name || 'User'}
                             </div>
                             {isClient && (
@@ -344,7 +343,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                          {/* REPORT BUTTON */}
                          <button 
                              onClick={() => setReportModal(app)} 
-                             className="text-[10px] text-gray-300 hover:text-red-500 flex items-center gap-1 transition-colors"
+                             className="text-[10px] text-gray-400 hover:text-red-500 flex items-center gap-1 transition-colors mt-1"
                              title="Report Issue"
                          >
                              <Flag size={10}/> Report Issue
@@ -356,7 +355,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
             </tbody>
           </table>
         </div>
-        {applications.length === 0 && <div className="p-10 text-center text-gray-400">No active applications found.</div>}
+        {applications.length === 0 && <div className="p-10 text-center text-gray-400 font-medium">No active applications found.</div>}
       </div>
 
        {/* --- MODALS SECTION --- */}
@@ -451,8 +450,8 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                </div>
 
                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
-                 <Button variant="ghost" type="button" onClick={() => { setCheckoutApp(null); setUseWallet(false); }}>Cancel</Button>
-                 <Button onClick={handleConfirmCheckout} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
+                 <Button variant="ghost" type="button" onClick={() => { setCheckoutApp(null); setUseWallet(false); }} className="w-full sm:w-auto">Cancel</Button>
+                 <Button onClick={handleConfirmCheckout} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md w-full sm:w-auto">
                    {finalPayable === 0 ? 'Pay with Wallet' : `Proceed to Pay ₹${finalPayable.toFixed(2)}`}
                  </Button>
                </div>
@@ -466,7 +465,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
          <Modal title="Confirm Payment Release" onClose={() => setReleaseModal(null)}>
            <div className="space-y-6">
              <div className="text-center space-y-2">
-                <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto text-green-600 dark:text-green-400">
+                <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto text-green-600 dark:text-green-400 shadow-inner">
                     <Receipt size={24} />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">Transaction Breakdown</h3>
@@ -542,7 +541,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
 
                 <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Reason</label>
-                    <select name="reason" required className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-red-500">
+                    <select name="reason" required className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-red-500 text-gray-900 dark:text-white">
                       <option value="">Select a reason...</option>
                       <option value="Scam/Fraud">Scam or Fraudulent Activity</option>
                       <option value="Harassment">Harassment or Abusive Behavior</option>
@@ -558,13 +557,13 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
                       name="description" 
                       required 
                       placeholder="Please describe the issue..." 
-                      className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none min-h-[100px] text-sm dark:bg-gray-800 dark:text-white dark:border-gray-700 resize-none"
+                      className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none min-h-[100px] text-sm dark:bg-gray-800 dark:text-white dark:border-gray-700 resize-none text-gray-900"
                     ></textarea>
                 </div>
                 
                 <div className="flex justify-end gap-3 pt-2">
                      <Button variant="ghost" type="button" onClick={() => setReportModal(null)}>Cancel</Button>
-                     <Button className="bg-red-600 hover:bg-red-700 text-white">Submit Report</Button>
+                     <Button className="bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-200">Submit Report</Button>
                 </div>
             </form>
         </Modal>

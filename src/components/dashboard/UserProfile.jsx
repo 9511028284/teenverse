@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   MapPin, Github, Instagram, Linkedin, Globe, 
   Award, Zap, Edit3, Share2, ShieldCheck, Heart, Terminal, Sparkles, 
-  FileText, Briefcase, GraduationCap, Eye, Download, X
+  FileText, Briefcase, GraduationCap, Eye, Download, X, ExternalLink
 } from 'lucide-react';
 import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../supabase'; 
@@ -32,15 +32,18 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
   const socials = user?.social_links || { github: '', instagram: '', linkedin: '', website: '' };
   
   const [resumeData, setResumeData] = useState(null);
+  const [userExtras, setUserExtras] = useState(null); // State for Specialty, Qualification, etc.
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const resumeRef = useRef(null);
 
-  // --- 1. Fetch Resume on Mount ---
+  // --- 1. Fetch Resume & User Extras on Mount ---
   useEffect(() => {
-    const fetchResume = async () => {
+    const fetchData = async () => {
       if (!user?.id) return;
-      const { data, error } = await supabase
+
+      // Fetch Generated Resume Data
+      const { data: resumeRes, error: resumeErr } = await supabase
         .from('resumes')
         .select('content')
         .eq('user_id', user.id)
@@ -48,10 +51,20 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
         .limit(1)
         .single();
 
-      if (data && !error) setResumeData(data.content);
+      if (resumeRes && !resumeErr) setResumeData(resumeRes.content);
+
+      // Fetch Extra Profile Details (Specialty, Qualification, Resume URL)
+      const { data: extrasRes, error: extrasErr } = await supabase
+        .from('freelancers')
+        .select('specialty, qualification, resume_url')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (extrasRes && !extrasErr) setUserExtras(extrasRes);
     };
-    fetchResume();
-  }, [user.id]);
+
+    fetchData();
+  }, [user?.id]);
 
   // --- 2. Download Logic ---
   const handleDownloadPDF = async () => {
@@ -84,7 +97,6 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
   const rotateY = useTransform(x, [-100, 100], [-5, 5]);
 
   const handleMouseMove = (e) => {
-    // Check if it's a touch device, if so bypass to prevent jitter
     if(window.innerWidth < 768) return; 
     const rect = e.currentTarget.getBoundingClientRect();
     x.set(e.clientX - rect.left - rect.width / 2);
@@ -202,6 +214,44 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
            </div>
         </GlassCard>
 
+        {/* --- 2.5 PROFESSIONAL DETAILS CARD --- */}
+        <GlassCard className="p-6 md:p-8 lg:col-span-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+           <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              <div className="flex items-start gap-3">
+                 <div className="p-3 bg-purple-500/10 rounded-xl text-purple-400">
+                    <Sparkles size={20} />
+                 </div>
+                 <div>
+                    <h4 className="text-[10px] md:text-xs font-black uppercase tracking-widest text-gray-500 mb-1">Specialty</h4>
+                    <p className="text-white font-medium text-sm md:text-base">{userExtras?.specialty || 'Not specified'}</p>
+                 </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                 <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-400">
+                    <GraduationCap size={20} />
+                 </div>
+                 <div>
+                    <h4 className="text-[10px] md:text-xs font-black uppercase tracking-widest text-gray-500 mb-1">Qualification</h4>
+                    <p className="text-white font-medium text-sm md:text-base">{userExtras?.qualification || 'Not specified'}</p>
+                 </div>
+              </div>
+
+           </div>
+
+           {userExtras?.resume_url && (
+              <a 
+                 href={userExtras.resume_url} 
+                 target="_blank" 
+                 rel="noopener noreferrer" 
+                 className="w-full md:w-auto px-6 py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 active:scale-95 text-white rounded-2xl text-sm font-bold uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 whitespace-nowrap"
+              >
+                 <ExternalLink size={16}/> External Resume
+              </a>
+           )}
+        </GlassCard>
+
         {/* --- 3. RESUME TRIGGER CARD --- */}
         {resumeData && (
           <GlassCard 
@@ -214,7 +264,7 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
                 </div>
                 <div>
                    <h3 className="text-base md:text-lg font-bold text-white group-hover:text-blue-100 transition-colors">Verified Resume</h3>
-                   <p className="text-xs md:text-sm text-gray-400 mt-0.5">Click to preview document</p>
+                   <p className="text-xs md:text-sm text-gray-400 mt-0.5">Click to preview platform-generated document</p>
                 </div>
              </div>
              <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl text-xs md:text-sm font-bold text-blue-400 border border-white/5 group-hover:bg-blue-500/10 group-hover:border-blue-500/30 transition-all">
