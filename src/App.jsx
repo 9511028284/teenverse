@@ -2,20 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from './supabase'; 
 import Toast from './components/ui/Toast';
-
-// ✅ Fixed Import: Using the React version instead of the Next.js version
 import { SpeedInsights } from "@vercel/speed-insights/react";
-
 import { Loader2 } from 'lucide-react';
 
-// Pages
-import LandingPage from './pages/LandingPage';
-import AboutPage from './pages/AboutPage'; 
-import FaqPage from './pages/FaqPage'; 
-import SafetyPage from './pages/SafetyPage'; 
+// --- Pages (Only App/Dashboard logic remains) ---
 import Auth from './pages/Auth'; 
 import Dashboard from './pages/Dashboard';
-import Legal from './pages/Legal';
 import TermsAgreement from './pages/TermsAgreement'; 
 import AdminDashboard from './pages/AdminPage';
 import ParentApproval from './pages/ParentApproval';
@@ -49,22 +41,21 @@ export default function App() {
 
   // ⚡ OPTIMIZATION: Instant Scroll Restoration
   useEffect(() => {
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: 'auto' 
-    });
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [location.pathname]);
 
-  // Compatibility helper
+  // --- SMART ROUTING CROSS-DOMAIN ---
   const setView = (viewName) => {
       switch(viewName) {
-          case 'home': navigate('/'); break;
+          // If a button in the app tries to go to a marketing page, send them back to the Next.js site!
+          case 'home': 
           case 'about': 
-          case 'about us': navigate('/about'); break; 
-          case 'faq': navigate('/faq'); break; 
-          case 'safety': navigate('/safety'); break;
-          case 'auth': navigate('/auth'); break;
+          case 'about us':
+          case 'faq': 
+          case 'safety': 
+              window.location.href = 'https://teenversehub.in'; 
+              break;
+          case 'auth': navigate('/'); break; // Auth is now the root page
           case 'dashboard': navigate('/dashboard'); break;
           case 'legal': navigate('/legal'); break;
           case 'admin': navigate('/admin'); break;
@@ -100,15 +91,13 @@ export default function App() {
   const handleSession = async (session, attempts = 0) => {
     const currentPath = location.pathname;
     
-    // ✅ Public paths
-    const isPublic = ['/', '/about', '/faq', '/safety', '/auth', '/legal', '/termsagreement', '/parent-approval', '/parent-login'].some(path => currentPath.startsWith(path));
-    
-    // Variable to check if they are currently trying to view the terms page
+    // ✅ Auth/Login is now at '/'
+    const isPublic = ['/', '/legal', '/termsagreement', '/parent-approval', '/parent-login'].some(path => currentPath === path || currentPath.startsWith(path + '/'));
     const isTermsPage = currentPath.startsWith('/termsagreement');
 
     if (!session) {
       setUser(null);
-      if (!isPublic) navigate('/');
+      if (!isPublic) navigate('/'); // Boot unauthorized users back to Auth
       setLoading(false);
       return;
     }
@@ -120,7 +109,7 @@ export default function App() {
       const { data: adminCheck } = await supabase.from('admins').select('*').eq('email', u.email).maybeSingle();
       if (adminCheck) {
         setUser({ ...u, type: "admin" });
-        if (currentPath === '/' || currentPath.toLowerCase().startsWith('/auth') || (!currentPath.startsWith('/admin') && !isPublic)) {
+        if (currentPath === '/' || (!currentPath.startsWith('/admin') && !isPublic)) {
             navigate('/admin');
         }
         setLoading(false);
@@ -131,7 +120,7 @@ export default function App() {
       let { data: c } = await supabase.from('clients').select('*').eq('id', u.id).maybeSingle();
       if (c) { 
           setUser({ ...c, type: 'client' }); 
-          if (currentPath === '/' || currentPath.toLowerCase().startsWith('/auth') || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
+          if (currentPath === '/' || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
               navigate('/dashboard');
           }
           setLoading(false);
@@ -142,7 +131,7 @@ export default function App() {
       let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
       if (f) { 
           setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] });
-          if (currentPath === '/' || currentPath.toLowerCase().startsWith('/auth') || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
+          if (currentPath === '/' || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
               navigate('/dashboard');
           }
           setLoading(false);
@@ -158,7 +147,7 @@ export default function App() {
 
       if (parentMatch) {
           setUser({ ...u, type: 'parent', teenId: parentMatch.user_id });
-          if (currentPath === '/' || currentPath.toLowerCase().startsWith('/auth') || (!currentPath.startsWith('/parent-dashboard') && !isPublic)) {
+          if (currentPath === '/' || (!currentPath.startsWith('/parent-dashboard') && !isPublic)) {
               navigate('/parent-dashboard');
           }
           setLoading(false);
@@ -174,7 +163,7 @@ export default function App() {
       // 6. FALLBACK
       console.warn("No profile found.");
       setUser(null); 
-      navigate('/auth');
+      if (currentPath !== '/') navigate('/');
       setLoading(false);
 
     } catch (err) {
@@ -207,14 +196,6 @@ export default function App() {
       setToast({ message, type });
       setTimeout(() => setToast(null), 4000); 
   };
-  
-  const handleFeedback = async (e) => { 
-      e.preventDefault();
-      const formData = new FormData(e.target); 
-      const { error } = await supabase.from('feedback').insert([{ name: formData.get('name'), email: formData.get('email'), message: formData.get('message') }]);
-      if (!error) { showToast('Feedback sent!'); e.target.reset(); } 
-      else { showToast('Failed to send feedback', 'error'); }
-  };
 
  if (loading) {
     return (
@@ -226,77 +207,37 @@ export default function App() {
 
   return (
    <>
-      {/* ✅ Vercel Analytics Tracker */}
       <SpeedInsights />
-
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
       <Routes>
+        {/* ✅ ROOT IS NOW AUTH / LOGIN */}
         <Route path="/" element={
-            <LandingPage 
-                setView={setView} 
-                onFeedback={handleFeedback} 
-                darkMode={darkMode} 
-                toggleTheme={toggleTheme} 
-                onLegalClick={(page) => navigate(`/legal?page=${page}`)} 
-            />
-        } />
-
-        <Route path="/about" element={
-            <AboutPage 
-                setView={setView} 
-                darkMode={darkMode} 
-                toggleTheme={toggleTheme} 
-                onLegalClick={(page) => navigate(`/legal?page=${page}`)} 
-            />
-        } />
-
-        <Route path="/faq" element={
-            <FaqPage 
-                setView={setView} 
-                darkMode={darkMode} 
-                toggleTheme={toggleTheme} 
-                onLegalClick={(page) => navigate(`/legal?page=${page}`)} 
-            />
-        } />
-
-        {/* ✅ Safety Route */}
-        <Route path="/safety" element={
-            <SafetyPage 
-                setView={setView} 
-                darkMode={darkMode} 
-                toggleTheme={toggleTheme} 
-                onLegalClick={(page) => navigate(`/legal?page=${page}`)} 
-            />
-        } />
-
-        <Route path="/legal" element={<LegalWrapper />} />
-        
-        <Route path="/termsagreement" element={<TermsAgreement onAgree={() => navigate('/dashboard')} />} />
-        
-        <Route path="/parent-approval" element={<ParentApprovalWrapper />} />
-        
-        <Route path="/Auth" element={
             <Auth 
                 setView={setView} 
                 onLogin={(msg) => showToast(msg)} 
                 onSignUpSuccess={() => {
-                    // ✅ Using getSession() instead of getUser()
                     supabase.auth.getSession().then(({ data }) => {
                         if(data?.session) handleSession(data.session);
                     });
                 }} 
             />
         } />
+
+        {/* Legal & Onboarding */}
+        <Route path="/legal" element={<LegalWrapper />} />
+        <Route path="/termsagreement" element={<TermsAgreement onAgree={() => navigate('/dashboard')} />} />
+        <Route path="/parent-approval" element={<ParentApprovalWrapper />} />
         <Route path="/parent-login" element={<ParentLogin />} />
 
+        {/* Secure Dashboards */}
         <Route path="/parent-dashboard" element={
             user?.type === 'parent' ? (
                 <ParentDashboard 
                     user={user} 
                     onLogout={async () => { await supabase.auth.signOut(); navigate('/'); showToast('Logged out'); }} 
                 />
-            ) : <Navigate to="/auth" />
+            ) : <Navigate to="/" />
         } />
 
         <Route path="/admin" element={
@@ -305,7 +246,7 @@ export default function App() {
                     user={user} 
                     onLogout={async () => { await supabase.auth.signOut(); navigate('/'); showToast('Logged out'); }} 
                 />
-            ) : <Navigate to="/auth" />
+            ) : <Navigate to="/" />
         } />
 
         <Route path="/dashboard/*" element={
@@ -318,9 +259,10 @@ export default function App() {
                     darkMode={darkMode} 
                     toggleTheme={toggleTheme} 
                 />
-            ) : <Navigate to="/auth" />
+            ) : <Navigate to="/" />
         } />
 
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
    </>
