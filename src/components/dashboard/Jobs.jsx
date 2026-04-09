@@ -24,6 +24,12 @@ const getTimeAgo = (dateString) => {
     return 'Just now';
 };
 
+// --- HELPER: STRICT ELITE CHECK ---
+// Prevents bugs where the database returns 'true' as a string or 1 as an integer
+const checkIsElite = (val) => {
+    return val === true || String(val).toLowerCase() === 'true' || val === 1 || val === '1';
+};
+
 // --- AI RESULT CARD COMPONENT ---
 const AiResultCard = ({ title, icon, freelancer, colorClass, setActiveChat, setTab }) => {
     if (!freelancer) return null;
@@ -79,8 +85,8 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
     const isLongText = description.length > 120;
     const displayName = isClient ? (data.freelancer_name || 'Freelancer') : (data.client_name || 'Client');
 
-    // Elite Mode Check
-    const isElite = data.is_elite && !isClient;
+    // Robust Elite Mode Check (Removed strict !isClient constraint so cards render correctly)
+    const isElite = checkIsElite(data.is_elite);
 
     // Standard Gradients
     const gradients = [
@@ -249,13 +255,24 @@ const Jobs = ({
   
   const [jobView, setJobView] = useState('normal'); 
 
+  // --- FILTER 1: FREELANCER VIEW (Missions) ---
   const publicMissions = filteredJobs.filter(job => {
       if (job.category === 'Direct Hire') return false;
       if (job.status && !['Pending', 'Open'].includes(job.status)) return false;
 
-      if (jobView === 'elite' && !job.is_elite) return false; 
-      if (jobView === 'normal' && job.is_elite) return false; 
+      const isElite = checkIsElite(job.is_elite);
+      if (jobView === 'elite' && !isElite) return false; 
+      if (jobView === 'normal' && isElite) return false; // Absolutely forces elite to hide
 
+      return true;
+  });
+
+  // --- FILTER 2: CLIENT VIEW (Services/Gigs) ---
+  // Added identical filtering logic here so elite items do not show in client normal views
+  const visibleServices = services.filter(service => {
+      const isElite = checkIsElite(service.is_elite);
+      if (jobView === 'elite' && !isElite) return false;
+      if (jobView === 'normal' && isElite) return false; // Applies the strict hide rule
       return true;
   });
 
@@ -394,40 +411,39 @@ const Jobs = ({
                  {isClient ? 'Talent Catalog' : 'Mission Board'}
               </h2>
               
-              {/* ELITE TOGGLE FOR FREELANCERS ONLY */}
-              {!isClient && (
-                  <div className="bg-gray-100 dark:bg-white/5 p-1 rounded-full flex items-center border border-gray-200 dark:border-white/10 w-fit shrink-0">
-                      <button 
-                          onClick={() => handleToggle('normal')}
-                          className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${jobView === 'normal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                      >
-                          Normal
-                      </button>
-                      <button 
-                          onClick={() => handleToggle('elite')}
-                          className={`px-5 py-2 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${jobView === 'elite' ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-white shadow-md shadow-amber-500/20' : 'text-gray-500 hover:text-amber-500'}`}
-                      >
-                          <Crown size={14} className={jobView === 'elite' ? 'fill-white' : ''}/> Elite
-                      </button>
-                  </div>
-              )}
+              {/* ELITE TOGGLE */}
+              <div className="bg-gray-100 dark:bg-white/5 p-1 rounded-full flex items-center border border-gray-200 dark:border-white/10 w-fit shrink-0">
+                  <button 
+                      onClick={() => handleToggle('normal')}
+                      className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${jobView === 'normal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  >
+                      Normal
+                  </button>
+                  <button 
+                      onClick={() => handleToggle('elite')}
+                      className={`px-5 py-2 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${jobView === 'elite' ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-white shadow-md shadow-amber-500/20' : 'text-gray-500 hover:text-amber-500'}`}
+                  >
+                      <Crown size={14} className={jobView === 'elite' ? 'fill-white' : ''}/> Elite
+                  </button>
+              </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative z-10">
             {isClient 
-                ? services.map(s => <JobCard key={s.id} data={s} type="Gig" isClient={isClient} onAction={onAction} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} />)
+                // Uses visibleServices instead of raw services array
+                ? visibleServices.map(s => <JobCard key={s.id} data={s} type="Gig" isClient={isClient} onAction={onAction} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} />)
                 : publicMissions.map(j => <JobCard key={j.id} data={j} type="Mission" isClient={isClient} onAction={onAction} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} />)
             }
           </div>
       </div>
 
       {/* --- EMPTY STATE --- */}
-      {((!isClient && publicMissions.length === 0) || (isClient && services.length === 0)) && (
+      {((!isClient && publicMissions.length === 0) || (isClient && visibleServices.length === 0)) && (
         <div className="flex flex-col items-center justify-center py-32 border-2 border-dashed border-gray-200 dark:border-white/5 rounded-[40px] bg-gray-50 dark:bg-white/5 m-4 text-center">
            <Briefcase size={48} className="text-gray-300 mb-4"/>
            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Void Detected</h3>
            <p className="text-gray-500 dark:text-gray-400 text-sm max-w-xs mx-auto">
-               {jobView === 'elite' ? "No Elite Missions currently available. Check back later!" : "No signals matching your query. Try adjusting your search terms."}
+               {jobView === 'elite' ? "No Elite entries currently available. Check back later!" : "No signals matching your query. Try adjusting your search terms."}
            </p>
         </div>
       )}
