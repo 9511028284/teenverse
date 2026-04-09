@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Save, User, Shield, Smartphone, Globe, Activity, CheckCircle, AlertTriangle, Clock, ChevronRight, ShieldCheck
+  Save, User, Shield, Smartphone, Globe, Activity, CheckCircle, AlertTriangle, Clock, ChevronRight, ShieldCheck, Mail
 } from 'lucide-react'; 
 import Button from '../ui/Button';
 
@@ -176,10 +176,38 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
             </button>
         </div>
 
-        {/* 3. KYC SECTION */}
-        <div className="col-span-12">
-            <div className={`${statusUI.lightColor} border border-transparent dark:border-white/5 p-1 rounded-[2rem]`}>
-                <div className="bg-white/50 dark:bg-[#1E293B]/80 backdrop-blur-xl rounded-[1.8rem] p-6 flex flex-col md:flex-row items-center gap-6">
+        {/* 3. 🚀 NEW: PARENT EMAIL CARD (Freelancers Only) */}
+        {!isClient && (
+            <div className="col-span-12 md:col-span-6 bg-white dark:bg-[#1E293B] p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl relative overflow-hidden">
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 rounded-full bg-pink-100 dark:bg-pink-500/20 flex items-center justify-center text-pink-600 dark:text-pink-400">
+                        <Mail size={20} />
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-bold dark:text-white">Guardian Contact</h2>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Required for teens under 18.</p>
+                    </div>
+                </div>
+                <div className="space-y-4">
+                    <ModernInput 
+                        label="Parent's Email Address" 
+                        icon={Mail}
+                        type="email"
+                        placeholder="parent@example.com"
+                        value={profileForm.parent_email || ""} 
+                        onChange={e => setProfileForm({...profileForm, parent_email: e.target.value})} 
+                    />
+                    <p className="text-[10px] text-gray-400 font-medium leading-tight">
+                        This email will be used to receive secure OTP codes for high-risk financial actions when your Parent Shield is actively engaged.
+                    </p>
+                </div>
+            </div>
+        )}
+
+        {/* 4. KYC SECTION */}
+        <div className={`col-span-12 ${!isClient ? 'md:col-span-6' : ''}`}>
+            <div className={`${statusUI.lightColor} border border-transparent dark:border-white/5 p-1 rounded-[2rem] h-full`}>
+                <div className="bg-white/50 dark:bg-[#1E293B]/80 backdrop-blur-xl rounded-[1.8rem] p-6 flex flex-col md:flex-row items-center gap-6 h-full">
                     <div className={`w-16 h-16 rounded-full flex items-center justify-center shrink-0 shadow-lg ${statusUI.color} text-white`}>
                         <StatusIcon size={32} />
                     </div>
@@ -196,14 +224,28 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
                     </div>
                     {/* Hides button if status is verified OR approved OR pending */}
                     {kycStatus !== 'verified' && kycStatus !== 'approved' && kycStatus !== 'pending' && (
-                        <button onClick={onOpenKyc} className="bg-gray-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+                        <button onClick={onOpenKyc} className="bg-gray-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2 w-full md:w-auto justify-center">
                             Start Verification <ChevronRight size={18} />
                         </button>
                     )}
                 </div>
             </div>
         </div>
+
       </div>
+      
+      {/* MOBILE SAVE BUTTON (Sticky to bottom) */}
+      <div className="md:hidden fixed bottom-20 left-4 right-4 z-40">
+         <Button 
+          onClick={handleUpdateProfile} 
+          disabled={parentMode} 
+          className="w-full bg-gray-900 dark:bg-white text-white dark:text-black hover:scale-105 active:scale-95 transition-transform shadow-2xl shadow-indigo-500/20 py-4"
+          icon={Save}
+        >
+          Save Changes
+        </Button>
+      </div>
+
     </div>
   );
 };
