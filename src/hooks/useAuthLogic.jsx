@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '../supabase'; // Ensure this path matches your project
-import { openMsg91Widget, verifyMsg91Token } from '../utils/phoneAuth'; // Updated to use the Widget
+import { supabase } from '../supabase'; 
+import { openMsg91Widget, verifyMsg91Token } from '../utils/phoneAuth'; 
 
 const CLOUDFLARE_SITE_KEY = import.meta.env.VITE_CLOUDFLARE_SITE_KEY;
-// Added ENV variables for the MSG91 Widget
 const MSG91_WIDGET_ID = import.meta.env.VITE_MSG91_WIDGET_ID;
 const MSG91_TOKEN_AUTH = import.meta.env.VITE_MSG91_TOKEN_AUTH; 
 
@@ -32,9 +31,11 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
 
+  // ⚡ UPDATED: Added state, pincode, source, and defaulted nationality to India
   const [formData, setFormData] = useState({
     role: 'freelancer', email: '', password: '', name: '', phone: '', 
-    nationality: '', dob: '', gender: 'Male', org: '', 
+    nationality: 'India', state: '', pincode: '', source: '', 
+    dob: '', gender: 'Male', org: '', 
     referralCode: ''
   });
   
@@ -60,7 +61,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value };
       
-      // Calculate Age Instantly (No useEffect lag)
+      // Calculate Age Instantly
       if (field === 'dob') {
         if (!value) {
             setAge(null);
@@ -76,11 +77,10 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
           calculatedAge--;
         }
 
-        // STRICT PLATFORM LIMIT: 14 to 19 ONLY
         if (calculatedAge < 14 || calculatedAge > 19) {
           showToast("Platform is exclusive to ages 14 to 19 only.");
           setAge(null);
-          return { ...newData, dob: '' }; // Clear the invalid date
+          return { ...newData, dob: '' }; 
         }
 
         setAge(calculatedAge);
@@ -108,22 +108,19 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
 
   // --- HANDLERS ---
   const handleAuthRedirect = async (user) => {
-    // 500ms delay prevents Database Trigger race conditions during social logins
     setTimeout(async () => {
         const { data: freelancerData } = await supabase.from('freelancers').select('phone').eq('id', user.id).maybeSingle();
         const { data: clientData } = await supabase.from('clients').select('phone').eq('id', user.id).maybeSingle();
 
-        // Check if they ACTUALLY have a completed profile (Phone is our anchor)
         if ((freelancerData?.phone && freelancerData.phone.length > 5) || (clientData?.phone && clientData.phone.length > 5)) {
            onLogin(`Welcome back!`);
         } else {
-           // They don't have a profile yet! Force them to Step 1 to collect details.
            setSocialUser(user);
            setFormData(prev => ({ 
              ...prev, 
              email: user.email, 
              name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0], 
-             role: 'freelancer' // Default to freelancer for the UI starting point
+             role: 'freelancer' 
            }));
            setViewMode('signup');
            setStep(1); 
@@ -139,6 +136,10 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     }
     if (step === 3) {
         if (!isPhoneVerified) return showToast("Verify mobile number via OTP to continue.");
+        // ⚡ Validation for new fields
+        if (!formData.state) return showToast("Please select your state.");
+        if (formData.pincode.length !== 6) return showToast("Please enter a valid 6-digit pincode.");
+
         setLoading(true);
         try {
             const userId = socialUser?.id || '00000000-0000-0000-0000-000000000000';
@@ -156,6 +157,8 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
 
   const handleFinalSubmit = async () => {
     if (viewMode !== 'login' && !agreedToTerms) return showToast("Agree to Terms & Privacy.");
+    // ⚡ Validate Source
+    if (viewMode !== 'login' && !formData.source) return showToast("Please tell us how you heard about us.");
     
     setLoading(true);
     try {
@@ -182,15 +185,15 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     let uid = socialUser?.id;
 
     try {
+        // ⚡ UPDATED: Added state, pincode, and source to the database payload
         const profileData = { 
             name: formData.name, email: formData.email, phone: formData.phone, 
             phone_verified: true, nationality: formData.nationality, referral_code: myRefCode,
+            state: formData.state, pincode: formData.pincode, source: formData.source,
             ...(formData.role === 'client' ? { is_organisation: formData.org } : { dob: formData.dob, age, gender: formData.gender })
         };
 
         if (!uid) {
-            // NEW EMAIL SIGNUP: Wait for email verification. 
-            // We pass ALL form data into user_metadata so the DB trigger can grab it.
             const { error } = await supabase.auth.signUp({
                 email: formData.email, password: formData.password,
                 options: { 
@@ -200,58 +203,44 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
             });
             if (error) throw error;
             
-            // Show "Email Sent" screen. The database trigger will handle the inserts securely!
             setVerificationSent(true);
-
         } else {
-            // SOCIAL SIGNUP: User is already authenticated! We CAN use .upsert() here safely.
             const table = formData.role === 'client' ? 'clients' : 'freelancers';
             
             await supabase.from('users').upsert({ id: uid, email: formData.email, full_name: formData.name });
             const { error: dbError } = await supabase.from(table).upsert({ id: uid, ...profileData });
             if (dbError) throw dbError;
 
-            // Instantly redirect them
             window.location.href = '/termsagreement';
         }
-
     } catch (error) {
         throw error; 
     }
   };
 
-  // --- NEW WIDGET HANDLER ---
-  // --- NEW WIDGET HANDLER ---
   const handlePhoneVerification = async () => {
     if (formData.phone.length < 10) return showToast("Enter valid mobile number");
     if (!MSG91_WIDGET_ID) return showToast("Widget ID is missing from environment variables.");
 
     setOtpLoading(true);
     try {
-        // Standardize to +91 if prefix is missing
         const formattedPhone = formData.phone.startsWith('+') 
           ? formData.phone 
           : `+91${formData.phone.replace(/^0+/, '')}`;
 
-        // 1. Open widget and get the JWT token back (saving it to a variable named 'jwtToken')
         const jwtToken = await openMsg91Widget(formattedPhone, MSG91_WIDGET_ID, MSG91_TOKEN_AUTH);
-
-        // 2. Send the exact same 'jwtToken' variable to Supabase
-        // (If you previously typed verifyMsg91Token(token) here, it would cause the exact error you are seeing!)
         await verifyMsg91Token(jwtToken);
 
-        // 3. Success! Update UI
         setIsPhoneVerified(true);
         updateField('phone', formattedPhone);
         showToast("Phone Verified Successfully!", "success");
     } catch (err) {
-        // Triggers if the user closes the modal, validation fails, or if token is rejected
         showToast(err.message || "Phone verification failed.");
     } finally {
         setOtpLoading(false);
     }
   };
-  // --- PASSWORD RESET HANDLERS ---
+
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if(!formData.email) return showToast("Enter your email address first.");
@@ -263,7 +252,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
         body: { action: 'send', email: formData.email.trim() }
       });
       if (error) throw error;
-       
+        
       setShowResetVerify(true);
       showToast("OTP sent! Check your email.", "success");
     } catch (err) {
@@ -281,11 +270,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     setLoading(true);
     try {
         const { data, error } = await supabase.functions.invoke('request-reset', {
-            body: { 
-              action: 'verify', 
-              email: formData.email.trim(), 
-              otp: resetOtp.trim() 
-            }
+            body: { action: 'verify', email: formData.email.trim(), otp: resetOtp.trim() }
         });
 
         if (error || !data || !data.success) throw new Error(data?.error || "Invalid or Expired Code");
@@ -307,12 +292,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     setLoading(true);
     try {
         const { data, error } = await supabase.functions.invoke('request-reset', {
-            body: { 
-                action: 'reset_password', 
-                email: formData.email.trim(),
-                otp: resetOtp.trim(),
-                new_password: newPassword
-            }
+            body: { action: 'reset_password', email: formData.email.trim(), otp: resetOtp.trim(), new_password: newPassword }
         });
 
         if (error || !data || !data.success) throw new Error(data?.error || "Failed to update password");
@@ -328,7 +308,6 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     }
   };
 
-  // Return everything needed by UI
   return {
     state: {
       viewMode, step, loading, toast, verificationSent,
@@ -342,12 +321,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
       setCaptchaToken, updateField, showToast, setIsPhoneVerified, setVerificationSent,
       handleNext, handleBack: () => setStep(s => s - 1), 
       handleFinalSubmit, handlePhoneVerification, 
-       
-      // Forgot Password Actions
-      handleForgotPassword,
-      handleVerifyResetOTP,
-      handleUpdatePassword,
-
+      handleForgotPassword, handleVerifyResetOTP, handleUpdatePassword,
       handleSocialLogin: async (provider) => {
           setLoading(true);
           const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });

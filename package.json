@@ -18,6 +18,8 @@
     "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-converter": "^4.22.0",
     "@tensorflow/tfjs-core": "^4.22.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "aws4fetch": "^1.0.20",
@@ -34,6 +36,7 @@
     "react-dom": "^19.2.3",
     "react-helmet-async": "^2.0.5",
     "react-router-dom": "^7.13.0",
+    "redis": "^5.11.0",
     "supabase": "^2.71.1",
     "tailwind-merge": "^3.4.0"
   },

@@ -18,6 +18,10 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
   const currentUserPlan = user?.current_plan || 'Basic';
   const walletBalance = Number(user?.wallet_balance) || 0;
 
+  // 🛡️ FRONTEND SUBSCRIPTION LOCK LOGIC
+  const planExpiryDate = user?.plan_expires_at ? new Date(user.plan_expires_at) : null;
+  const isPlanActive = currentUserPlan !== 'Basic' && planExpiryDate && planExpiryDate > new Date();
+
   // --- PREMIUM FREELANCER PLANS ---
   const freelancerPlans = [
     {
@@ -113,7 +117,6 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
         { text: 'Access to Elite Jobs', included: true },
       ],
       cta: 'Claim VIP Status',
-      // 🔥 THE VIP BLACK CARD LOOK
       style: 'border-amber-500/50 ring-1 ring-amber-500/30 bg-gradient-to-br from-slate-900 via-black to-slate-900 shadow-2xl shadow-amber-900/50 hover:shadow-amber-600/40 transition-all',
       btnStyle: 'bg-gradient-to-r from-amber-400 to-yellow-600 hover:from-amber-500 hover:to-yellow-700 text-black font-black shadow-lg shadow-amber-500/30',
       textColor: 'text-white',
@@ -260,7 +263,21 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
         className="grid md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-7xl mx-auto px-4 items-end z-10 relative"
       >
         {freelancerPlans.map((plan) => {
-          const isCurrentPlan = currentUserPlan === plan.name;
+          
+          // 🚀 DETERMINE LOCK STATES FOR EACH CARD
+          const isThisPlanCurrent = currentUserPlan === plan.name;
+          const isDisabled = isPlanActive || plan.planId === 'basic';
+          
+          let buttonText = plan.cta;
+          if (plan.planId === 'basic') {
+              buttonText = 'Current Plan';
+          } else if (isPlanActive) {
+              if (isThisPlanCurrent) {
+                  buttonText = `Current (Expires ${planExpiryDate?.toLocaleDateString()})`;
+              } else {
+                  buttonText = 'Locked (Active Plan)';
+              }
+          }
           
           return (
             <motion.div 
@@ -340,23 +357,23 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
                 ))}
               </ul>
 
-              {/* CALL TO ACTION */}
+              {/* 🚀 SMART CALL TO ACTION */}
               <Button 
                 onClick={() => {
-                  if (!isCurrentPlan && plan.planId !== 'basic') {
+                  if (!isDisabled) {
                     setCheckoutPlan({ plan, isAnnual });
                     setUseWallet(walletBalance > 0);
                   }
                 }}
-                disabled={isCurrentPlan || plan.planId === 'basic'}
-                className={`w-full py-4 rounded-xl font-black tracking-wide uppercase text-sm flex items-center justify-center gap-2 group ${
-                    isCurrentPlan 
+                disabled={isDisabled}
+                className={`w-full py-4 rounded-xl font-black tracking-wide uppercase text-[11px] flex items-center justify-center gap-2 group ${
+                    isDisabled 
                     ? (plan.name === 'Elite' ? 'bg-white/10 text-white/50 cursor-not-allowed border border-white/10' : 'bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-white/5 border border-gray-200 dark:border-white/10') 
                     : plan.btnStyle
                 }`}
               >
-                {isCurrentPlan ? 'Current Plan' : plan.cta} 
-                {!isCurrentPlan && plan.name !== 'Basic' && <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />}
+                {buttonText}
+                {!isDisabled && <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />}
               </Button>
             </motion.div>
           );

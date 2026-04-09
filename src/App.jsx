@@ -9,10 +9,7 @@ import { Loader2 } from 'lucide-react';
 import Auth from './pages/Auth'; 
 import Dashboard from './pages/Dashboard';
 import TermsAgreement from './pages/TermsAgreement'; 
-import AdminDashboard from './pages/AdminPage';
-import ParentApproval from './pages/ParentApproval';
-import ParentLogin from './pages/ParentLogin'; 
-import ParentDashboard from './pages/ParentDashboard'; 
+import AdminDashboard from './pages/AdminPage'; // Assuming this import was missing in your snippet but used in LegalWrapper
 
 // --- 1. Helper Wrappers ---
 const LegalWrapper = () => {
@@ -55,12 +52,19 @@ export default function App() {
           case 'safety': 
               window.location.href = 'https://teenversehub.in'; 
               break;
+              
+          // If they try to access parent routes, teleport them to the subdomain
+          case 'parent-login': 
+          case 'parent-dashboard': 
+          case 'parent portal':
+              window.location.href = 'https://parent.teenversehub.in'; 
+              break;
+
+          // Internal App Routing
           case 'auth': navigate('/'); break; // Auth is now the root page
           case 'dashboard': navigate('/dashboard'); break;
           case 'legal': navigate('/legal'); break;
           case 'admin': navigate('/admin'); break;
-          case 'parent-login': navigate('/parent-login'); break;
-          case 'parent-dashboard': navigate('/parent-dashboard'); break;
           default: navigate('/'); 
       }
   };
@@ -92,7 +96,7 @@ export default function App() {
     const currentPath = location.pathname;
     
     // ✅ Auth/Login is now at '/'
-    const isPublic = ['/', '/legal', '/termsagreement', '/parent-approval', '/parent-login'].some(path => currentPath === path || currentPath.startsWith(path + '/'));
+    const isPublic = ['/', '/legal', '/termsagreement', '/parent-approval'].some(path => currentPath === path || currentPath.startsWith(path + '/'));
     const isTermsPage = currentPath.startsWith('/termsagreement');
 
     if (!session) {
@@ -138,7 +142,7 @@ export default function App() {
           return;
       }
         
-      // 4. PARENT
+      // 4. PARENT (Instantly teleport them to the Parent Portal Subdomain)
       const { data: parentMatch } = await supabase
         .from('parent_consents')
         .select('user_id')
@@ -146,11 +150,7 @@ export default function App() {
         .maybeSingle();
 
       if (parentMatch) {
-          setUser({ ...u, type: 'parent', teenId: parentMatch.user_id });
-          if (currentPath === '/' || (!currentPath.startsWith('/parent-dashboard') && !isPublic)) {
-              navigate('/parent-dashboard');
-          }
-          setLoading(false);
+          window.location.href = 'https://parent.teenversehub.in';
           return;
       }
 
@@ -228,18 +228,8 @@ export default function App() {
         <Route path="/legal" element={<LegalWrapper />} />
         <Route path="/termsagreement" element={<TermsAgreement onAgree={() => navigate('/dashboard')} />} />
         <Route path="/parent-approval" element={<ParentApprovalWrapper />} />
-        <Route path="/parent-login" element={<ParentLogin />} />
 
         {/* Secure Dashboards */}
-        <Route path="/parent-dashboard" element={
-            user?.type === 'parent' ? (
-                <ParentDashboard 
-                    user={user} 
-                    onLogout={async () => { await supabase.auth.signOut(); navigate('/'); showToast('Logged out'); }} 
-                />
-            ) : <Navigate to="/" />
-        } />
-
         <Route path="/admin" element={
             user?.type === 'admin' ? (
                 <AdminDashboard 
