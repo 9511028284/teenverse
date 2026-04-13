@@ -104,7 +104,7 @@ const DashboardSidebar = ({
                  <div className="flex-1">
                     <div className="flex justify-between text-[10px] font-bold uppercase mb-1 text-slate-500 dark:text-gray-400">
                        <span>Energy</span>
-                       <span>{energy}/20</span>
+                       <span>{energy}</span>
                     </div>
                     <div className="w-full bg-slate-200 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
                        <div className="bg-amber-500 h-full rounded-full transition-all duration-500" style={{ width: `${(energy / 20) * 100}%` }}></div>

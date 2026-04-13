@@ -31,10 +31,10 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
 
-  // ⚡ UPDATED: Added state, pincode, source, and defaulted nationality to India
+  // ⚡ UPDATED: Removed state and pincode
   const [formData, setFormData] = useState({
     role: 'freelancer', email: '', password: '', name: '', phone: '', 
-    nationality: 'India', state: '', pincode: '', source: '', 
+    nationality: 'India', source: '', 
     dob: '', gender: 'Male', org: '', 
     referralCode: ''
   });
@@ -77,8 +77,8 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
           calculatedAge--;
         }
 
-        if (calculatedAge < 14 || calculatedAge > 19) {
-          showToast("Platform is exclusive to ages 14 to 19 only.");
+        if (calculatedAge < 14 || calculatedAge > 21) {
+          showToast("Platform is exclusive to ages 14 to 21 only.");
           setAge(null);
           return { ...newData, dob: '' }; 
         }
@@ -136,9 +136,7 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     }
     if (step === 3) {
         if (!isPhoneVerified) return showToast("Verify mobile number via OTP to continue.");
-        // ⚡ Validation for new fields
-        if (!formData.state) return showToast("Please select your state.");
-        if (formData.pincode.length !== 6) return showToast("Please enter a valid 6-digit pincode.");
+        // ⚡ UPDATED: Removed state and pincode validation here
 
         setLoading(true);
         try {
@@ -185,11 +183,11 @@ export const useAuthLogic = (onLogin, onSignUpSuccess) => {
     let uid = socialUser?.id;
 
     try {
-        // ⚡ UPDATED: Added state, pincode, and source to the database payload
+        // ⚡ UPDATED: Removed state and pincode from the payload
         const profileData = { 
             name: formData.name, email: formData.email, phone: formData.phone, 
             phone_verified: true, nationality: formData.nationality, referral_code: myRefCode,
-            state: formData.state, pincode: formData.pincode, source: formData.source,
+            source: formData.source,
             ...(formData.role === 'client' ? { is_organisation: formData.org } : { dob: formData.dob, age, gender: formData.gender })
         };
 
