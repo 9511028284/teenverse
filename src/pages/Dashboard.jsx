@@ -215,13 +215,14 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
    />
 )}
 
-{tab === 'support' && (
-    <SupportHub 
-        user={user} 
-        showToast={showToast} 
-        setModal={setters.setModal} // <-- MAKE SURE THIS IS HERE! (Use setters.setModal or just setModal depending on your setup)
-    />
-)}
+ {tab === 'support' && (
+                        <SupportHub 
+                            user={user} 
+                            showToast={showToast} 
+                            setModal={setters.setModal}
+                            isClient={isClient}
+                        />
+                    )}
                   
                     {tab === 'academy' && !isClient && (
                       <Academy 

@@ -108,6 +108,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
   }, [messages]);
 
   // --- FETCH INBOX CONVERSATIONS ---
+// --- FETCH INBOX CONVERSATIONS ---
   useEffect(() => {
     if (activeChat || !user?.id) return; 
 
@@ -115,12 +116,12 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
       setIsLoadingInbox(true);
       try {
         const roleColumn = isClient ? 'client_id' : 'freelancer_id';
-        const otherNameColumn = isClient ? 'freelancer_name' : 'client_name';
         const otherIdColumn = isClient ? 'freelancer_id' : 'client_id';
 
+        // 🚀 THE FIX: Safely select freelancer_name directly, and get client_name through the jobs relation!
         const { data: appData, error: appError } = await supabase
           .from('applications')
-          .select(`id, ${otherIdColumn}, ${otherNameColumn}, created_at, status`) 
+          .select(`id, client_id, freelancer_id, freelancer_name, created_at, status, jobs(client_name)`) 
           .eq(roleColumn, user.id)
           .order('created_at', { ascending: false }); 
 
@@ -131,7 +132,8 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
         if (appData) {
           combinedChats = appData.map(app => ({
             id: app[otherIdColumn], 
-            name: app[otherNameColumn],
+            // 🚀 Extract the correct name based on who is logged in
+            name: isClient ? app.freelancer_name : (app.jobs?.client_name || 'Client'),
             application_id: app.id,
             status: app.status,
             lastMessage: `Project Status: ${app.status}`,
@@ -187,11 +189,13 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
 
         setConversations(uniqueChats);
       } catch (err) {
+        console.error("Inbox Error:", err);
         if (showToast) showToast("Failed to sync inbox.", "error");
       } finally {
         setIsLoadingInbox(false);
       }
     };
+    
     fetchConversations();
   }, [activeChat, user?.id, isClient, showToast]);
 

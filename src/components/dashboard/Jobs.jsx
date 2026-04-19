@@ -385,35 +385,49 @@ const Jobs = ({
   return (
     <div className="min-h-screen space-y-8 animate-fade-in pb-20 relative">
       
-      {/* --- COMMAND BAR --- */}
+    {/* --- COMMAND BAR --- */}
       <div className="sticky top-6 z-[100] mx-auto max-w-4xl px-4">
         {isClient ? (
-          <div className="bg-white/90 dark:bg-[#0F172A]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-[2rem] p-6 shadow-xl relative overflow-hidden">
+          <div className="bg-white/90 dark:bg-[#0F172A]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 shadow-xl relative overflow-hidden">
             {/* Soft decorative background glow */}
             <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
             
-            <div className="text-center mb-6 relative z-10">
-                <h2 className="text-2xl font-black text-gray-900 dark:text-white flex items-center justify-center gap-2">
-                    <Sparkles className="text-indigo-500" size={24}/> AI Talent Matcher
+            <div className="text-center mb-5 sm:mb-6 relative z-10">
+                <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white flex items-center justify-center gap-2">
+                    <Sparkles className="text-indigo-500 shrink-0" size={24}/> AI Talent Matcher
                 </h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 max-w-lg mx-auto">
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-2 max-w-lg mx-auto leading-relaxed">
                     Don't waste time scrolling. Describe your exact project, required skills, and budget, and our AI will find the perfect freelancer for you.
                 </p>
             </div>
 
             <form onSubmit={handleAiSearch} className="relative group z-10">
-                <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full blur opacity-10 group-hover:opacity-30 transition-opacity"></div>
-                <div className="relative bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-full p-2 flex items-center shadow-inner">
-                    {isAiSearching ? <Loader2 className="ml-4 text-indigo-500 animate-spin shrink-0" size={20} /> : <Search className={`ml-4 shrink-0 ${searchTerm ? 'text-indigo-500' : 'text-gray-400'}`} size={20}/>}
-                    <input 
-                        type="text" 
-                        placeholder="e.g., Need a Python developer for a web scraper, budget around ₹1500/hr..."
-                        className="w-full bg-transparent px-4 py-3 outline-none text-gray-900 dark:text-white placeholder-gray-500 font-medium text-sm"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    <div className="pr-1 flex gap-2 shrink-0">
-                        <Button type="submit" disabled={isAiSearching || !searchTerm} className="rounded-full px-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold tracking-tight shadow-md shadow-indigo-500/20">
+                <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-[1.5rem] sm:rounded-full blur opacity-10 group-hover:opacity-30 transition-opacity"></div>
+                
+                {/* 🚀 RESPONSIVE CONTAINER: Stacks on mobile, pill on desktop */}
+                <div className="relative bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-2xl sm:rounded-full p-1.5 sm:p-2 flex flex-col sm:flex-row items-stretch sm:items-center shadow-inner gap-2 sm:gap-0">
+                    
+                    <div className="flex items-center flex-1 px-2 sm:pl-4 sm:pr-2">
+                        {isAiSearching ? (
+                            <Loader2 className="text-indigo-500 animate-spin shrink-0" size={20} />
+                        ) : (
+                            <Search className={`shrink-0 transition-colors ${searchTerm ? 'text-indigo-500' : 'text-gray-400'}`} size={20}/>
+                        )}
+                        <input 
+                            type="text" 
+                            placeholder="e.g., Need a Python dev for ₹1500/hr..."
+                            className="w-full bg-transparent px-3 sm:px-4 py-3 outline-none text-gray-900 dark:text-white placeholder-gray-500 font-medium text-xs sm:text-sm"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+
+                    <div className="flex shrink-0 w-full sm:w-auto">
+                        <Button 
+                            type="submit" 
+                            disabled={isAiSearching || !searchTerm} 
+                            className="w-full sm:w-auto rounded-xl sm:rounded-full py-3 sm:py-2.5 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold tracking-tight shadow-md shadow-indigo-500/20 text-xs sm:text-sm whitespace-nowrap flex justify-center items-center transition-all"
+                        >
                             {isAiSearching ? 'SEARCHING...' : 'FIND TALENT'}
                         </Button>
                     </div>
@@ -421,11 +435,11 @@ const Jobs = ({
             </form>
             
             {parsedData && (
-              <div className="mt-6 flex flex-wrap justify-center gap-3 animate-fade-in-up relative z-10">
-                  <span className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 rounded-full flex items-center gap-1.5 shadow-sm">
-                    <DollarSign size={14}/> Extracted Budget: ₹{parsedData.budget || 'Flexible'}
+              <div className="mt-5 flex flex-wrap justify-center gap-2 sm:gap-3 animate-fade-in-up relative z-10">
+                  <span className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-400 rounded-full flex items-center gap-1.5 shadow-sm">
+                    <DollarSign size={14}/> Budget: ₹{parsedData.budget || 'Flexible'}
                   </span>
-                  <span className="px-3 py-1.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-[11px] font-bold text-rose-700 dark:text-rose-400 rounded-full flex items-center gap-1.5 shadow-sm">
+                  <span className="px-3 py-1.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-[10px] sm:text-[11px] font-bold text-rose-700 dark:text-rose-400 rounded-full flex items-center gap-1.5 shadow-sm">
                     <Clock size={14}/> Priority: {parsedData.urgency || 'Normal'}
                   </span>
               </div>
@@ -433,19 +447,35 @@ const Jobs = ({
           </div>
         ) : (
           <div className="relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full blur opacity-10 transition-opacity"></div>
-            <div className="relative bg-white/95 dark:bg-[#0F172A]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-full p-2 flex items-center shadow-2xl">
-                <Search className="ml-4 text-gray-400" size={20}/>
-                <input 
-                    type="text" 
-                    placeholder="Search missions, skills, or keywords..."
-                    className="w-full bg-transparent px-4 py-3 outline-none text-gray-900 dark:text-white placeholder-gray-500 font-medium text-sm"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                <div className="pr-1 flex gap-2">
-                    <button type="button" className="w-10 h-10 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center text-gray-400 transition-all"><Filter size={18}/></button>
-                    <Button type="button" className="rounded-full px-6 bg-gray-900 dark:bg-white text-white dark:text-black font-bold tracking-tight shadow-md">SEARCH</Button>
+            <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-[1.5rem] sm:rounded-full blur opacity-10 transition-opacity"></div>
+            
+            {/* 🚀 RESPONSIVE CONTAINER: Stacks on mobile, pill on desktop */}
+            <div className="relative bg-white/95 dark:bg-[#0F172A]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-2xl sm:rounded-full p-1.5 sm:p-2 flex flex-col sm:flex-row items-stretch sm:items-center shadow-2xl gap-2 sm:gap-0">
+                
+                <div className="flex items-center flex-1 px-2 sm:pl-4 sm:pr-2">
+                    <Search className="text-gray-400 shrink-0" size={20}/>
+                    <input 
+                        type="text" 
+                        placeholder="Search missions, skills, or keywords..."
+                        className="w-full bg-transparent px-3 sm:px-4 py-3 outline-none text-gray-900 dark:text-white placeholder-gray-500 font-medium text-xs sm:text-sm"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+
+                <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                    <button 
+                        type="button" 
+                        className="flex-1 sm:flex-none sm:w-10 sm:h-10 py-3 sm:py-0 rounded-xl sm:rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center text-gray-400 hover:text-indigo-500 transition-all"
+                    >
+                        <Filter size={18}/>
+                    </button>
+                    <Button 
+                        type="button" 
+                        className="flex-[2] sm:flex-none rounded-xl sm:rounded-full py-3 sm:py-2.5 px-6 bg-gray-900 dark:bg-white text-white dark:text-black font-bold tracking-tight shadow-md text-xs sm:text-sm flex justify-center items-center"
+                    >
+                        SEARCH
+                    </Button>
                 </div>
             </div>
           </div>
