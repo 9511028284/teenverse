@@ -1,10 +1,34 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Send, ArrowLeft, Loader2, CheckCheck, Lock, Flag, MessageSquare, Rocket, Briefcase } from 'lucide-react'; 
+import { Send, ArrowLeft, Loader2, CheckCheck, Lock, Flag, MessageSquare, Rocket, Briefcase, Wifi, WifiOff, ShieldAlert } from 'lucide-react'; 
 import { supabase } from '../../supabase';
 import { useChat } from '../../hooks/useChat'; 
 import Button from '../ui/Button'; 
 import Modal from '../ui/Modal';     
 import Input from '../ui/Input'; 
+
+// ==========================================
+// 🛡️ ENTERPRISE PII SHIELD
+// ==========================================
+const containsContactDetails = (text) => {
+    if (!text) return false;
+    
+    // Aggressive normalization to catch obfuscated attempts (e.g., "i n s t a")
+    const normalized = text.toLowerCase().replace(/[\s\-_.]+/g, '');
+    
+    // 1. Phone Numbers (Catches any 7+ digits, even spaced out)
+    const phoneRegex = /(?:\d[\s-._]*){7,15}/;
+    
+    // 2. Emails (Catches exact, [at], (at), dot com, etc)
+    const emailRegex = /[a-z0-9._%+-]+(?:@|\[at\]|\(at\)|\s+at\s+)[a-z0-9.-]+(?:\.|\[dot\]|\(dot\)|\s+dot\s+)[a-z]{2,}/i;
+    
+    // 3. Links & Domains
+    const urlRegex = /(https?:\/\/|www\.)[^\s]+|[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s]*)?/i;
+    
+    // 4. Banned Platforms
+    const socialRegex = /(instagram|insta|ig|whatsapp|wa|telegram|tg|discord|snapchat|snap|skype|twitter|x|linkedin|facebook|fb|wechat|viber|zoom|meet|teams)/i;
+
+    return phoneRegex.test(text) || emailRegex.test(text) || urlRegex.test(text) || socialRegex.test(text) || socialRegex.test(normalized);
+};
 
 // ==========================================
 // 💳 CASHFREE PAYMENT HELPER
@@ -36,15 +60,14 @@ const processCashfreePayment = async (params, onSuccess, onFail) => {
     else onFail("Payment not completed or failed.");
 
   } catch (err) {
-    console.error(err);
-    onFail(err.message);
+    onFail(err.message || "Payment processing error.");
   }
 };
 
 // ==========================================
 // 💬 MAIN CHAT COMPONENT
 // ==========================================
-const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAction }) => {
+const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAction, showToast }) => {
   const scrollRef = useRef(null);
   const textareaRef = useRef(null); 
   const lastSentRef = useRef(0); 
@@ -56,8 +79,8 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
   const [conversations, setConversations] = useState([]);
   const [isLoadingInbox, setIsLoadingInbox] = useState(false);
 
-  const { messages, input, setInput, loading: chatLoading, myId, executeSendMessage } = useChat(activeChat, user, initialMessage);
-
+  // 🚀 Added isConnected and passed showToast into the hook
+  const { messages, input, setInput, loading: chatLoading, myId, executeSendMessage, isConnected } = useChat(activeChat, user, initialMessage, showToast);
   const isClient = user?.type === 'client';
   const isUuid = (val) => typeof val === 'string' && val.includes('-');
   const isDirect = !activeChat?.application_id || isUuid(activeChat?.application_id);
@@ -95,11 +118,13 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
         const otherNameColumn = isClient ? 'freelancer_name' : 'client_name';
         const otherIdColumn = isClient ? 'freelancer_id' : 'client_id';
 
-        const { data: appData } = await supabase
+        const { data: appData, error: appError } = await supabase
           .from('applications')
           .select(`id, ${otherIdColumn}, ${otherNameColumn}, created_at, status`) 
           .eq(roleColumn, user.id)
           .order('created_at', { ascending: false }); 
+
+        if (appError) throw appError;
 
         let combinedChats = [];
 
@@ -114,13 +139,15 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
           }));
         }
 
-        const { data: directMsgs } = await supabase
+        const { data: directMsgs, error: msgError } = await supabase
           .from('messages')
           .select('sender_id, receiver_id, content, created_at')
           .is('application_id', null)
           .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
           .order('created_at', { ascending: false })
           .limit(100);
+          
+        if (msgError) throw msgError;
 
         if (directMsgs && directMsgs.length > 0) {
            const directMap = new Map();
@@ -160,13 +187,13 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
 
         setConversations(uniqueChats);
       } catch (err) {
-        console.error("Error loading inbox:", err);
+        if (showToast) showToast("Failed to sync inbox.", "error");
       } finally {
         setIsLoadingInbox(false);
       }
     };
     fetchConversations();
-  }, [activeChat, user?.id, isClient]);
+  }, [activeChat, user?.id, isClient, showToast]);
 
   // ==========================================
   // 🔒 SMART CHAT LOCK LOGIC
@@ -186,13 +213,13 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
               lockReason = "Active project exists. Please switch to the Secure Project Chat.";
           } else if (hasCompletedApp) {
               isChatLocked = true;
-              lockReason = "Project completed and funds released. Chat is securely closed.";
+              lockReason = "Project completed. Chat securely archived.";
           }
       } else {
           const currentAppStatus = activeChat.status || relatedApps.find(c => c.application_id === activeChat.application_id)?.status;
           if (currentAppStatus && ['Paid', 'Completed', 'Rejected', 'Cancelled'].includes(currentAppStatus)) {
               isChatLocked = true;
-              lockReason = `Project is ${currentAppStatus}. Chat is securely closed.`;
+              lockReason = `Project is ${currentAppStatus}. Chat securely archived.`;
           }
       }
   }
@@ -202,16 +229,6 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
   ] : [
       "I'll get started on this right away.", "Could you please clarify this requirement?", "The revision is ready."
   ];
-
-  const normalize = (text) => text?.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9@+]/g, '') || '';
-  const containsContactDetails = (text) => {
-    const clean = normalize(text);
-    const patterns = [
-      /(\+?\d{10,13})/, /(whatsapp|wa\.me)/, /(telegram|t\.me)/,
-      /(gmail|yahoo|outlook)/, /instagram|insta/, /@/
-    ];
-    return patterns.some(p => p.test(clean));
-  };
 
   const sendSystemMessage = async (sysMsg) => {
     const dbPayload = {
@@ -230,7 +247,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
     const amount = formData.get('amount');
 
     if (!user?.phone) {
-      alert("Please add a phone number to your profile to proceed with payment.");
+      if (showToast) showToast("Please add a phone number to your profile to proceed.", "error");
       return;
     }
 
@@ -259,25 +276,33 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
           setIsSending(false);
         },
         (errorMsg) => {
-          alert(errorMsg);
+          if (showToast) showToast(errorMsg, "error");
           setIsSending(false);
         });
     } catch (err) {
-        alert("Failed: " + err.message);
+        if (showToast) showToast("Escrow initialization failed.", "error");
         setIsSending(false);
     }
   };
 
+  // 🚀 SECURE SEND HANDLER
   const handleSend = async (e) => {
       e.preventDefault();
+      
+      if (!isConnected) {
+          if (showToast) showToast("Cannot send. Reconnecting to secure server...", "error");
+          return;
+      }
+      
       if (!input.trim() || isSending || isChatLocked) return;
 
       const now = Date.now();
       if (now - lastSentRef.current < 1000) return; 
       lastSentRef.current = now;
 
+      // 🛡️ FRONTEND PII INTERCEPTOR
       if (containsContactDetails(input)) {
-          alert("Sharing contact details is strictly prohibited to protect both parties.");
+          if (showToast) showToast("Message blocked. Sharing external contact info, links, or social media handles is strictly prohibited.", "error");
           return;
       }
 
@@ -293,15 +318,22 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
     const reason = formData.get('reason');
     const details = formData.get('details');
 
-    if (!reason || !details || details.trim().length < 10) { alert("Please provide a valid reason and description."); return; }
+    if (!reason || !details || details.trim().length < 10) { 
+        if (showToast) showToast("Please provide a valid reason and detailed description.", "error");
+        return; 
+    }
 
     const { error } = await supabase.from('reports').insert([{
         reporter_id: myId, reported_user_id: activeChat?.id, target_id: activeChat?.application_id || 'direct_message',
         target_type: 'chat_violation', reason: reason, details: details
     }]);
 
-    if (error) alert("Failed: " + error.message); 
-    else { alert("User reported."); setReportModalOpen(false); }
+    if (error) {
+        if (showToast) showToast("Failed to submit report.", "error");
+    } else { 
+        if (showToast) showToast("Report submitted successfully. Our trust & safety team will review it.", "success");
+        setReportModalOpen(false); 
+    }
   };
 
   /* =========================================================
@@ -309,46 +341,55 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
      ========================================================= */
   if (!activeChat) {
     return (
-      <div className="flex w-full h-full bg-white dark:bg-[#0a0a0a] text-gray-900 dark:text-white overflow-hidden relative font-sans flex-col rounded-2xl md:rounded-3xl border border-gray-200 dark:border-gray-800 shadow-xl transition-colors duration-300">
-        <div className="p-6 border-b border-gray-100 dark:border-gray-800/60 flex items-center gap-3">
-           <MessageSquare className="text-indigo-500" size={24}/>
-           <h2 className="text-2xl font-black tracking-tight">Messages</h2>
+      <div className="flex w-full h-full bg-white dark:bg-[#0B0F19] text-gray-900 dark:text-white overflow-hidden relative font-sans flex-col rounded-2xl md:rounded-3xl border border-gray-200 dark:border-white/10 shadow-xl transition-colors duration-300">
+        <div className="p-6 border-b border-gray-100 dark:border-white/10 flex items-center justify-between">
+           <div className="flex items-center gap-3">
+               <MessageSquare className="text-indigo-600 dark:text-indigo-400" size={24}/>
+               <h2 className="text-2xl font-black tracking-tight">Inbox</h2>
+           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-gray-50/50 dark:bg-transparent">
           {isLoadingInbox ? (
-            <div className="flex justify-center items-center h-40"><Loader2 className="animate-spin text-gray-400" size={24} /></div>
+            <div className="flex justify-center items-center h-40"><Loader2 className="animate-spin text-indigo-500" size={24} /></div>
           ) : conversations.length === 0 ? (
-            <div className="text-center py-20 opacity-50">
-               <div className="w-16 h-16 bg-gray-200 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4"><MessageSquare size={24} className="text-gray-400"/></div>
-               <p className="font-medium text-lg mb-1">No messages yet</p>
-               <p className="text-sm">Apply for jobs or hire talent to start chatting.</p>
+            <div className="text-center py-20 opacity-60">
+               <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                   <MessageSquare size={24} className="text-gray-400"/>
+               </div>
+               <p className="font-bold text-lg mb-1 text-gray-900 dark:text-white">No active conversations</p>
+               <p className="text-sm text-gray-500">Your secure messages will appear here.</p>
             </div>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {conversations.map(chat => (
                 <li 
                   key={chat.application_id || chat.id} 
                   onClick={() => setActiveChat(chat)} 
-                  className="p-4 bg-white dark:bg-[#111111] border border-gray-100 dark:border-gray-800 rounded-2xl hover:border-indigo-500/30 hover:shadow-md cursor-pointer transition-all group flex items-center justify-between"
+                  className="p-4 bg-white dark:bg-[#111827] border border-gray-200 dark:border-white/10 rounded-2xl hover:border-indigo-500/50 dark:hover:border-indigo-400/50 hover:shadow-md cursor-pointer transition-all group flex items-center justify-between"
                 >
                    <div className="flex items-center gap-4">
-                     <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-lg">
+                     <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-lg border border-indigo-100 dark:border-indigo-800">
                         {chat.name ? chat.name.charAt(0) : '?'}
                      </div>
                      <div>
-                       <p className="font-bold text-gray-900 dark:text-white group-hover:text-indigo-500 transition-colors">{chat.name || 'User'}</p>
+                       <p className="font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{chat.name || 'User'}</p>
                        <p className="text-xs text-gray-500 truncate max-w-[200px] sm:max-w-xs">{chat.lastMessage}</p>
                      </div>
                    </div>
                    <div className="text-right flex flex-col items-end">
                       {chat.application_id ? (
-                          <span className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
-                             {['Paid', 'Completed'].includes(chat.status) ? <Lock size={10} className="text-red-500"/> : <Lock size={10} className="text-emerald-500"/>} 
-                             {['Paid', 'Completed'].includes(chat.status) ? 'Closed' : 'Escrow Secure'}
+                          <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                             {['Paid', 'Completed', 'Cancelled', 'Rejected'].includes(chat.status) 
+                                 ? <Lock size={12} className="text-gray-400"/> 
+                                 : <ShieldAlert size={12} className="text-indigo-500"/>
+                             } 
+                             {['Paid', 'Completed'].includes(chat.status) ? 'Archived' : 'Active Project'}
                           </span>
                       ) : (
-                          <span className="text-[10px] text-gray-400 font-mono flex items-center gap-1">Direct Message</span>
+                          <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                              <MessageSquare size={12} className="text-gray-400" /> Direct
+                          </span>
                       )}
                    </div>
                 </li>
@@ -364,73 +405,88 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
      VIEW 2: ACTIVE CHAT WINDOW
      ========================================================= */
   return (
-    <div className="flex w-full h-full bg-white dark:bg-[#0a0a0a] text-gray-900 dark:text-white overflow-hidden relative font-sans flex-col rounded-2xl md:rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl transition-colors duration-300">
+    <div className="flex w-full h-full bg-white dark:bg-[#0B0F19] text-gray-900 dark:text-white overflow-hidden relative font-sans flex-col rounded-2xl md:rounded-3xl border border-gray-200 dark:border-white/10 shadow-2xl transition-colors duration-300">
       
+      {/* 🚀 REAL-TIME CONNECTION BANNER */}
+      {!isConnected && !chatLoading && (
+          <div className="bg-amber-500 text-white text-[11px] font-bold text-center py-1.5 px-4 z-50 flex items-center justify-center gap-2 shadow-sm animate-pulse">
+              <Loader2 size={12} className="animate-spin" /> Connection interrupted. Reconnecting securely...
+          </div>
+      )}
+
       {/* HEADER */}
-      <div className="flex-none px-4 py-3 z-40 flex flex-wrap items-center gap-3 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-800/60 shadow-sm transition-colors duration-300">
-          <button onClick={() => setActiveChat(null)} className="w-9 h-9 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-              <ArrowLeft size={18}/>
-          </button>
-          
-          <div className="flex-1 min-w-[150px]">
-              <h3 className="font-bold text-[15px] leading-tight tracking-wide">{activeChat?.name}</h3>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
-                {isDirect ? (
-                    <>Pre-Hire Inquiry</>
-                ) : (
-                    <><Lock size={10} className={isChatLocked ? "text-red-500" : "text-emerald-500"} /> Project Chat: {activeChat?.application_id?.toString().slice(0,8)}</>
-                )}
-              </p>
+      <div className="flex-none px-4 py-3.5 z-40 flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-[#0B0F19] border-b border-gray-200 dark:border-white/10 shadow-sm transition-colors duration-300">
+          <div className="flex items-center gap-3">
+              <button onClick={() => setActiveChat(null)} className="w-9 h-9 bg-gray-50 dark:bg-white/5 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10 transition-colors border border-gray-200 dark:border-transparent">
+                  <ArrowLeft size={18}/>
+              </button>
+              
+              <div>
+                  <h3 className="font-bold text-[15px] leading-tight tracking-wide flex items-center gap-2">
+                      {activeChat?.name}
+                      {/* Connection Dot indicator */}
+                      <div className="relative flex h-2 w-2" title={isConnected ? "Secure Connection Active" : "Reconnecting"}>
+                        {isConnected && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                        <span className={`relative inline-flex rounded-full h-2 w-2 ${isConnected ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+                      </div>
+                  </h3>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5 font-medium">
+                    {isDirect ? (
+                        <>Pre-Hire Inquiry</>
+                    ) : (
+                        <><Lock size={10} className={isChatLocked ? "text-gray-400" : "text-indigo-500"} /> Project ID: {activeChat?.application_id?.toString().slice(0,8)}</>
+                    )}
+                  </p>
+              </div>
           </div>
 
-          {/* THE FREELANCER "REQUEST PROJECT" BUTTON (Hidden if locked) */}
-          {isDirect && !isClient && !isChatLocked && (
-             <button onClick={() => sendSystemMessage('[SYSTEM_ACTION:REQUEST_HIRE]')} className="group relative flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full transition-all active:scale-95 shadow-md shadow-indigo-500/20">
-                 <Rocket size={14} />
-                 <span className="text-[11px] font-bold hidden sm:block uppercase tracking-wider">Start Project</span>
-             </button>
-          )}
+          <div className="flex items-center gap-2">
+              {isDirect && !isClient && !isChatLocked && (
+                 <button onClick={() => sendSystemMessage('[SYSTEM_ACTION:REQUEST_HIRE]')} className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all active:scale-95 shadow-sm">
+                     <Rocket size={14} />
+                     <span className="text-[11px] font-bold hidden sm:block uppercase tracking-wider">Request Setup</span>
+                 </button>
+              )}
 
-          <button onClick={() => setReportModalOpen(true)} className="group relative flex items-center gap-1.5 px-3 py-1.5 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 border border-red-200 dark:border-red-500/30 rounded-full transition-all active:scale-95">
-              <Flag size={12} className="text-red-500 dark:text-red-400" />
-              <span className="text-[10px] font-bold text-red-600 dark:text-red-400 hidden sm:block uppercase tracking-wider">Report</span>
-          </button>
+              <button onClick={() => setReportModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 border border-red-100 dark:border-red-500/30 rounded-lg transition-all active:scale-95 text-red-600 dark:text-red-400">
+                  <Flag size={12} />
+                  <span className="text-[10px] font-bold hidden sm:block uppercase tracking-wider">Report</span>
+              </button>
+          </div>
       </div>
 
       {/* MESSAGES LIST */}
-      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4 scroll-smooth custom-scrollbar relative bg-gray-50/50 dark:bg-[#0a0a0a] transition-colors duration-300">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-5 scroll-smooth custom-scrollbar relative bg-gray-50/50 dark:bg-[#0B0F19] transition-colors duration-300">
         {chatLoading ? (
-            <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-gray-400 dark:text-gray-600"/></div>
+            <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="animate-spin text-indigo-500 w-8 h-8"/></div>
         ) : (
             <>
-                <div className="text-center py-8 opacity-60 dark:opacity-40">
-                    <div className="w-12 h-12 bg-gray-200 dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700/50 rounded-full mx-auto flex items-center justify-center mb-3">
-                        {isDirect ? <MessageSquare size={18} className="text-gray-500"/> : <Lock size={18} className="text-gray-500 dark:text-gray-400"/>}
+                <div className="text-center py-6 opacity-80">
+                    <div className="w-12 h-12 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full mx-auto flex items-center justify-center mb-3 shadow-sm">
+                        {isDirect ? <MessageSquare size={18} className="text-gray-400"/> : <ShieldAlert size={18} className="text-indigo-500"/>}
                     </div>
-                    <p className="text-xs px-8 leading-relaxed text-gray-600 dark:text-gray-300">
-                        {isDirect ? "Direct Message Inquiry" : "Secure, encrypted chat" } with <span className="font-bold text-gray-900 dark:text-white">{activeChat?.name}</span>.<br/>Do not share external contact information.
+                    <p className="text-xs px-8 leading-relaxed text-gray-500 dark:text-gray-400 font-medium">
+                        {isDirect ? "Direct Message Inquiry" : "Secure, encrypted channel" } with <span className="font-bold text-gray-900 dark:text-white">{activeChat?.name}</span>.<br/>Do not share external contact information. Escrow protects both parties.
                     </p>
                 </div>
 
                 {messages.map((msg, index) => {
                 const isMe = msg.sender_id === myId;
-                
-                // 🚀 THE FIX: Safely fallback to an empty string if content is missing
                 const safeContent = msg.content || ""; 
                 
                 if (safeContent === '[SYSTEM_ACTION:REQUEST_HIRE]') {
                     return (
-                        <div key={msg.id || index} className="w-full flex justify-center my-6">
-                            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-500/30 p-5 rounded-2xl text-center max-w-sm shadow-sm">
-                                <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-800/50 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <div key={msg.id || index} className="w-full flex justify-center my-8">
+                            <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-200 dark:border-indigo-500/20 p-6 rounded-2xl text-center max-w-sm shadow-sm">
+                                <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-800/40 rounded-full flex items-center justify-center mx-auto mb-3">
                                     <Briefcase size={20} className="text-indigo-600 dark:text-indigo-400" />
                                 </div>
-                                <p className="text-sm font-bold text-indigo-900 dark:text-indigo-100 mb-4">
+                                <p className="text-sm font-bold text-indigo-900 dark:text-indigo-100 mb-5">
                                     {isMe ? "You sent a formal request to start the project." : `${activeChat.name} is ready to start the project!`}
                                 </p>
                                 {!isMe && isClient && !isChatLocked && (
-                                    <Button onClick={() => setHireModalOpen(true)} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg">
-                                        Set Up Project & Pay
+                                    <Button onClick={() => setHireModalOpen(true)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-500/20">
+                                        Fund Escrow & Start
                                     </Button>
                                 )}
                             </div>
@@ -438,14 +494,13 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
                     );
                 }
                 
-                // 🚀 THE FIX: Safely check startsWith on our guaranteed string
                 if (safeContent.startsWith('[SYSTEM_ACTION:HIRED]')) {
                      return (
-                         <div key={msg.id || index} className="w-full flex justify-center my-6">
-                             <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-500/30 p-4 rounded-2xl text-center max-w-sm shadow-sm">
-                                 <CheckCheck size={24} className="mx-auto text-emerald-500 mb-2" />
-                                 <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Project Officially Started!</p>
-                                 <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{safeContent.replace('[SYSTEM_ACTION:HIRED]', '')}</p>
+                         <div key={msg.id || index} className="w-full flex justify-center my-8">
+                             <div className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-500/20 p-5 rounded-2xl text-center max-w-sm shadow-sm">
+                                 <CheckCheck size={28} className="mx-auto text-emerald-600 mb-3" />
+                                 <p className="text-sm font-black text-emerald-900 dark:text-emerald-400 uppercase tracking-wider">Project Officially Started</p>
+                                 <p className="text-xs font-medium text-emerald-700 dark:text-emerald-500 mt-1.5">{safeContent.replace('[SYSTEM_ACTION:HIRED]', '')}</p>
                              </div>
                          </div>
                      );
@@ -453,21 +508,20 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
                 
                 return (
                     <div key={msg.id || index} className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] sm:max-w-[70%] px-4 py-2.5 text-[14px] shadow-sm relative transition-all
+                        <div className={`max-w-[85%] sm:max-w-[70%] px-4 py-3 text-[14px] shadow-sm relative transition-all
                         ${isMe 
-                            ? 'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white rounded-[22px] rounded-br-[4px] border border-white/10 shadow-purple-900/20' 
-                            : 'bg-white dark:bg-[#262626] text-gray-800 dark:text-gray-100 rounded-[22px] rounded-bl-[4px] border border-gray-200 dark:border-gray-800/80 shadow-sm'
+                            ? 'bg-indigo-600 text-white rounded-2xl rounded-br-sm border border-indigo-700 shadow-indigo-500/10' 
+                            : 'bg-white dark:bg-[#1E293B] text-gray-800 dark:text-gray-100 rounded-2xl rounded-bl-sm border border-gray-200 dark:border-white/5'
                         }
-                        ${msg.status === 'sending' ? 'opacity-70' : 'opacity-100'}
+                        ${msg.status === 'sending' ? 'opacity-60' : 'opacity-100'}
                         `}>
                         
-                        {/* 🚀 THE FIX: Render the safe content */}
                         <p className="leading-relaxed whitespace-pre-wrap break-words">{safeContent}</p>
                         
-                        <div className={`text-[10px] mt-1.5 flex items-center gap-1 justify-end font-medium tracking-wide
-                            ${isMe ? 'text-white/70' : 'text-gray-400 dark:text-gray-400'}`}>
+                        <div className={`text-[10px] mt-2 flex items-center gap-1 font-semibold tracking-wider
+                            ${isMe ? 'justify-end text-indigo-200' : 'justify-start text-gray-400'}`}>
                             {msg.created_at && new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} 
-                            {isMe && (msg.status === 'sending' ? <Loader2 size={12} className="animate-spin text-white/70"/> : <CheckCheck size={14} className="text-white/90"/>)}
+                            {isMe && (msg.status === 'sending' ? <Loader2 size={12} className="animate-spin text-indigo-200"/> : <CheckCheck size={14} className="text-indigo-200"/>)}
                         </div>
                         </div>
                     </div>
@@ -480,17 +534,17 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
 
       {/* INPUT BAR OR LOCK MESSAGE */}
       {isChatLocked ? (
-        <div className="flex-none p-4 bg-gray-50 dark:bg-[#111111] border-t border-gray-200 dark:border-gray-800 flex justify-center transition-colors duration-300">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-800/80 border border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 rounded-xl text-xs font-bold shadow-inner">
-                <Lock size={14} className={isDirect ? "text-amber-500" : "text-red-500"} /> {lockReason}
+        <div className="flex-none p-4 bg-gray-50 dark:bg-[#0F172A] border-t border-gray-200 dark:border-white/10 flex justify-center transition-colors duration-300">
+            <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-200/50 dark:bg-gray-800/50 border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-xl text-xs font-bold shadow-inner">
+                <Lock size={14} className={isDirect ? "text-amber-500" : "text-gray-500"} /> {lockReason}
             </div>
         </div>
       ) : (
-        <div className="flex-none p-3 bg-white dark:bg-[#111111] border-t border-gray-200 dark:border-gray-800/80 z-30 flex flex-col gap-2 transition-colors duration-300">
+        <div className="flex-none p-3 bg-white dark:bg-[#0B0F19] border-t border-gray-200 dark:border-white/10 z-30 flex flex-col gap-2 transition-colors duration-300 relative">
             <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar hide-scrollbar items-center">
                 <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider shrink-0 mr-1">Quick Reply:</span>
                 {quickReplies.map((reply, index) => (
-                    <button key={index} onClick={() => handleQuickReplyClick(reply)} className="whitespace-nowrap px-3 py-1.5 bg-gray-100 dark:bg-gray-800/40 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-[11px] rounded-full transition-colors border border-gray-200 dark:border-gray-700 shrink-0">
+                    <button key={index} onClick={() => handleQuickReplyClick(reply)} disabled={!isConnected} className="whitespace-nowrap px-3 py-1.5 bg-gray-50 dark:bg-gray-800/40 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 text-[11px] rounded-lg transition-colors border border-gray-200 dark:border-gray-700 shrink-0 disabled:opacity-50">
                         {reply}
                     </button>
                 ))}
@@ -498,31 +552,47 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
 
             <div className="relative flex items-end gap-2 max-w-4xl mx-auto w-full">
             <textarea 
-                ref={textareaRef} value={input} onChange={handleInput} placeholder="Message..." rows={1}
-                className="flex-1 bg-gray-100 dark:bg-[#262626] border border-gray-300 dark:border-gray-700/50 text-gray-900 dark:text-white rounded-[24px] py-3 px-5 focus:outline-none focus:border-blue-500/50 focus:bg-white dark:focus:bg-[#333333] transition-all resize-none overflow-y-auto min-h-[48px] text-[15px] custom-scrollbar" 
+                ref={textareaRef} 
+                value={input} 
+                onChange={handleInput} 
+                disabled={!isConnected || isSending || isChatLocked}
+                placeholder={!isConnected ? "Connecting to secure server..." : "Type a message..."} 
+                rows={1}
+                className="flex-1 bg-gray-50 dark:bg-[#0F172A] border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white rounded-[20px] py-3.5 px-5 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all resize-none overflow-y-auto min-h-[50px] text-[14px] custom-scrollbar disabled:opacity-70" 
                 style={{ maxHeight: '120px' }}
             />
-            <button onClick={handleSend} disabled={!input.trim() || isSending} className="w-12 h-12 bg-blue-600 hover:bg-blue-500 text-white rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.2)] transition-all active:scale-95 disabled:opacity-50 disabled:shadow-none shrink-0">
+            <button 
+               onClick={handleSend} 
+               disabled={!input.trim() || isSending || !isConnected} 
+               className="w-12 h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:shadow-none shrink-0"
+            >
                 {isSending ? <Loader2 size={18} className="animate-spin"/> : <Send size={18} className="ml-0.5" />}
             </button>
             </div>
         </div>
       )}
 
-      {/* NEW: DIRECT HIRE MODAL (CLIENTS ONLY) */}
+      {/* DIRECT HIRE MODAL */}
       {hireModalOpen && (
-          <Modal title="Setup Project & Pay" onClose={() => setHireModalOpen(false)}>
+          <Modal title="Fund Escrow & Start" onClose={() => setHireModalOpen(false)}>
               <form onSubmit={handleDirectHire} className="space-y-4">
-                  <div className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-800 dark:text-indigo-300 p-4 rounded-xl text-sm border border-indigo-200 dark:border-indigo-500/20">
-                      You are about to hire <strong>{activeChat.name}</strong>. Funds will be held securely in escrow until the work is approved.
+                  <div className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-800 dark:text-indigo-300 p-4 rounded-xl text-sm border border-indigo-200 dark:border-indigo-500/20 flex items-start gap-3">
+                      <ShieldAlert className="shrink-0 mt-0.5" size={18} />
+                      <p>You are about to hire <strong>{activeChat.name}</strong>. Funds will be held securely in escrow and only released when you approve the final work.</p>
                   </div>
-                  <Input name="title" type="text" placeholder="Project Title (e.g. Logo Design)" required className="bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white"/>
-                  <Input name="amount" type="number" placeholder="Agreed Amount (₹)" min="50" required className="bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white"/>
+                  <div>
+                      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest ml-1 mb-1 block">Project Title</label>
+                      <Input name="title" type="text" placeholder="e.g. Graphic Design Assets" required className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800"/>
+                  </div>
+                  <div>
+                      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest ml-1 mb-1 block">Agreed Amount (₹)</label>
+                      <Input name="amount" type="number" placeholder="500" min="50" required className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800"/>
+                  </div>
                   
-                  <div className="flex gap-3 pt-2">
-                      <Button variant="ghost" type="button" onClick={() => setHireModalOpen(false)} className="w-full text-gray-600 dark:text-gray-400">Cancel</Button>
-                      <Button type="submit" disabled={isSending} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg">
-                          {isSending ? <Loader2 size={16} className="animate-spin mx-auto"/> : "Create & Pay"}
+                  <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                      <Button variant="outline" type="button" onClick={() => setHireModalOpen(false)} className="w-full">Cancel</Button>
+                      <Button type="submit" disabled={isSending} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg">
+                          {isSending ? <Loader2 size={16} className="animate-spin mx-auto"/> : "Fund Escrow & Pay"}
                       </Button>
                   </div>
               </form>
@@ -531,14 +601,22 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", onAc
 
       {/* REPORT MODAL */}
       {reportModalOpen && (
-          <Modal title="Report Message" onClose={() => setReportModalOpen(false)}>
+          <Modal title="Report Violation" onClose={() => setReportModalOpen(false)}>
               <form onSubmit={handleReportUser} className="space-y-4">
-                  <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-sm border border-red-200 dark:border-red-500/20">Reports are reviewed by our trust and safety team.</div>
-                  <Input name="reason" type="select" options={["Asking for payment outside platform", "Harassment", "Spam", "Other"]} className="bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white"/>
-                  <Input name="details" type="textarea" placeholder="Provide specific context..." className="bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white min-h-[100px]"/>
-                  <div className="flex gap-3 pt-2">
-                      <Button variant="ghost" onClick={() => setReportModalOpen(false)} className="w-full text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</Button>
-                      <Button className="w-full bg-red-600 hover:bg-red-500 text-white shadow-lg">Submit Report</Button>
+                  <div className="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-4 rounded-xl text-sm border border-red-200 dark:border-red-500/20 font-medium">
+                      Reports are strictly confidential and reviewed by our Trust & Safety team within 24 hours.
+                  </div>
+                  <div>
+                      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest ml-1 mb-1 block">Reason for report</label>
+                      <Input name="reason" type="select" options={["Attempting to bypass platform/escrow", "Harassment or abuse", "Spam", "Other"]} className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800"/>
+                  </div>
+                  <div>
+                      <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest ml-1 mb-1 block">Detailed Context</label>
+                      <Input name="details" type="textarea" placeholder="Please provide specific context to help our investigation..." className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 min-h-[100px]"/>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                      <Button variant="outline" onClick={() => setReportModalOpen(false)} className="w-full">Cancel</Button>
+                      <Button className="w-full bg-red-600 hover:bg-red-700 text-white shadow-lg">Submit Report</Button>
                   </div>
               </form>
           </Modal>

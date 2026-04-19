@@ -589,22 +589,35 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 };
 
   // --- JOB & SERVICE ACTIONS ---
-  const handlePostJob = async (e) => {
+  // --- JOB & SERVICE ACTIONS ---
+const handlePostJob = async (e) => {
     e.preventDefault();
+    
+    // 1. Security Check
     if (!checkKycLock('post_job')) return;
     
+    // 2. Extract Form Data
     const formData = new FormData(e.target);
-    const budget = parseFloat(formData.get('budget'));
     const title = formData.get('title');
+    
+    // 🚀 Strict Parsing for Database
+    const isEliteBoolean = formData.get('is_elite') === 'true';
+    const budget = parseFloat(formData.get('budget')); // <-- Renamed back to 'budget' so it matches!
     
     const fileInput = e.target.querySelector('input[name="attachments"]');
     const files = fileInput ? Array.from(fileInput.files) : []; 
     
-    if (budget < 1) return showToast("Minimum budget is ₹1", "error"); 
+    // 3. Dynamic Minimum Budget Validation
+    const minRequiredBudget = isEliteBoolean ? 500 : 100;
+    
+    if (budget < minRequiredBudget) {
+        return showToast(`Minimum budget for ${isEliteBoolean ? 'Elite' : 'Normal'} projects is ₹${minRequiredBudget}`, "error"); 
+    }
+    
     if (title.length < 5) return showToast("Job title is too short", "error"); 
     
+    // 4. Handle File Uploads (if any)
     let uploadedUrls = [];
-
     if (files.length > 0) {
         showToast("Uploading attachments to secure vault...", "info");
         try {
@@ -614,23 +627,40 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         }
     }
 
+    // 5. Construct Payload
     const jobData = { 
-        client_id: user.id, client_name: user.name, title: title, budget: budget, 
-        job_type: 'Fixed', duration: formData.get('duration'), tags: formData.get('tags'), 
-        description: formData.get('description'), category: formData.get('category') || 'dev',
+        client_id: user.id, 
+        client_name: user.name, 
+        title: title, 
+        budget: budget,             // ✅ Now perfectly defined
+        is_elite: isEliteBoolean,   // ✅ Pure boolean
+        job_type: 'Fixed', 
+        duration: formData.get('duration'), 
+        tags: formData.get('tags'), 
+        description: formData.get('description'), 
+        category: formData.get('category') || 'dev',
         attachments: uploadedUrls 
     };
     
+    // 6. Save to Database
     const { error } = await api.createJob(jobData);
+    
     if (error) { 
         showToast(error.message, 'error'); 
     } else { 
-        await logAction('JOB_POSTED', { title: title, budget: budget, has_attachments: uploadedUrls.length > 0 });
-        showToast('Mission Launched Successfully!', 'success'); 
+        await logAction('JOB_POSTED', { 
+            title: title, 
+            budget: budget,         // ✅ Now perfectly defined
+            is_elite: isEliteBoolean, 
+            has_attachments: uploadedUrls.length > 0 
+        });
+        
+        showToast(isEliteBoolean ? 'Elite Project Posted Successfully!' : 'Project Posted Successfully!', 'success'); 
+        
         setModal(null); 
         setJobs([jobData, ...jobs]); 
     }
-  };
+};
   
   const handleDeleteJob = async (id) => {
     if(!window.confirm("Are you sure you want to delete this job?")) return;

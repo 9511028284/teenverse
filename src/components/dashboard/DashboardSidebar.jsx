@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Rocket, X, User, ShieldCheck, Maximize2, Minimize2, LogOut, ChevronRight,
   LayoutDashboard, Briefcase, ListChecks, Package, FileText, MessageSquare,
-  BookOpen, Sparkles, Share2, UserCircle, Settings, Zap, Crown, HelpCircle
+  BookOpen, Sparkles, Share2, UserCircle, Settings, Zap, Crown, HelpCircle, WandSparkles
 } from 'lucide-react';
 import BadgeItem from './BadgeItem'; // Ensure this path matches your project structure
 
@@ -152,7 +152,7 @@ const DashboardSidebar = ({
                <SidebarItem id="overview" icon={LayoutDashboard} label="Dashboard" />
                
                <div className="mt-6 mb-2 px-4 text-[10px] font-black text-slate-400 dark:text-gray-500 uppercase tracking-widest">Workspace</div>
-               <SidebarItem id="jobs" icon={Briefcase} label={isClient ? 'Browse Services' : 'Find Jobs'} />
+               <SidebarItem id="jobs" icon={WandSparkles} label={isClient ? 'HireGenie' : 'Find Jobs'} />
                {isClient && <SidebarItem id="posted-jobs" icon={ListChecks} label="My Listings" />}
                {isClient && <SidebarItem id="pricing" icon={Crown} label="Pricing & Fees" />}
                {!isClient && <SidebarItem id="my-services" icon={Package} label="My Gigs" />}

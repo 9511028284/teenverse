@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Search, MapPin, ArrowUpRight, Sparkles, Filter, Briefcase, 
   ChevronDown, ChevronUp, Clock, Calendar, DollarSign, Flag, AlertTriangle,
-  Loader2, Flame, Zap, Crown
+  Loader2, Flame, Zap, Crown, User, Star, Paperclip, ShieldCheck, Cpu, Award
 } from 'lucide-react';
 import { supabase } from '../../supabase'; 
 import Button from '../ui/Button';
@@ -25,7 +25,6 @@ const getTimeAgo = (dateString) => {
 };
 
 // --- HELPER: STRICT ELITE CHECK ---
-// Prevents bugs where the database returns 'true' as a string or 1 as an integer
 const checkIsElite = (val) => {
     return val === true || String(val).toLowerCase() === 'true' || val === 1 || val === '1';
 };
@@ -76,26 +75,85 @@ const AiResultCard = ({ title, icon, freelancer, colorClass, setActiveChat, setT
     );
 };
 
-// --- STANDARD & ELITE CARD COMPONENT ---
+// --- TALENT CARD COMPONENT (FOR CLIENTS) ---
+const TalentCard = ({ freelancer, onAction, setActiveChat, setTab }) => {
+    const isElite = freelancer.current_plan === 'Elite';
+    
+    return (
+        <div className={`group relative bg-white dark:bg-[#09090b] rounded-[24px] border ${isElite ? 'border-amber-500/30 hover:border-amber-400 shadow-md' : 'border-gray-200 dark:border-white/10 hover:border-indigo-500/30'} p-6 flex flex-col hover:-translate-y-1 transition-all hover:shadow-xl overflow-hidden`}>
+            
+            {/* Elite Badge */}
+            {isElite && (
+                <div className="absolute top-4 right-4 bg-gradient-to-r from-amber-400 to-amber-600 text-white px-3 py-1 rounded-full flex items-center gap-1 text-[10px] font-black shadow-lg shadow-amber-500/30 z-20">
+                    <Crown size={12} className="fill-white" /> ELITE
+                </div>
+            )}
+
+            <div className="flex items-center gap-4 mb-5 mt-2">
+                <div className="relative">
+                    <div className={`absolute -inset-1 rounded-full blur opacity-40 ${isElite ? 'bg-amber-500' : 'bg-indigo-500'}`}></div>
+                    <img src={freelancer.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${freelancer.id}`} alt="avatar" className="w-16 h-16 rounded-full bg-gray-100 relative z-10 border-2 border-white dark:border-gray-800 object-cover" />
+                </div>
+                <div>
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white leading-tight flex items-center gap-1.5">
+                        {freelancer.name}
+                        <ShieldCheck size={14} className="text-emerald-500" title="Identity Verified"/>
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{freelancer.tag_line || freelancer.specialty || 'Digital Creator'}</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="bg-gray-50 dark:bg-white/5 p-3 rounded-xl flex flex-col justify-center border border-gray-100 dark:border-white/5">
+                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest mb-1 flex items-center gap-1"><DollarSign size={12}/> Rate</p>
+                    <p className="text-sm font-black text-gray-900 dark:text-white">₹{freelancer.hourly_rate || 0}<span className="text-[10px] text-gray-500 font-normal">/hr</span></p>
+                </div>
+                <div className="bg-gray-50 dark:bg-white/5 p-3 rounded-xl flex flex-col justify-center border border-gray-100 dark:border-white/5">
+                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest mb-1 flex items-center gap-1"><Star size={12}/> Rating</p>
+                    <p className="text-sm font-black text-gray-900 dark:text-white flex items-center gap-1">{freelancer.rating || "5.0"}</p>
+                </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 mb-6 mt-auto">
+                {(freelancer.unlocked_skills || ['Creative', 'Tech']).slice(0,3).map((skill, i) => (
+                    <span key={i} className="px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-white/5 text-[10px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                        {skill}
+                    </span>
+                ))}
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-gray-100 dark:border-white/5">
+                <Button variant="outline" className="flex-1 text-xs" onClick={() => onAction('view_profile', freelancer)}>
+                    <User size={14} className="mr-1"/> Profile
+                </Button>
+                <Button className="flex-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-500/20" onClick={() => {
+                    setActiveChat({ id: freelancer.id, name: freelancer.name });
+                    setTab('messages');
+                }}>
+                    Chat <ArrowUpRight size={14}/>
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+// --- STANDARD JOB CARD COMPONENT (FOR FREELANCERS) ---
 const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setTab, setSelectedJob }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     
-    // Safety Fallbacks
     const description = data?.description || "No description provided.";
     const isLongText = description.length > 120;
-    const displayName = isClient ? (data.freelancer_name || 'Freelancer') : (data.client_name || 'Client');
-
-    // Robust Elite Mode Check (Removed strict !isClient constraint so cards render correctly)
+    const displayName = data.client_name || 'Client';
     const isElite = checkIsElite(data.is_elite);
+    
+    const hasAttachments = data.attachments && data.attachments.length > 0;
 
-    // Standard Gradients
     const gradients = [
         "from-pink-500/80 via-rose-500/80 to-yellow-500/80", 
         "from-blue-400/80 via-indigo-500/80 to-purple-500/80", 
         "from-emerald-400/80 via-teal-500/80 to-cyan-500/80", 
     ];
     
-    // Dynamic Styling Variables
     const headerGradient = isElite 
         ? "from-amber-600/60 via-yellow-500/40 to-orange-700/60" 
         : gradients[(data.id || 0) % gradients.length];
@@ -104,14 +162,8 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
         ? "bg-gradient-to-br from-[#1a1a1a] via-[#111111] to-[#000000] border-amber-500/30 hover:border-amber-400 shadow-[0_4px_20px_rgba(0,0,0,0.5)] hover:shadow-[0_8px_30px_rgba(245,158,11,0.25)]" 
         : "bg-white dark:bg-[#09090b] border-gray-200 dark:border-white/10 hover:border-indigo-500/30 dark:hover:border-indigo-500/50 hover:shadow-xl";
         
-    const titleColor = isElite 
-        ? "text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 drop-shadow-sm" 
-        : "text-gray-900 dark:text-white";
-        
-    const pillBg = isElite 
-        ? "bg-amber-500/10 border-amber-500/20" 
-        : "bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/5";
-        
+    const titleColor = isElite ? "text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 drop-shadow-sm" : "text-gray-900 dark:text-white";
+    const pillBg = isElite ? "bg-amber-500/10 border-amber-500/20" : "bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/5";
     const pillText = isElite ? "text-amber-100" : "text-gray-700 dark:text-gray-200";
     const subText = isElite ? "text-amber-200/50" : "text-gray-400 uppercase";
     const iconColor = isElite ? "text-amber-400" : "text-indigo-500 dark:text-indigo-400";
@@ -123,10 +175,8 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
     return (
       <div className={`group relative rounded-[24px] border transition-all duration-500 hover:-translate-y-1 overflow-hidden flex flex-col h-full ${cardBg}`}>
         
-        {/* ELITE BADGE - ENHANCED */}
         {isElite && (
             <div className="absolute top-4 left-4 bg-gradient-to-r from-yellow-400 via-amber-500 to-orange-500 text-black px-3 py-1 rounded-full flex items-center gap-1.5 text-[10px] font-black shadow-[0_0_15px_rgba(245,158,11,0.6)] z-20 overflow-hidden ring-1 ring-white/30">
-                <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-white/60 to-transparent -translate-x-full animate-shimmer skew-x-12"></div>
                 <Crown size={12} className="fill-black relative z-10" /> 
                 <span className="relative z-10 tracking-wider">ELITE</span>
             </div>
@@ -134,10 +184,7 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
 
         <div className={`h-28 w-full relative overflow-hidden bg-gradient-to-br ${headerGradient}`}>
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-30 mix-blend-overlay"></div>
-            
-            {/* Smooth transition from gradient to card bg */}
             <div className={`absolute bottom-0 left-0 w-full h-2/3 bg-gradient-to-t ${isElite ? 'from-[#1a1a1a]' : 'from-white dark:from-[#09090b]'} to-transparent`}></div>
-            
             <div className={`absolute top-4 right-4 ${isElite ? 'bg-black/60 border-amber-500/30 text-amber-300' : 'bg-white/90 dark:bg-black/40 border-gray-200 dark:border-white/10 text-gray-800 dark:text-white'} backdrop-blur-md border px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm z-20`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${isElite ? 'bg-amber-400' : 'bg-green-500'} animate-pulse shadow-[0_0_8px_currentColor]`}></span>
                 <span className="text-[10px] font-bold uppercase tracking-wider">{type}</span>
@@ -153,7 +200,7 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${isElite ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300'}`}>
                     {displayName.charAt(0)}
                   </span>
-                  {isClient ? `Freelancer: ${displayName}` : `Client: ${displayName}`}
+                  Client: {displayName}
               </p>
             </div>
 
@@ -180,7 +227,7 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
                 </div>
             </div>
 
-            <div className="mb-6 relative">
+            <div className="mb-4 relative">
                 <p className={`text-sm leading-relaxed ${isExpanded ? '' : 'line-clamp-3'} ${descriptionColor}`}>
                     {description}
                 </p>
@@ -193,6 +240,28 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
                     </button>
                 )}
             </div>
+
+            {hasAttachments && (
+                <div className="mb-5 flex flex-wrap items-center gap-2">
+                    {data.attachments.map((url, idx) => (
+                        <a 
+                            key={idx}
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-bold transition-transform active:scale-95 hover:shadow-md ${
+                                isElite 
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20' 
+                                : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40'
+                            }`}
+                        >
+                            <Paperclip size={12} />
+                            View File {data.attachments.length > 1 ? idx + 1 : ''}
+                        </a>
+                    ))}
+                </div>
+            )}
 
             <div className="flex flex-wrap gap-2 mb-6 mt-auto">
                 {(data.tags ? data.tags.split(',') : [data.category || 'Gig']).slice(0,3).map((t,i) => (
@@ -212,7 +281,7 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
                     <button 
                       onClick={(e) => {
                          e.stopPropagation();
-                         const reportPayload = { target_type: 'job', target_id: data.id, reported_user_id: isClient ? data.freelancer_id : data.client_id };
+                         const reportPayload = { target_type: 'job', target_id: data.id, reported_user_id: data.client_id };
                          if (onAction) onAction('report', reportPayload);
                          else if (setModal) setModal(reportPayload); 
                       }}
@@ -223,17 +292,14 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
                 </div>
                 
                 <button 
-                   onClick={() => isClient ? 
-                     (setActiveChat({ id: data.freelancer_id, name: data.freelancer_name, application_id: data.id }), setTab('messages')) : 
-                     (setSelectedJob(data), setModal('apply-job'))
-                   }
+                   onClick={() => (setSelectedJob(data), setModal('apply-job'))}
                    className={`h-10 px-5 rounded-xl font-bold text-sm flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg ${
                      isElite 
                      ? 'bg-gradient-to-r from-amber-400 to-yellow-600 text-black hover:shadow-[0_0_20px_rgba(245,158,11,0.4)] border border-amber-300' 
                      : 'bg-gray-900 dark:bg-white text-white dark:text-black'
                    }`}
                 >
-                    {isClient ? 'Chat' : 'Apply'}
+                    Apply
                     <ArrowUpRight size={16} strokeWidth={isElite ? 3 : 2.5}/>
                 </button>
             </div>
@@ -244,7 +310,7 @@ const JobCard = ({ data, type, isClient, onAction, setModal, setActiveChat, setT
 
 // --- MAIN JOBS COMPONENT ---
 const Jobs = ({ 
-    user, showToast, isClient, services = [], filteredJobs = [], 
+    user, showToast, isClient, freelancersList = [], filteredJobs = [], 
     searchTerm, setSearchTerm, setModal, setActiveChat, setTab, setSelectedJob, onAction 
 }) => {
   
@@ -262,17 +328,8 @@ const Jobs = ({
 
       const isElite = checkIsElite(job.is_elite);
       if (jobView === 'elite' && !isElite) return false; 
-      if (jobView === 'normal' && isElite) return false; // Absolutely forces elite to hide
+      if (jobView === 'normal' && isElite) return false; 
 
-      return true;
-  });
-
-  // --- FILTER 2: CLIENT VIEW (Services/Gigs) ---
-  // Added identical filtering logic here so elite items do not show in client normal views
-  const visibleServices = services.filter(service => {
-      const isElite = checkIsElite(service.is_elite);
-      if (jobView === 'elite' && !isElite) return false;
-      if (jobView === 'normal' && isElite) return false; // Applies the strict hide rule
       return true;
   });
 
@@ -329,41 +386,51 @@ const Jobs = ({
     <div className="min-h-screen space-y-8 animate-fade-in pb-20 relative">
       
       {/* --- COMMAND BAR --- */}
-      <div className="sticky top-6 z-[100] mx-auto max-w-3xl px-4">
+      <div className="sticky top-6 z-[100] mx-auto max-w-4xl px-4">
         {isClient ? (
-          <>
-            <form onSubmit={handleAiSearch} className="relative group">
+          <div className="bg-white/90 dark:bg-[#0F172A]/95 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-[2rem] p-6 shadow-xl relative overflow-hidden">
+            {/* Soft decorative background glow */}
+            <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <div className="text-center mb-6 relative z-10">
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white flex items-center justify-center gap-2">
+                    <Sparkles className="text-indigo-500" size={24}/> AI Talent Matcher
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 max-w-lg mx-auto">
+                    Don't waste time scrolling. Describe your exact project, required skills, and budget, and our AI will find the perfect freelancer for you.
+                </p>
+            </div>
+
+            <form onSubmit={handleAiSearch} className="relative group z-10">
                 <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full blur opacity-10 group-hover:opacity-30 transition-opacity"></div>
-                <div className="relative bg-white/90 dark:bg-[#0F172A]/90 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-full p-2 flex items-center shadow-xl">
-                    {isAiSearching ? <Loader2 className="ml-4 text-indigo-500 animate-spin" size={20} /> : <Sparkles className={`ml-4 ${searchTerm ? 'text-indigo-500 animate-pulse' : 'text-gray-400'}`} size={20}/>}
+                <div className="relative bg-gray-50 dark:bg-black/50 border border-gray-200 dark:border-white/10 rounded-full p-2 flex items-center shadow-inner">
+                    {isAiSearching ? <Loader2 className="ml-4 text-indigo-500 animate-spin shrink-0" size={20} /> : <Search className={`ml-4 shrink-0 ${searchTerm ? 'text-indigo-500' : 'text-gray-400'}`} size={20}/>}
                     <input 
                         type="text" 
-                        placeholder="Describe what you need (e.g., Logo designer under ₹1000)"
+                        placeholder="e.g., Need a Python developer for a web scraper, budget around ₹1500/hr..."
                         className="w-full bg-transparent px-4 py-3 outline-none text-gray-900 dark:text-white placeholder-gray-500 font-medium text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
-                    <div className="pr-1 flex gap-2">
-                        <button type="button" className="w-10 h-10 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-200 transition-all">
-                            <Filter size={18}/>
-                        </button>
-                        <Button type="submit" disabled={isAiSearching || !searchTerm} className="rounded-full px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold tracking-tight">
-                            MATCH
+                    <div className="pr-1 flex gap-2 shrink-0">
+                        <Button type="submit" disabled={isAiSearching || !searchTerm} className="rounded-full px-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold tracking-tight shadow-md shadow-indigo-500/20">
+                            {isAiSearching ? 'SEARCHING...' : 'FIND TALENT'}
                         </Button>
                     </div>
                 </div>
             </form>
+            
             {parsedData && (
-              <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 flex items-center gap-2 whitespace-nowrap animate-fade-in-up">
-                  <span className="px-3 py-1 bg-white/90 dark:bg-black/90 backdrop-blur border border-gray-200 dark:border-white/10 text-[10px] font-bold text-gray-600 dark:text-gray-300 rounded-full flex items-center gap-1 shadow-sm">
-                    <DollarSign size={12} className="text-emerald-500"/> Max: ₹{parsedData.budget || 'Open'}
+              <div className="mt-6 flex flex-wrap justify-center gap-3 animate-fade-in-up relative z-10">
+                  <span className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 rounded-full flex items-center gap-1.5 shadow-sm">
+                    <DollarSign size={14}/> Extracted Budget: ₹{parsedData.budget || 'Flexible'}
                   </span>
-                  <span className="px-3 py-1 bg-white/90 dark:bg-black/90 backdrop-blur border border-gray-200 dark:border-white/10 text-[10px] font-bold text-gray-600 dark:text-gray-300 rounded-full flex items-center gap-1 shadow-sm">
-                    <Clock size={12} className="text-rose-500"/> {parsedData.urgency || 'Normal'} priority
+                  <span className="px-3 py-1.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-[11px] font-bold text-rose-700 dark:text-rose-400 rounded-full flex items-center gap-1.5 shadow-sm">
+                    <Clock size={14}/> Priority: {parsedData.urgency || 'Normal'}
                   </span>
               </div>
             )}
-          </>
+          </div>
         ) : (
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full blur opacity-10 transition-opacity"></div>
@@ -389,16 +456,16 @@ const Jobs = ({
       {aiResults && isClient && (
         <div className="px-4 mt-12 mb-8 animate-fade-in-up">
             <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-                <Sparkles size={18} className="text-indigo-500"/> Top AI Matches
+                <Sparkles size={18} className="text-indigo-500"/> Top Recommended Professionals
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <AiResultCard title="Best Overall" icon={<Flame size={14}/>} freelancer={aiResults.best} colorClass="border-orange-200 text-orange-600" setActiveChat={setActiveChat} setTab={setTab} />
-              <AiResultCard title="Fastest Reply" icon={<Zap size={14}/>} freelancer={aiResults.fast} colorClass="border-yellow-200 text-yellow-600" setActiveChat={setActiveChat} setTab={setTab} />
-              <AiResultCard title="Best Value" icon={<DollarSign size={14}/>} freelancer={aiResults.budget} colorClass="border-emerald-200 text-emerald-600" setActiveChat={setActiveChat} setTab={setTab} />
+              <AiResultCard title="Best Overall Match" icon={<Flame size={14}/>} freelancer={aiResults.best} colorClass="border-orange-200 text-orange-600" setActiveChat={setActiveChat} setTab={setTab} />
+              <AiResultCard title="Fastest Responder" icon={<Zap size={14}/>} freelancer={aiResults.fast} colorClass="border-yellow-200 text-yellow-600" setActiveChat={setActiveChat} setTab={setTab} />
+              <AiResultCard title="Most Cost Effective" icon={<DollarSign size={14}/>} freelancer={aiResults.budget} colorClass="border-emerald-200 text-emerald-600" setActiveChat={setActiveChat} setTab={setTab} />
             </div>
-            <div className="mt-8 mb-4 flex items-center gap-4">
+            <div className="mt-12 mb-4 flex items-center gap-4">
                 <div className="h-px bg-gray-200 dark:bg-white/10 flex-1"></div>
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Or browse catalog</span>
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Or browse full talent directory</span>
                 <div className="h-px bg-gray-200 dark:bg-white/10 flex-1"></div>
             </div>
         </div>
@@ -407,50 +474,93 @@ const Jobs = ({
       {/* --- MAIN FEED --- */}
       <div className="px-4 mt-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-              <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight uppercase italic">
-                 {isClient ? 'Talent Catalog' : 'Mission Board'}
-              </h2>
               
-              {/* ELITE TOGGLE */}
-              <div className="bg-gray-100 dark:bg-white/5 p-1 rounded-full flex items-center border border-gray-200 dark:border-white/10 w-fit shrink-0">
-                  <button 
-                      onClick={() => handleToggle('normal')}
-                      className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${jobView === 'normal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                  >
-                      Normal
-                  </button>
-                  <button 
-                      onClick={() => handleToggle('elite')}
-                      className={`px-5 py-2 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${jobView === 'elite' ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-white shadow-md shadow-amber-500/20' : 'text-gray-500 hover:text-amber-500'}`}
-                  >
-                      <Crown size={14} className={jobView === 'elite' ? 'fill-white' : ''}/> Elite
-                  </button>
-              </div>
+              {isClient ? (
+                  <div>
+                      <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
+                          Verified Talent Directory <ShieldCheck className="text-emerald-500" size={24}/>
+                      </h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">Browse our curated list of top-rated professionals ready for your next project.</p>
+                  </div>
+              ) : (
+                  <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight uppercase italic">
+                      Mission Board
+                  </h2>
+              )}
+              
+              {/* ELITE TOGGLE FOR FREELANCERS ONLY */}
+              {!isClient && (
+                  <div className="bg-gray-100 dark:bg-white/5 p-1 rounded-full flex items-center border border-gray-200 dark:border-white/10 w-fit shrink-0">
+                      <button 
+                          onClick={() => handleToggle('normal')}
+                          className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${jobView === 'normal' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                      >
+                          Normal
+                      </button>
+                      <button 
+                          onClick={() => handleToggle('elite')}
+                          className={`px-5 py-2 rounded-full text-xs font-bold flex items-center gap-1 transition-all ${jobView === 'elite' ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-white shadow-md shadow-amber-500/20' : 'text-gray-500 hover:text-amber-500'}`}
+                      >
+                          <Crown size={14} className={jobView === 'elite' ? 'fill-white' : ''}/> Elite
+                      </button>
+                  </div>
+              )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative z-10">
             {isClient 
-                // Uses visibleServices instead of raw services array
-                ? visibleServices.map(s => <JobCard key={s.id} data={s} type="Gig" isClient={isClient} onAction={onAction} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} />)
-                : publicMissions.map(j => <JobCard key={j.id} data={j} type="Mission" isClient={isClient} onAction={onAction} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} />)
+                ? freelancersList.map(f => <TalentCard key={f.id} freelancer={f} onAction={onAction} setActiveChat={setActiveChat} setTab={setTab} />)
+                : publicMissions.map(j => <JobCard key={j.id} data={j} type="Mission" isClient={false} onAction={onAction} setModal={setModal} setActiveChat={setActiveChat} setTab={setTab} setSelectedJob={setSelectedJob} />)
             }
           </div>
       </div>
 
       {/* --- EMPTY STATE --- */}
-      {((!isClient && publicMissions.length === 0) || (isClient && visibleServices.length === 0)) && (
-        <div className="flex flex-col items-center justify-center py-32 border-2 border-dashed border-gray-200 dark:border-white/5 rounded-[40px] bg-gray-50 dark:bg-white/5 m-4 text-center">
-           <Briefcase size={48} className="text-gray-300 mb-4"/>
-           <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Void Detected</h3>
-           <p className="text-gray-500 dark:text-gray-400 text-sm max-w-xs mx-auto">
-               {jobView === 'elite' ? "No Elite entries currently available. Check back later!" : "No signals matching your query. Try adjusting your search terms."}
-           </p>
+      {((!isClient && publicMissions.length === 0) || (isClient && freelancersList.length === 0)) && (
+        <div className={`flex flex-col items-center justify-center ${isClient ? 'py-12' : 'py-32 border-2 border-dashed border-gray-200 dark:border-white/5 rounded-[40px] bg-gray-50 dark:bg-[#0B0F19] m-4 text-center'}`}>
+           
+           {isClient ? (
+               <div className="w-full max-w-5xl mx-auto bg-white dark:bg-[#0F172A] border border-gray-200 dark:border-white/10 rounded-[2rem] p-8 md:p-12 shadow-xl">
+                   <div className="text-center mb-10">
+                       <h3 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white mb-4">Hire Top-Tier Talent, Risk-Free</h3>
+                       <p className="text-gray-500 dark:text-gray-400 text-sm md:text-base max-w-2xl mx-auto leading-relaxed">
+                           Our platform is built to protect you. From AI-driven matchmaking to secure escrow payments, we ensure your project is a success from start to finish.
+                       </p>
+                   </div>
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                       <div className="bg-gray-50 dark:bg-[#0B0F19] p-6 rounded-2xl border border-gray-100 dark:border-white/5">
+                           <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center mb-4"><Cpu size={24}/></div>
+                           <h4 className="font-bold text-gray-900 dark:text-white mb-2">Smart AI Matching</h4>
+                           <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">Type your exact requirements in the search bar above, and our AI will instantly filter thousands of profiles to find your perfect match.</p>
+                       </div>
+                       <div className="bg-gray-50 dark:bg-[#0B0F19] p-6 rounded-2xl border border-gray-100 dark:border-white/5">
+                           <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center mb-4"><ShieldCheck size={24}/></div>
+                           <h4 className="font-bold text-gray-900 dark:text-white mb-2">Secure Escrow Protection</h4>
+                           <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">Your payment is held safely in escrow. Funds are only released to the freelancer once you review and approve the final work.</p>
+                       </div>
+                       <div className="bg-gray-50 dark:bg-[#0B0F19] p-6 rounded-2xl border border-gray-100 dark:border-white/5">
+                           <div className="w-12 h-12 bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center mb-4"><Award size={24}/></div>
+                           <h4 className="font-bold text-gray-900 dark:text-white mb-2">Verified Professionals</h4>
+                           <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">Every freelancer goes through strict identity and skill verification, ensuring you only work with reliable, high-quality creators.</p>
+                       </div>
+                   </div>
+               </div>
+           ) : (
+               <>
+                   <Briefcase size={48} className="text-gray-300 mb-4"/>
+                   <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Void Detected</h3>
+                   <p className="text-gray-500 dark:text-gray-400 text-sm max-w-xs mx-auto">
+                       {jobView === 'elite' ? "No Elite entries currently available. Check back later!" : "No signals matching your query. Try adjusting your search terms."}
+                   </p>
+               </>
+           )}
+           
         </div>
       )}
 
       {/* --- REPORT MODAL --- */}
       {reportModal && (
-        <Modal title="Report Post" onClose={() => setReportModal(null)}>
+        <Modal title="Report" onClose={() => setReportModal(null)}>
             <form onSubmit={handleReportSubmit} className="space-y-4">
                 <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl border border-red-100 flex gap-3 text-red-800 dark:text-red-200">
                     <Flag size={18} />

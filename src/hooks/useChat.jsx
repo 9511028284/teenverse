@@ -1,25 +1,49 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabase'; 
 
-// IMPORTANT: Add this to your .env file: VITE_WORKER_URL=wss://your-worker-name.your-subdomain.workers.dev
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 
-export const useChat = (activeChat, user, initialMessage) => {
+// ==========================================
+// 🛡️ ZERO-TOLERANCE PII & CONTACT FILTER
+// ==========================================
+const containsPersonalInfo = (text) => {
+    if (!text) return false;
+    
+    // 1. Emails (Catches normal + obfuscated like "test at gmail dot com")
+    const emailRegex = /[a-zA-Z0-9._%+-]+\s*(?:@|\[at\]|\(at\)|\s+at\s+)\s*[a-zA-Z0-9.-]+\s*(?:\.|\[dot\]|\(dot\)|\s+dot\s+)\s*[a-zA-Z]{2,}/i;
+    
+    // 2. Phone Numbers (Aggressive: Catches any sequence containing 7-15 digits, even with spaces/dashes)
+    const phoneRegex = /(?:\d[\s-._]*){7,15}/;
+    
+    // 3. URLs and Links (Catches standard URLs and raw domains like "myportfolio.com")
+    const linkRegex = /(https?:\/\/|www\.)[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?/i;
+    
+    // 4. Banned Platforms / Social Media Keywords
+    const socialRegex = /\b(instagram|insta|ig|whatsapp|wa|telegram|tg|discord|snapchat|snap|skype|twitter|x|linkedin|facebook|fb|wechat|viber|zoom)\b/i;
+
+    return emailRegex.test(text) || phoneRegex.test(text) || linkRegex.test(text) || socialRegex.test(text);
+};
+
+export const useChat = (activeChat, user, initialMessage, showToast) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [myId, setMyId] = useState(null);
   const [hasMore, setHasMore] = useState(true);
-  const [isConnected, setIsConnected] = useState(false); // 🚀 NEW: Connection State
+  const [isConnected, setIsConnected] = useState(false);
   
-  // WebSocket Reference
+  // Advanced Refs to prevent stale closures and memory leaks
   const wsRef = useRef(null);
+  const isMountedRef = useRef(true);
+  const reconnectTimeoutRef = useRef(null);
 
   // 1. SECURELY GET USER IDENTITY
   useEffect(() => {
     const getIdentity = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      setMyId(session?.user?.id || user?.id || user?.user?.id);
+      if (isMountedRef.current) {
+          setMyId(session?.user?.id || user?.id || user?.user?.id);
+      }
     };
     getIdentity();
   }, [user]);
@@ -28,23 +52,30 @@ export const useChat = (activeChat, user, initialMessage) => {
     if (initialMessage) setInput(initialMessage);
   }, [initialMessage]);
 
+  // Lifecycle Management
+  useEffect(() => {
+      isMountedRef.current = true;
+      return () => {
+          isMountedRef.current = false;
+          if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+          if (wsRef.current) wsRef.current.close(1000);
+      };
+  }, []);
+
   // 2. IDENTIFY CHAT TYPE & ROOM ID
   const isUuid = (val) => typeof val === 'string' && val.includes('-');
   const isDirectChat = !activeChat?.application_id || isUuid(activeChat?.application_id);
   const appId = isDirectChat ? null : activeChat?.application_id;
 
-  // 3. FETCH HISTORY & CONNECT WEBSOCKET
+  // 3. CORE WEBSOCKET & HISTORY LOGIC
   useEffect(() => {
     const chatId = activeChat?.id;
     if (!chatId || !myId) return; 
 
-    // Generate a consistent Room ID
     const sortedIds = [myId, chatId].sort();
     const roomId = appId ? `app_${appId}` : `direct_${sortedIds[0]}_${sortedIds[1]}`;
 
-    let isMounted = true; 
-
-    // A. Fetch historical messages from Supabase
+    // A. Fetch historical messages
     const fetchMessages = async () => {
       setLoading(true);
       try {
@@ -60,91 +91,72 @@ export const useChat = (activeChat, user, initialMessage) => {
         const { data, error } = await query;
         if (error) throw error;
         
-        if (data && isMounted) {
+        if (data && isMountedRef.current) {
           setMessages([...data].reverse()); 
           if (data.length < 50) setHasMore(false);
         }
       } catch (err) {
-        console.error("Fetch error:", err);
+        // Silently fail in production
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMountedRef.current) setLoading(false);
       }
     };
 
     fetchMessages();
 
-    // B. Connect to Cloudflare Worker Securely
+    // B. Secure WebSocket Connection
     const connectWebSocket = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        console.error("🛑 [Frontend] No Supabase session found! Cannot connect.");
-        return;
-      }
+      if (!session) return;
 
       try {
-        // ==========================================
-        // 🎟️ THE 20/20 TICKET FIX
-        // Fetch a 30-second ticket so we don't leak the real token!
-        // ==========================================
         const httpUrl = WORKER_URL.replace("wss://", "https://").replace("ws://", "http://");
         const ticketRes = await fetch(`${httpUrl}/chat/ticket`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
 
-        if (!ticketRes.ok) throw new Error("Failed to authenticate with chat server");
+        if (!ticketRes.ok) throw new Error("Auth Failed");
         const { ticket } = await ticketRes.json();
 
-        // Connect using the temporary ticket
         const wsUrl = `${WORKER_URL}/chat/${roomId}?ticket=${ticket}`;
-        console.log(`🌐 [Frontend] Connecting securely with ticket to room: ${roomId}`);
-
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
-          console.log(`✅ [Frontend] Locked into Cloudflare Room: ${roomId}`);
-          if (isMounted) setIsConnected(true);
+          if (isMountedRef.current) setIsConnected(true);
         };
 
-        ws.onerror = (error) => {
-          console.error("🚨 [Frontend] WebSocket onerror event triggered!", error);
+        ws.onerror = () => {
+          // Silently handle errors
         };
 
         ws.onmessage = (event) => {
            const newMsg = JSON.parse(event.data);
            
-           // Catch Server Errors & Logs
            if (newMsg.error) {
-               console.error("🚨 SERVER REJECTED CONNECTION:", newMsg.error);
-               alert("Chat Connection Error: " + newMsg.error);
+               if (showToast) showToast(`Connection Error: ${newMsg.error}`, "error");
                return;
            }
-           if (newMsg.system) {
-               console.log("✅ SERVER MESSAGE:", newMsg.system);
-               return;
-           }
+           if (newMsg.system) return;
 
-           // Strict deduplication against itself AND previous messages
+           // Strict deduplication
            if (newMsg.type === "history") {
                setMessages(prev => {
                    const existingIds = new Set(prev.map(m => m.id || m.client_temp_id));
-                   const uniqueHistory = [];
-                   
-                   for (const m of newMsg.messages) {
+                   const uniqueHistory = newMsg.messages.filter(m => {
                        const identifier = m.id || m.client_temp_id;
-                       
-                       // If we haven't seen this ID on the screen OR in this current batch...
                        if (!existingIds.has(identifier)) {
-                           existingIds.add(identifier); 
-                           uniqueHistory.push(m);
+                           existingIds.add(identifier);
+                           return true;
                        }
-                   }
+                       return false;
+                   });
                    return [...prev, ...uniqueHistory];
                });
                return;
            }
            
-           // Handle incoming standard messages
+           // Standard incoming message routing
            setMessages((prev) => {
              if (newMsg.sender_id === myId && newMsg.client_temp_id) {
                return prev.map(msg => msg.id === newMsg.client_temp_id ? { ...newMsg, status: "sent", id: newMsg.id || newMsg.client_temp_id } : msg);
@@ -158,18 +170,14 @@ export const useChat = (activeChat, user, initialMessage) => {
         };
 
         ws.onclose = (event) => {
-          if (isMounted) setIsConnected(false);
-          console.warn(`⚠️ [Frontend] WebSocket disconnected. Code: ${event.code}`);
+          if (!isMountedRef.current) return;
+          setIsConnected(false);
           
-          // ==========================================
-          // 🌩️ THE 20/20 JITTER FIX
-          // Auto-Reconnect with random delay to prevent Server Storms
-          // ==========================================
-          if (isMounted && event.code !== 1008 && event.code !== 1000) {
-              const delay = 2000 + Math.random() * 3000; // Random delay between 2-5 seconds
-              console.log(`🔄 Attempting to auto-reconnect in ${Math.round(delay)}ms...`);
-              setTimeout(() => {
-                  if (isMounted) connectWebSocket();
+          // Auto-Reconnect with random jitter (only if abnormal closure)
+          if (event.code !== 1008 && event.code !== 1000) {
+              const delay = 2000 + Math.random() * 3000;
+              reconnectTimeoutRef.current = setTimeout(() => {
+                  if (isMountedRef.current) connectWebSocket();
               }, delay);
           }
         };
@@ -177,22 +185,16 @@ export const useChat = (activeChat, user, initialMessage) => {
         wsRef.current = ws;
 
       } catch (err) {
-        console.error("❌ WebSocket Connection Error:", err);
+        // Silently fail connection errors in production
       }
     };
 
     connectWebSocket();
       
-    return () => { 
-      isMounted = false;
-      if (wsRef.current) {
-          wsRef.current.close(1000, "Component unmounted"); 
-      }
-    };
   }, [activeChat?.id, myId, appId, isDirectChat]); 
 
-  // 4. PAGINATION (LOAD MORE HISTORY FROM SUPABASE)
-  const loadMore = async () => {
+  // 4. PAGINATION
+  const loadMore = useCallback(async () => {
     if (!hasMore || !activeChat?.id) return;
     
     let query = supabase.from('messages').select('*').order('created_at', { ascending: false }).range(messages.length, messages.length + 49);
@@ -208,16 +210,23 @@ export const useChat = (activeChat, user, initialMessage) => {
       if (data.length < 50) setHasMore(false);
       setMessages(prev => [...[...data].reverse(), ...prev]);
     }
-  };
+  }, [hasMore, activeChat?.id, messages.length, appId, myId]);
 
-  // 5. BULLETPROOF WEBSOCKET SEND LOGIC 
-  const executeSendMessage = async () => {
+  // 5. RESTRICTED SEND LOGIC 
+  const executeSendMessage = useCallback(async () => {
     if (!input.trim() || !activeChat?.id || !myId) return false;
 
+    // 🛡️ SECURITY INTERCEPT: Check for PII before processing
+    if (containsPersonalInfo(input)) {
+        if (showToast) {
+            showToast("Message blocked. Sharing external contact info, links, or social media handles is strictly prohibited.", "error");
+        }
+        return false; // Abort send entirely
+    }
+
     const tempId = `temp-${Date.now()}`;
-    const messageText = input;
+    const messageText = input.trim();
     
-    // 1. Optimistic UI Update
     const optimisticMsg = { 
         id: tempId,
         client_temp_id: tempId,
@@ -232,7 +241,6 @@ export const useChat = (activeChat, user, initialMessage) => {
     setMessages((prev) => [...prev, optimisticMsg]);
     setInput('');
 
-    // 2. Send payload via WebSocket to Cloudflare Worker
     const wsPayload = {
         client_temp_id: tempId,
         application_id: appId, 
@@ -244,13 +252,11 @@ export const useChat = (activeChat, user, initialMessage) => {
         wsRef.current.send(JSON.stringify(wsPayload));
         return true;
     } else {
-        console.error("WebSocket is not connected.");
         setMessages((prev) => prev.filter(msg => msg.id !== tempId));
-        alert("Connection lost. Please wait to reconnect.");
+        if (showToast) showToast("Connection lost. Please wait to reconnect.", "error");
         return false;
     }
-  };
+  }, [input, activeChat?.id, myId, appId, showToast]);
 
-  // Export isConnected so your UI can optionally show a "Connecting..." indicator
   return { messages, input, setInput, loading, myId, executeSendMessage, loadMore, hasMore, isConnected };
 };

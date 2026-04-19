@@ -30,7 +30,6 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
   const kycStatus = profileForm.kyc_status || 'not_started';
   
   const kycConfig = {
-    // ✅ NEW STATUS: VERIFIED (Used by new Edge Function logic)
     verified: {
       color: "bg-emerald-500",
       lightColor: "bg-emerald-50 dark:bg-emerald-900/20",
@@ -39,7 +38,6 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
       title: "Identity Verified",
       desc: "Your account is fully verified & active."
     },
-    // Legacy support for 'approved'
     approved: {
       color: "bg-emerald-500",
       lightColor: "bg-emerald-50 dark:bg-emerald-900/20",
@@ -176,7 +174,7 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
             </button>
         </div>
 
-        {/* 3. 🚀 NEW: PARENT EMAIL CARD (Freelancers Only) */}
+        {/* 3. PARENT EMAIL CARD (Freelancers Only) */}
         {!isClient && (
             <div className="col-span-12 md:col-span-6 bg-white dark:bg-[#1E293B] p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl relative overflow-hidden">
                 <div className="flex items-center gap-3 mb-6">
@@ -204,33 +202,35 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
             </div>
         )}
 
-        {/* 4. KYC SECTION */}
-        <div className={`col-span-12 ${!isClient ? 'md:col-span-6' : ''}`}>
-            <div className={`${statusUI.lightColor} border border-transparent dark:border-white/5 p-1 rounded-[2rem] h-full`}>
-                <div className="bg-white/50 dark:bg-[#1E293B]/80 backdrop-blur-xl rounded-[1.8rem] p-6 flex flex-col md:flex-row items-center gap-6 h-full">
-                    <div className={`w-16 h-16 rounded-full flex items-center justify-center shrink-0 shadow-lg ${statusUI.color} text-white`}>
-                        <StatusIcon size={32} />
-                    </div>
-                    <div className="flex-1 text-center md:text-left">
-                        <div className="flex items-center justify-center md:justify-start gap-3 mb-1">
-                            <h3 className={`text-xl font-bold ${statusUI.textColor}`}>{statusUI.title}</h3>
-                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-white/50 dark:bg-black/20 ${statusUI.textColor} border-current opacity-70`}>
-                                {kycStatus.replace('_', ' ')}
-                            </span>
-                        </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">
-                            {statusUI.desc}
-                        </p>
-                    </div>
-                    {/* Hides button if status is verified OR approved OR pending */}
-                    {kycStatus !== 'verified' && kycStatus !== 'approved' && kycStatus !== 'pending' && (
-                        <button onClick={onOpenKyc} className="bg-gray-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2 w-full md:w-auto justify-center">
-                            Start Verification <ChevronRight size={18} />
-                        </button>
-                    )}
-                </div>
-            </div>
-        </div>
+        {/* 4. KYC SECTION (Freelancers Only) */}
+        {!isClient && (
+          <div className="col-span-12 md:col-span-6">
+              <div className={`${statusUI.lightColor} border border-transparent dark:border-white/5 p-1 rounded-[2rem] h-full`}>
+                  <div className="bg-white/50 dark:bg-[#1E293B]/80 backdrop-blur-xl rounded-[1.8rem] p-6 flex flex-col md:flex-row items-center gap-6 h-full">
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center shrink-0 shadow-lg ${statusUI.color} text-white`}>
+                          <StatusIcon size={32} />
+                      </div>
+                      <div className="flex-1 text-center md:text-left">
+                          <div className="flex items-center justify-center md:justify-start gap-3 mb-1">
+                              <h3 className={`text-xl font-bold ${statusUI.textColor}`}>{statusUI.title}</h3>
+                              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-white/50 dark:bg-black/20 ${statusUI.textColor} border-current opacity-70`}>
+                                  {kycStatus.replace('_', ' ')}
+                              </span>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                              {statusUI.desc}
+                          </p>
+                      </div>
+                      {/* Hides button if status is verified OR approved OR pending */}
+                      {kycStatus !== 'verified' && kycStatus !== 'approved' && kycStatus !== 'pending' && (
+                          <button onClick={onOpenKyc} className="bg-gray-900 dark:bg-white text-white dark:text-black px-6 py-3 rounded-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2 w-full md:w-auto justify-center">
+                              Start Verification <ChevronRight size={18} />
+                          </button>
+                      )}
+                  </div>
+              </div>
+          </div>
+        )}
 
       </div>
       

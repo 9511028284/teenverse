@@ -124,7 +124,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                )}
 
                <div className="flex items-center gap-3">
-                 <div className="hidden md:flex items-center gap-1 bg-gray-100 dark:bg-black/30 p-1 rounded-full">
+                 {/* 🚀 FIXED: Removed "hidden md:flex" so the toggle shows on Mobile */}
+                 <div className="flex items-center gap-1 bg-gray-100 dark:bg-black/30 p-1 rounded-full">
                       <button onClick={() => !darkMode && toggleTheme()} className={`p-2 rounded-full transition-all ${!darkMode ? 'bg-white shadow-sm text-amber-500' : 'text-gray-400'}`}><Sun size={18}/></button>
                       <button onClick={() => darkMode && toggleTheme()} className={`p-2 rounded-full transition-all ${darkMode ? 'bg-gray-800 shadow-sm text-indigo-400' : 'text-gray-400'}`}><Moon size={18}/></button>
                   </div>
@@ -181,8 +182,6 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         parentMode={parentMode} 
         onAction={actions.handleAppAction} 
         setActiveChat={setActiveChat}
-        // Note: If you have setActiveChat in your setters, add it here too!
-        // setActiveChat={setters.setActiveChat} 
     />
 )}
                     {tab === 'posted-jobs' && isClient && <ClientPostedJobs jobs={jobs} setModal={setters.setModal} handleDeleteJob={actions.handleDeleteJob} />}
@@ -212,6 +211,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       activeChat={state.activeChat} // Passing the chat ID if they clicked from a profile
       setActiveChat={setters.setActiveChat}
       onAction={actions.handleAppAction}
+      showToast={showToast}
    />
 )}
 
