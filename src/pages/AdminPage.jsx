@@ -1048,8 +1048,13 @@ const AdminDashboard = ({ onLogout }) => {
                                             <button onClick={() => copyToClipboard(payoutData.bankDetails.account_holder_name)} className="p-2 hover:bg-blue-100 rounded text-blue-500"><Copy size={14}/></button>
                                         </div>
                                         <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex justify-between items-center">
-                                            <div><span className="block text-xs text-blue-600 font-bold">Account Number</span><span className="font-mono text-sm tracking-widest">{payoutData.bankDetails.account_number}</span></div>
-                                            <button onClick={() => copyToClipboard(payoutData.bankDetails.account_number)} className="p-2 hover:bg-blue-100 rounded text-blue-500"><Copy size={14}/></button>
+                                            <div>
+                                                <span className="block text-xs text-blue-600 font-bold">Account Number</span>
+                                                <span className="font-mono text-sm tracking-widest">
+                                                    ****{String(payoutData.bankDetails.account_number || '').slice(-4)}
+                                                </span>
+                                            </div>
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-500">Masked</span>
                                         </div>
                                         <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex justify-between items-center">
                                             <div><span className="block text-xs text-blue-600 font-bold">IFSC Code</span><span className="font-mono text-sm">{payoutData.bankDetails.ifsc_code}</span></div>

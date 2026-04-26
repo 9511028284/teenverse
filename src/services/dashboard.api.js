@@ -553,7 +553,16 @@ export const getUserBankingDetails = async (userId) => {
     console.error("Banking Fetch Error:", error);
     return { data: null, error };
   }
-  return { data, error: null };
+
+  const accountNumber = String(data?.account_number || '');
+  return {
+    data: {
+      ...data,
+      account_number: accountNumber ? `****${accountNumber.slice(-4)}` : '',
+      account_number_last4: accountNumber.slice(-4),
+    },
+    error: null
+  };
 };
 
 export const submitReview = async (appId, rating, tags = []) => {

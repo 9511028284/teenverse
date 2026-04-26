@@ -1,426 +1,955 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Sparkles, Download, ShieldCheck, Briefcase, 
-  Loader2, Link as LinkIcon, CheckCircle2, 
-  Target, Flame, Wand2, Zap
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowRight,
+  BadgeCheck,
+  Briefcase,
+  CheckCircle2,
+  Download,
+  FileCheck2,
+  Layers3,
+  Link as LinkIcon,
+  Loader2,
+  PenLine,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  ToggleLeft,
+  Wand2,
 } from 'lucide-react';
-import { supabase } from '../../supabase'; 
-import { jsPDF } from "jspdf";
+import { supabase } from '../../supabase';
+import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
+
+const ALLOWED_PROOF_DOMAINS = [
+  'github.com', 'www.github.com', 'behance.net', 'www.behance.net',
+  'dribbble.com', 'www.dribbble.com', 'figma.com', 'www.figma.com',
+  'linkedin.com', 'www.linkedin.com', 'vercel.app', 'netlify.app',
+  'youtube.com', 'www.youtube.com',
+];
+
+const STEPS = [
+  { id: 'import', label: 'Import', title: 'Drop the raw material', summary: 'Paste old resume notes, projects, wins, links, or anything you want the AI to understand.', icon: Sparkles },
+  { id: 'journey', label: 'Story', title: 'Shape the story', summary: 'Write the short professional arc recruiters should remember.', icon: PenLine },
+  { id: 'experience', label: 'Proof', title: 'Add one proof point', summary: 'Capture a real role, project, client, internship, or achievement.', icon: Briefcase },
+  { id: 'skills', label: 'Skills', title: 'Lock in capabilities', summary: 'Add a skill and the source behind it.', icon: Target },
+  { id: 'finish', label: 'Finish', title: 'AI resume optimizer', summary: 'One final pass turns everything into a polished, impact-first resume.', icon: Wand2 },
+];
+
+const inputClass =
+  'w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-cyan-300';
+
+const compactButtonClass =
+  'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-xs font-black uppercase tracking-[0.18em] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60';
+
+const MotionDiv = motion.div;
+const MotionForm = motion.form;
+
+const getGithubHandle = (socialLinks) => {
+  const github = socialLinks?.github;
+  if (!github) return null;
+
+  try {
+    const parsed = new URL(github);
+    return parsed.pathname.split('/').filter(Boolean)[0] || null;
+  } catch {
+    return String(github).replace(/^@/, '').trim() || null;
+  }
+};
 
 const ResumeBuilder = ({ user, showToast }) => {
-  const [activeTab, setActiveTab] = useState('magic');
+  const [currentStep, setCurrentStep] = useState('import');
   const [isLoading, setIsLoading] = useState(false);
-  
-  // One-Shot AI State
-  const [rawImportText, setRawImportText] = useState("");
-  const [isForging, setIsForging] = useState(false);
-  const expDescRef = useRef(null);
-  
-  // Structured Data States
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [rawImportText, setRawImportText] = useState('');
   const [trustScore, setTrustScore] = useState(user?.trust_score || 0);
-  const [journeyText, setJourneyText] = useState(user?.journey_statement || "");
+  const [journeyText, setJourneyText] = useState(user?.journey_statement || '');
   const [experiences, setExperiences] = useState([]);
   const [skills, setSkills] = useState([]);
-  
-  const resumeRef = useRef(null);
+  const [platformWork, setPlatformWork] = useState([]);
+  const [optimizedResume, setOptimizedResume] = useState(null);
+  const [backendTrustBreakdown, setBackendTrustBreakdown] = useState(user?.trust_score_breakdown || []);
+  const [profileSocialLinks, setProfileSocialLinks] = useState(user?.social_links || {});
+  const [riskLevel, setRiskLevel] = useState(user?.risk_level || 'low');
+  const [showVerifiedOnly, setShowVerifiedOnly] = useState(true);
 
-  // --- 0. Load Data on Mount ---
+  const resumeRef = useRef(null);
+  const previewContainerRef = useRef(null);
+  const [previewScale, setPreviewScale] = useState(1);
+
+  const activeIndex = STEPS.findIndex((step) => step.id === currentStep);
+  const activeStep = STEPS[activeIndex] || STEPS[0];
+  const ActiveIcon = activeStep.icon;
+
+  // --- Dynamic Scaler Hook ---
+  // Calculates scale to ensure the 800px page fits within the container with padding.
+  useEffect(() => {
+    const updateScale = () => {
+      if (previewContainerRef.current) {
+        const parentWidth = previewContainerRef.current.offsetWidth;
+        // Reserve 64px total for surrounding padding (32px left/right)
+        const availableWidth = parentWidth - 64; 
+        if (availableWidth < 800) {
+          setPreviewScale(availableWidth / 800);
+        } else {
+          setPreviewScale(1);
+        }
+      }
+    };
+    setTimeout(updateScale, 50); // Ensure DOM is painted
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
+
   useEffect(() => {
     const fetchTrustData = async () => {
       if (!user?.id) return;
+
       const [expRes, skillRes, scoreRes, userRes] = await Promise.all([
         supabase.from('resume_experiences').select('*').eq('user_id', user.id).order('start_date', { ascending: false }),
         supabase.from('resume_skills').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.rpc('calculate_trust_score', { p_user: user.id }),
-        supabase.from('freelancers').select('journey_statement').eq('id', user.id).single()
+        supabase
+          .from('freelancers')
+          .select('journey_statement, trust_score_breakdown, risk_level, social_links')
+          .eq('id', user.id)
+          .single(),
       ]);
+      const { data: platformApps } = await supabase
+        .from('applications')
+        .select('id, status, bid_amount, updated_at, created_at, freelancer_id, client_id, jobs(title)')
+        .eq('freelancer_id', user.id)
+        .in('status', ['Accepted', 'Completed', 'Paid', 'Processing'])
+        .order('updated_at', { ascending: false })
+        .limit(4);
 
       if (expRes.data) setExperiences(expRes.data);
       if (skillRes.data) setSkills(skillRes.data);
       if (scoreRes.data !== null) setTrustScore(scoreRes.data);
       if (userRes.data?.journey_statement) setJourneyText(userRes.data.journey_statement);
+      if (Array.isArray(userRes.data?.trust_score_breakdown)) setBackendTrustBreakdown(userRes.data.trust_score_breakdown);
+      if (userRes.data?.risk_level) setRiskLevel(userRes.data.risk_level);
+      if (userRes.data?.social_links) setProfileSocialLinks(userRes.data.social_links);
+      if (platformApps) setPlatformWork(platformApps);
     };
+
     fetchTrustData();
-  }, [user.id]);
+  }, [user?.id]);
 
-  // --- 1. THE 1-TOKEN MASTER FORGE ---
-  const handleMasterForge = async () => {
-    if (!rawImportText || rawImportText.length < 30) {
-        return showToast("Pour a bit more of your story into the terminal first!", "warning");
-    }
+  const resumeData = useMemo(() => {
+    const normalizedOptimizedExperiences = optimizedResume?.experiences?.length
+      ? optimizedResume.experiences.map((job, index) => ({
+          id: `optimized-exp-${index}`,
+          title: job.title || 'AI-generated experience',
+          company: job.company || 'Self declared',
+          description: job.description || '',
+          start_date: job.start_date || null,
+          end_date: job.end_date || null,
+          is_verified: false,
+          source: 'ai',
+        }))
+      : [];
 
-    setIsForging(true);
-    showToast("AI Neural Engine analyzing your profile... 🤖", "info");
+    const normalizedOptimizedSkills = optimizedResume?.skills?.length
+      ? optimizedResume.skills.map((skill, index) =>
+          typeof skill === 'string'
+            ? { id: `optimized-skill-${index}`, skill_name: skill, is_verified: false, source: 'ai' }
+            : { id: `optimized-skill-${index}`, skill_name: skill.skill_name || skill.name || String(skill), is_verified: false, source: 'ai' },
+        )
+      : [];
 
+    const experienceSource = normalizedOptimizedExperiences.length ? normalizedOptimizedExperiences : experiences;
+    const skillSource = normalizedOptimizedSkills.length ? normalizedOptimizedSkills : skills;
+
+    return {
+      journey: optimizedResume?.journey_statement || journeyText,
+      experiences: experienceSource,
+      skills: skillSource,
+      isOptimized: Boolean(optimizedResume),
+    };
+  }, [experiences, journeyText, optimizedResume, skills]);
+
+  const groupedExperiences = useMemo(() => {
+    const verified = [];
+    const selfDeclared = [];
+    resumeData.experiences.forEach((job) => {
+      if (job.is_verified) verified.push(job);
+      else selfDeclared.push(job);
+    });
+    return { verified, selfDeclared };
+  }, [resumeData.experiences]);
+
+  const groupedSkills = useMemo(() => {
+    const verified = [];
+    const selfDeclared = [];
+    resumeData.skills.forEach((skill) => {
+      const hasProofSource = ['project', 'certificate', 'platform', 'verified'].includes(String(skill.source || '').toLowerCase());
+      if (skill.is_verified || hasProofSource) verified.push(skill);
+      else selfDeclared.push(skill);
+    });
+    return { verified, selfDeclared };
+  }, [resumeData.skills]);
+
+  const fallbackTrustBreakdown = useMemo(() => {
+    const kycPoints = user?.is_kyc_verified || user?.kyc_status === 'verified' ? 30 : 0;
+    const verifiedWorkPoints = Math.min(platformWork.length * 10, 20);
+    const verifiedSkillsPoints = Math.min(groupedSkills.verified.length * 2 + groupedExperiences.verified.length * 3, 10);
+    const aiPenalty = resumeData.isOptimized ? -10 : 0;
+    const selfDeclaredPenalty = groupedExperiences.selfDeclared.length > groupedExperiences.verified.length ? -5 : 0;
+
+    return [
+      { label: 'KYC', value: kycPoints },
+      { label: 'Platform work', value: verifiedWorkPoints },
+      { label: 'Verified proof', value: verifiedSkillsPoints },
+      { label: 'AI data', value: aiPenalty },
+      { label: 'Self declared weight', value: selfDeclaredPenalty },
+    ];
+  }, [groupedExperiences.selfDeclared.length, groupedExperiences.verified.length, groupedSkills.verified.length, platformWork.length, resumeData.isOptimized, user?.is_kyc_verified, user?.kyc_status]);
+
+  const displayedTrustBreakdown = backendTrustBreakdown.length ? backendTrustBreakdown : fallbackTrustBreakdown;
+
+  const trustBand = useMemo(() => {
+    if (trustScore >= 80) return { label: 'High Trust', className: 'text-emerald-300', tone: 'bg-emerald-400/10 border-emerald-300/30' };
+    if (trustScore >= 50) return { label: 'Medium Trust', className: 'text-amber-300', tone: 'bg-amber-400/10 border-amber-300/30' };
+    return { label: 'Low Trust', className: 'text-rose-300', tone: 'bg-rose-400/10 border-rose-300/30' };
+  }, [trustScore]);
+
+  const riskFlags = useMemo(() => {
+    const flags = [];
+    if (resumeData.isOptimized) flags.push('AI-generated language is always treated as unverified.');
+    if (groupedExperiences.selfDeclared.length > groupedExperiences.verified.length) flags.push('Most experience is self declared, so profile trust should stay conservative.');
+    if (groupedSkills.selfDeclared.length && !groupedSkills.verified.length) flags.push('Skills are not proof-backed yet.');
+    return flags;
+  }, [groupedExperiences.selfDeclared.length, groupedExperiences.verified.length, groupedSkills.selfDeclared.length, groupedSkills.verified.length, resumeData.isOptimized]);
+
+  const completion = Math.round(((activeIndex + 1) / STEPS.length) * 100);
+
+  const refreshTrustScore = async () => {
+    if (!user?.id) return;
+    const { data } = await supabase.rpc('calculate_trust_score', { p_user: user.id });
+    if (data !== null) setTrustScore(data);
+  };
+
+  const goToStep = (stepId) => setCurrentStep(stepId);
+  const goToNext = () => setCurrentStep(STEPS[Math.min(activeIndex + 1, STEPS.length - 1)].id);
+
+  const validateProofUrl = async (proofUrl) => {
+    if (!proofUrl) return { valid: true, normalizedUrl: null };
     try {
-        const { data: aiData, error } = await supabase.functions.invoke('generate-resume', {
-            body: { roughText: rawImportText }
-        });
-        if (error) throw error;
-
-        showToast("Structuring data... 🧱", "info");
-
-        // Save Journey
-        if (aiData.journey_statement) {
-            await supabase.from('freelancers').update({ journey_statement: aiData.journey_statement }).eq('id', user.id);
-            setJourneyText(aiData.journey_statement);
-        }
-
-        // Save Experiences
-        if (aiData.experiences && aiData.experiences.length > 0) {
-            for (const exp of aiData.experiences) {
-                await supabase.rpc('add_experience', {
-                    p_user: user.id, p_title: exp.title, p_company: exp.company,
-                    p_start: exp.start_date || null, p_end: exp.end_date || null,
-                    p_desc: exp.description, p_proof: null 
-                });
-            }
-        }
-
-        // Save Skills
-        if (aiData.skills && aiData.skills.length > 0) {
-            for (const skill of aiData.skills) {
-                await supabase.rpc('add_skill', { p_user: user.id, p_skill: skill, p_source: 'none' });
-            }
-        }
-
-        showToast("Masterpiece Forged! 🚀", "success");
-        setRawImportText(""); 
-        
-        // Refresh local state to show PDF
-        const [newExps, newSkills, scoreRes] = await Promise.all([
-            supabase.from('resume_experiences').select('*').eq('user_id', user.id).order('start_date', { ascending: false }),
-            supabase.from('resume_skills').select('*').eq('user_id', user.id),
-            supabase.rpc('calculate_trust_score', { p_user: user.id })
-        ]);
-        
-        setExperiences(newExps.data || []);
-        setSkills(newSkills.data || []);
-        if (scoreRes.data !== null) setTrustScore(scoreRes.data);
-        
-        setActiveTab('experience');
-
-    } catch (err) {
-        console.error(err);
-        showToast("Forge failed: " + err.message, "error");
-    } finally {
-        setIsForging(false);
+      const parsed = new URL(proofUrl);
+      const hostname = parsed.hostname.toLowerCase();
+      if (!['http:', 'https:'].includes(parsed.protocol)) return { valid: false, message: 'Proof URL must use http or https.' };
+      if (!ALLOWED_PROOF_DOMAINS.includes(hostname)) return { valid: false, message: 'Use a trusted proof source like GitHub, Behance, Figma, LinkedIn, Vercel, or Netlify.' };
+      
+      const { data, error } = await supabase.functions.invoke('validate-resume-proof', {
+        body: {
+          proofUrl: parsed.toString(),
+          expectedGithubUsername: getGithubHandle(profileSocialLinks),
+        },
+      });
+      if (error || !data?.valid) return { valid: false, message: data?.reason || error?.message || 'Proof link could not be validated.' };
+      
+      return {
+        valid: true,
+        normalizedUrl: data.normalizedUrl || parsed.toString(),
+        domain: data.domain || hostname,
+        metadata: data.metadata || {},
+        httpStatus: data.httpStatus || 200,
+        ownershipVerified: data.ownershipVerified || false,
+      };
+    } catch {
+      return { valid: false, message: 'Proof URL format looks invalid.' };
     }
   };
 
-  // --- 2. Manual Database Handlers ---
+  const buildOptimizerInput = () => {
+    const experienceText = experiences.map((exp) => [
+      `Role: ${exp.title || 'Untitled'}`, `Company: ${exp.company || 'Independent'}`,
+      `Dates: ${exp.start_date || 'Unknown'} to ${exp.end_date || 'Present'}`,
+      `Impact: ${exp.description || ''}`, exp.proof_url ? `Proof: ${exp.proof_url}` : '',
+    ].filter(Boolean).join('\n')).join('\n\n');
+
+    const skillsText = skills.map((skill) => skill.skill_name).filter(Boolean).join(', ');
+
+    return [
+      `Candidate: ${user?.name || 'TeenVerse talent'}`, `Specialty: ${user?.specialty || 'Independent talent'}`,
+      rawImportText ? `Raw notes:\n${rawImportText}` : '', journeyText ? `Journey statement:\n${journeyText}` : '',
+      experienceText ? `Experience:\n${experienceText}` : '', skillsText ? `Skills:\n${skillsText}` : '',
+      'Optimize this into a concise, professional, impact-focused resume.',
+      'DO NOT exaggerate claims. DO NOT invent scope, leadership, clients, or measurable results.',
+      'If the input is weak, keep the writing simple, honest, and specific.',
+      'Treat all unverified content as self-declared and keep that uncertainty visible in wording.',
+    ].filter(Boolean).join('\n\n');
+  };
+
   const handleSaveJourney = async (e) => {
     e.preventDefault();
+    if (!user?.id) return;
     setIsLoading(true);
     try {
-        const { error } = await supabase.from('freelancers').update({ journey_statement: journeyText }).eq('id', user.id);
-        if (error) throw error;
-        showToast("Origin Story Saved! 📖", "success");
-    } catch (err) { showToast("Failed to save.", "error"); } 
+      const { error } = await supabase.from('freelancers').update({ journey_statement: journeyText }).eq('id', user.id);
+      if (error) throw error;
+      showToast('Story saved. Moving to proof points.', 'success');
+      goToNext();
+    } catch (err) { showToast(err.message || 'Failed to save story.', 'error'); } 
     finally { setIsLoading(false); }
   };
 
   const handleAddExperience = async (e) => {
     e.preventDefault();
+    if (!user?.id) return;
     setIsLoading(true);
     const formData = new FormData(e.target);
+    const proofUrl = String(formData.get('proof_url') || '').trim();
+
     try {
+      const validation = await validateProofUrl(proofUrl);
+      if (!validation.valid) { showToast(validation.message, 'warning'); return; }
+
       const { error } = await supabase.rpc('add_experience', {
         p_user: user.id, p_title: formData.get('title'), p_company: formData.get('company'),
         p_start: formData.get('start_date') || null, p_end: formData.get('end_date') || null,
-        p_desc: formData.get('description'), p_proof: formData.get('proof_url') || null
+        p_desc: formData.get('description'), p_proof: validation.normalizedUrl,
       });
       if (error) throw error;
-      showToast("Experience added to ledger.", "success");
-      e.target.reset();
+
       const { data } = await supabase.from('resume_experiences').select('*').eq('user_id', user.id).order('start_date', { ascending: false });
+      const savedExperience = data?.find((item) => item.proof_url === validation.normalizedUrl);
+
+      if (savedExperience && validation.normalizedUrl) {
+        const proofStatus = validation.ownershipVerified ? 'verified' : 'pending';
+
+        await supabase
+          .from('resume_experiences')
+          .update({
+            proof_status: proofStatus,
+            proof_domain: validation.domain,
+            proof_metadata: validation.metadata,
+            validation_http_status: validation.httpStatus,
+          })
+          .eq('id', savedExperience.id);
+
+        await supabase.from('resume_verifications').upsert(
+          {
+            user_id: user.id,
+            section: 'experience',
+            reference_id: savedExperience.id,
+            target_type: 'experience',
+            target_id: savedExperience.id,
+            status: proofStatus,
+            proof_url: validation.normalizedUrl,
+            evidence_url: validation.normalizedUrl,
+            evidence_domain: validation.domain,
+            evidence_metadata: validation.metadata,
+            verified_by: validation.ownershipVerified ? 'system' : 'pending_ownership',
+            source: validation.ownershipVerified ? 'github' : 'portfolio',
+          },
+          { onConflict: 'target_type,target_id' },
+        );
+      }
+
       setExperiences(data || []);
-      refreshTrustScore();
-    } catch (err) { showToast(err.message, "error"); } 
+      await refreshTrustScore();
+      showToast('Proof point saved. Next up: skills.', 'success');
+      e.target.reset();
+      goToNext();
+    } catch (err) { showToast(err.message || 'Failed to add experience.', 'error'); } 
     finally { setIsLoading(false); }
   };
 
   const handleAddSkill = async (e) => {
     e.preventDefault();
+    if (!user?.id) return;
     setIsLoading(true);
     const formData = new FormData(e.target);
+
     try {
-      const { error } = await supabase.rpc('add_skill', { p_user: user.id, p_skill: formData.get('skill_name'), p_source: formData.get('source') });
+      const { error } = await supabase.rpc('add_skill', {
+        p_user: user.id, p_skill: formData.get('skill_name'), p_source: formData.get('source'),
+      });
       if (error) throw error;
-      showToast("Skill logged securely.", "success");
-      e.target.reset();
+
       const { data } = await supabase.from('resume_skills').select('*').eq('user_id', user.id);
       setSkills(data || []);
-      refreshTrustScore();
-    } catch (err) { showToast(err.message, "error"); } 
+      await refreshTrustScore();
+      showToast('Skill saved. Ready for the AI finish.', 'success');
+      e.target.reset();
+      goToNext();
+    } catch (err) { showToast(err.message || 'Failed to add skill.', 'error'); } 
     finally { setIsLoading(false); }
   };
 
-  const refreshTrustScore = async () => {
-    const { data } = await supabase.rpc('calculate_trust_score', { p_user: user.id });
-    if (data !== null) setTrustScore(data);
+  const handleOptimizeResume = async () => {
+    const optimizerInput = buildOptimizerInput();
+    if (optimizerInput.length < 120) { showToast('Add a little more detail before the final AI pass.', 'warning'); return; }
+
+    setIsOptimizing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-resume', { body: { roughText: optimizerInput } });
+      if (error) throw error;
+
+      const normalizedData = {
+        ...data, source: 'ai', is_verified: false,
+        suspicion_flags: [
+          ...((data?.suspicion_flags || [])),
+          ...(/\b(ai|machine learning|blockchain|global|international|scaled|enterprise)\b/i.test(optimizerInput)
+            ? ['unverified_high_claim']
+            : []),
+        ],
+        experiences: (data?.experiences || []).map((job) => ({ ...job, source: 'ai', is_verified: false })),
+        skills: (data?.skills || []).map((skill) => typeof skill === 'string' ? { skill_name: skill, source: 'ai', is_verified: false } : { ...skill, source: 'ai', is_verified: false }),
+      };
+      setOptimizedResume(normalizedData);
+      if (data?.journey_statement) setJourneyText(data.journey_statement);
+      showToast('AI optimized the full resume, but it remains marked unverified until proof exists.', 'success');
+    } catch (err) { showToast(err.message || 'AI optimization failed.', 'error'); } 
+    finally { setIsOptimizing(false); }
   };
 
+  // --- THE PDF EXPORT FIX ---
   const handleDownloadPDF = async () => {
     if (!resumeRef.current) return;
-    showToast("Rendering High-Res PDF...", "info");
+    showToast('Rendering resume PDF...', 'info');
     try {
-      const dataUrl = await toPng(resumeRef.current, { quality: 1, pixelRatio: 3, backgroundColor: '#ffffff' });
+      const dataUrl = await toPng(resumeRef.current, {
+        quality: 1,
+        pixelRatio: 2, 
+        backgroundColor: '#ffffff',
+        width: 800,
+        height: 1131,
+        style: {
+          transform: 'none',       // Override responsive scale to capture true dimensions
+          transformOrigin: 'top left',
+          margin: '0',
+        }
+      });
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (1131 * pdfWidth) / 800; 
+      const pdfHeight = (1131 * pdfWidth) / 800;
       pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`TeenVerse_${user.name.replace(/\s+/g, '_')}_Portfolio.pdf`);
-      showToast("Export Complete 🚀", "success");
-    } catch (err) { showToast("Download failed.", "error"); }
+      pdf.save(`TeenVerse_${(user?.name || 'Resume').replace(/\s+/g, '_')}_Optimized_Resume.pdf`);
+      showToast('Export complete.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Download failed.', 'error');
+    }
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-auto min-h-[calc(100vh-120px)] pb-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      
-      {/* ========================================== */}
-      {/* LEFT SIDE: DATA INPUT TERMINAL */}
-      {/* ========================================== */}
-      <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-5 flex flex-col space-y-4 sm:space-y-6">
-        
-        {/* Trust Score Header */}
-        <div className="relative overflow-hidden rounded-[1.5rem] sm:rounded-[2rem] bg-[#020617] border border-white/10 p-5 sm:p-8 shadow-2xl flex justify-between items-center">
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
-            <div className="absolute -top-20 -right-20 w-48 sm:w-64 h-48 sm:h-64 bg-gradient-to-br from-indigo-500/20 to-purple-600/20 rounded-full blur-[80px]"></div>
-            <div className="relative z-10">
-               <h2 className="text-2xl sm:text-3xl font-black text-white mb-1 tracking-tighter leading-none">Career Forge</h2>
-               <p className="text-gray-400 text-[10px] sm:text-xs font-mono mt-2 flex items-center gap-1.5"><ShieldCheck size={14} className="text-indigo-400" /> Identity Protected</p>
+    <div className="mx-auto grid min-h-[calc(100vh-120px)] max-w-7xl grid-cols-1 gap-5 px-4 pb-10 sm:px-6 lg:grid-cols-12 lg:px-8">
+      <MotionDiv
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="lg:col-span-5"
+      >
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-white/10 dark:bg-[#080b12]">
+          <div className="bg-slate-950 px-5 py-6 text-white sm:px-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-cyan-100">
+                  <ShieldCheck size={13} />
+                  Guided builder
+                </div>
+                <h2 className="text-3xl font-black tracking-tight sm:text-4xl">Impact Resume Studio</h2>
+                <p className="mt-3 max-w-md text-sm leading-6 text-slate-300">
+                  Fast pages, fewer decisions, and a final AI polish that turns rough experience into recruiter-ready impact.
+                </p>
+              </div>
+              <div className="shrink-0 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-center">
+                <div className="text-3xl font-black text-cyan-200">{trustScore}</div>
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Trust</div>
+              </div>
             </div>
-            <div className="relative z-10 flex flex-col items-center justify-center bg-white/5 border border-white/10 w-20 h-20 sm:w-24 sm:h-24 rounded-full backdrop-blur-md shadow-[0_0_30px_rgba(99,102,241,0.15)]">
-                <span className="text-2xl sm:text-3xl font-black text-indigo-400 tracking-tighter">{trustScore}</span>
-                <span className="text-[8px] sm:text-[9px] uppercase tracking-widest text-gray-400 font-bold mt-[-2px]">Trust</span>
-            </div>
-        </div>
 
-        {/* Responsive Tab Navigation */}
-        <div className="flex flex-wrap sm:flex-nowrap gap-2 p-1.5 bg-gray-100 dark:bg-white/5 rounded-xl sm:rounded-2xl">
-            {['magic', 'journey', 'experience', 'skills'].map((t) => (
+            <div className={`mt-5 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] ${trustBand.tone}`}>
+              <ShieldCheck size={13} className={trustBand.className} />
+              <span className={trustBand.className}>{trustBand.label}</span>
+              <span className="text-slate-400">Risk: {riskLevel}</span>
+            </div>
+
+            <div className="mt-6 h-2 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-cyan-300 transition-all" style={{ width: `${completion}%` }} />
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {displayedTrustBreakdown.map((item) => (
+                <div key={item.label} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                  <div className={`text-sm font-black ${item.value >= 0 ? 'text-white' : 'text-amber-300'}`}>
+                    {item.value > 0 ? `+${item.value}` : item.value}
+                  </div>
+                  <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">{item.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-5 border-b border-slate-200 dark:border-white/10">
+            {STEPS.map((step, index) => {
+              const StepIcon = step.icon;
+              const isActive = step.id === currentStep;
+              const isDone = index < activeIndex;
+
+              return (
                 <button
-                    key={t} onClick={() => setActiveTab(t)}
-                    className={`flex-1 py-2.5 sm:py-3 px-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest rounded-lg sm:rounded-xl transition-all ${
-                        activeTab === t ? 'bg-white dark:bg-[#09090b] text-indigo-600 dark:text-indigo-400 shadow-sm border border-gray-200 dark:border-white/10' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
-                    }`}
+                  key={step.id}
+                  type="button"
+                  onClick={() => goToStep(step.id)}
+                  className={`flex flex-col items-center gap-1 border-r border-slate-200 px-2 py-3 text-[10px] font-black uppercase tracking-[0.14em] last:border-r-0 dark:border-white/10 ${
+                    isActive
+                      ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-300/10 dark:text-cyan-200'
+                      : isDone
+                        ? 'text-emerald-600 dark:text-emerald-300'
+                        : 'text-slate-400 hover:text-slate-700 dark:hover:text-white'
+                  }`}
                 >
-                    {t === 'magic' ? <span className="flex items-center justify-center gap-1"><Sparkles size={12}/> Auto Forge</span> : t}
+                  {isDone ? <CheckCircle2 size={16} /> : <StepIcon size={16} />}
+                  <span className="hidden sm:inline">{step.label}</span>
                 </button>
-            ))}
-        </div>
+              );
+            })}
+          </div>
 
-        {/* Form Area */}
-        <div className="flex-1 bg-white dark:bg-[#09090b] backdrop-blur-xl p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-gray-200 dark:border-white/10 shadow-xl relative overflow-hidden">
-            <AnimatePresence mode="wait">
-                
-                {/* 1. MAGIC IMPORT TAB (One-Shot) */}
-                {activeTab === 'magic' && (
-                    <motion.div key="magic" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4 flex flex-col h-full">
-                        <div className="flex items-center gap-2 mb-1">
-                            <Zap size={18} className="text-purple-500" />
-                            <h3 className="text-sm font-black uppercase tracking-widest text-gray-800 dark:text-white">Neural Engine</h3>
-                        </div>
-                        <p className="text-[11px] sm:text-xs text-gray-500 font-medium leading-relaxed">
-                            Dump your raw notes, old resume, and origin story here. Our AI will extract, maximize impact, and secure it all into your ledger instantly.
-                        </p>
-                        
-                        <textarea 
-                            value={rawImportText} onChange={(e) => setRawImportText(e.target.value)}
-                            placeholder="I started coding games at 14. I also worked at a local cafe from Jan 2023 to May 2023. I know Python and React..." 
-                            className="w-full flex-1 min-h-[180px] sm:min-h-[200px] bg-gray-50 dark:bg-white/5 border border-purple-200 dark:border-purple-500/20 rounded-xl px-4 py-4 text-sm resize-none focus:ring-2 focus:ring-purple-500/50 outline-none dark:text-white leading-relaxed custom-scrollbar transition-all"
-                        ></textarea>
-
-                        <button onClick={handleMasterForge} disabled={isForging} className="w-full py-3.5 sm:py-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black uppercase tracking-widest text-[10px] sm:text-xs flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50 mt-auto active:scale-[0.98]">
-                            {isForging ? <Loader2 className="animate-spin" size={16}/> : <><Wand2 size={16}/> Forge Profile</>}
-                        </button>
-                    </motion.div>
-                )}
-
-                {/* 2. JOURNEY FORM (Manual) */}
-                {activeTab === 'journey' && (
-                    <motion.form key="journey" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} onSubmit={handleSaveJourney} className="space-y-4 flex flex-col h-full">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Flame size={18} className="text-orange-500" />
-                            <h3 className="text-sm font-black uppercase tracking-widest text-gray-800 dark:text-white">Your Origin Story</h3>
-                        </div>
-                        
-                        <textarea 
-                            required value={journeyText} onChange={(e) => setJourneyText(e.target.value)}
-                            placeholder="I started my journey when I was 14..." 
-                            className="w-full flex-1 min-h-[200px] bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-4 text-sm resize-none focus:ring-2 focus:ring-indigo-500/50 outline-none dark:text-white leading-relaxed custom-scrollbar transition-all"
-                        ></textarea>
-
-                        <button disabled={isLoading} type="submit" className="w-full py-3.5 sm:py-4 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black font-black uppercase tracking-widest text-[10px] sm:text-xs flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all shadow-xl disabled:opacity-50 mt-auto">
-                            {isLoading ? <Loader2 className="animate-spin" size={16}/> : "Update Journey"}
-                        </button>
-                    </motion.form>
-                )}
-
-                {/* 3. EXPERIENCE FORM (Manual Ledger) */}
-                {activeTab === 'experience' && (
-                    <motion.form key="exp" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} onSubmit={handleAddExperience} className="space-y-4 flex flex-col h-full">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Briefcase size={16} className="text-indigo-500"/> 
-                            <h3 className="text-sm font-black uppercase tracking-widest text-gray-800 dark:text-white">Add Experience</h3>
-                        </div>
-
-                        <input required name="title" placeholder="Role (e.g. Freelance Developer)" className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none dark:text-white transition-all" />
-                        <input required name="company" placeholder="Company / Client Name" className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none dark:text-white transition-all" />
-                        
-                        <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[9px] font-bold text-gray-400 uppercase ml-1">Start Date</label>
-                                <input type="date" name="start_date" className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-xs sm:text-sm text-gray-500 focus:ring-2 focus:ring-indigo-500/50 outline-none dark:text-white transition-all" />
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <label className="text-[9px] font-bold text-gray-400 uppercase ml-1">End Date</label>
-                                <input type="date" name="end_date" className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-xs sm:text-sm text-gray-500 focus:ring-2 focus:ring-indigo-500/50 outline-none dark:text-white transition-all" />
-                            </div>
-                        </div>
-
-                        <textarea required ref={expDescRef} name="description" placeholder="What did you achieve?" className="w-full h-[90px] sm:h-[100px] bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-indigo-500/50 outline-none dark:text-white transition-all"></textarea>
-                        
-                        <div className="relative">
-                            <LinkIcon size={16} className="absolute left-4 top-3.5 text-gray-400" />
-                            <input name="proof_url" placeholder="Proof URL (GitHub, Live Site)" className="w-full bg-indigo-50 dark:bg-indigo-500/5 border border-indigo-200 dark:border-indigo-500/20 rounded-xl pl-11 pr-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none dark:text-white placeholder-indigo-400/70 transition-all" />
-                        </div>
-
-                        <button disabled={isLoading} type="submit" className="w-full py-3.5 sm:py-4 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black font-black uppercase tracking-widest text-[10px] sm:text-xs flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all shadow-xl disabled:opacity-50 mt-auto">
-                            {isLoading ? <Loader2 className="animate-spin" size={16}/> : "Add to Ledger"}
-                        </button>
-                    </motion.form>
-                )}
-
-                {/* 4. SKILLS FORM (Manual) */}
-                {activeTab === 'skills' && (
-                    <motion.form key="skills" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} onSubmit={handleAddSkill} className="space-y-4 flex flex-col h-full">
-                         <div className="flex items-center gap-2 mb-2">
-                            <Target size={16} className="text-indigo-500"/> 
-                            <h3 className="text-sm font-black uppercase tracking-widest text-gray-800 dark:text-white">Register Skill</h3>
-                         </div>
-                         <input required name="skill_name" placeholder="Skill (e.g. React.js, Video Editing)" className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none dark:text-white transition-all" />
-                         <select required name="source" className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none dark:text-white appearance-none transition-all">
-                            <option value="none">Self-Taught (Unverified)</option>
-                            <option value="project">Project Backed</option>
-                            <option value="certificate">External Certificate</option>
-                         </select>
-                         <button disabled={isLoading} type="submit" className="w-full py-3.5 sm:py-4 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black font-black uppercase tracking-widest text-[10px] sm:text-xs flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-xl disabled:opacity-50 mt-auto">
-                            {isLoading ? <Loader2 className="animate-spin" size={16}/> : "Log Skill"}
-                        </button>
-                    </motion.form>
-                )}
-            </AnimatePresence>
-        </div>
-      </motion.div>
-
-      {/* ========================================== */}
-      {/* RIGHT SIDE: EDITORIAL PDF PREVIEW */}
-      {/* ========================================== */}
-      <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-7 bg-gray-200 dark:bg-[#0a0a0a] border border-gray-300 dark:border-white/5 rounded-[1.5rem] sm:rounded-[2.5rem] shadow-inner relative flex flex-col overflow-hidden" style={{ backgroundImage: 'radial-gradient(circle, #888 1px, transparent 1px)', backgroundSize: '20px 20px', backgroundPosition: '0 0' }}>
-        
-        {/* Floating Action Bar */}
-        <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-center bg-white/90 dark:bg-black/90 backdrop-blur-xl border border-gray-200 dark:border-white/10 px-4 sm:px-5 py-3 rounded-xl sm:rounded-2xl shadow-xl">
-            <div className="flex items-center gap-2 sm:gap-3">
-                <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${trustScore > 0 ? 'bg-indigo-500 animate-pulse' : 'bg-gray-400'}`}></div>
-                <span className="text-[10px] sm:text-xs font-black text-gray-800 dark:text-white uppercase tracking-widest">Live Preview</span>
+          <div className="p-5 sm:p-6">
+            <div className="mb-5 flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-cyan-200 dark:bg-white dark:text-slate-950">
+                <ActiveIcon size={20} />
+              </div>
+              <div>
+                <h3 className="text-xl font-black tracking-tight text-slate-950 dark:text-white">{activeStep.title}</h3>
+                <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">{activeStep.summary}</p>
+              </div>
             </div>
-            <button onClick={handleDownloadPDF} className="px-3 sm:px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 sm:gap-2 transition-all shadow-lg active:scale-95">
-                <Download size={12}/> <span className="hidden sm:inline">Export 4K PDF</span><span className="sm:hidden">Export</span>
-            </button>
+
+            {riskFlags.length > 0 && (
+              <div className="mb-5 rounded-xl border border-amber-300/40 bg-amber-50 p-4 text-amber-900 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-100">
+                <p className="text-[11px] font-black uppercase tracking-[0.2em]">Inconsistent Data Detected</p>
+                <div className="mt-2 space-y-2 text-sm leading-6">
+                  {riskFlags.map((flag) => (
+                    <p key={flag}>Warning: {flag}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <AnimatePresence mode="wait">
+              {currentStep === 'import' && (
+                <MotionDiv
+                  key="import"
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  className="space-y-4"
+                >
+                  <textarea
+                    value={rawImportText}
+                    onChange={(e) => setRawImportText(e.target.value)}
+                    placeholder="Paste notes, a rough resume, school projects, links, achievements, client work, volunteer experience, or anything else the optimizer should use."
+                    className={`${inputClass} min-h-[260px] resize-none leading-6`}
+                  />
+                  <button
+                    type="button"
+                    onClick={goToNext}
+                    className={`${compactButtonClass} w-full bg-slate-950 text-white hover:bg-slate-800 dark:bg-cyan-300 dark:text-slate-950 dark:hover:bg-cyan-200`}
+                  >
+                    Continue to story
+                    <ArrowRight size={15} />
+                  </button>
+                </MotionDiv>
+              )}
+
+              {currentStep === 'journey' && (
+                <MotionForm
+                  key="journey"
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  onSubmit={handleSaveJourney}
+                  className="space-y-4"
+                >
+                  <textarea
+                    required
+                    value={journeyText}
+                    onChange={(e) => setJourneyText(e.target.value)}
+                    placeholder="Example: I build polished web experiences for small businesses and student founders, combining React, design instincts, and fast delivery."
+                    className={`${inputClass} min-h-[240px] resize-none leading-6`}
+                  />
+                  <button
+                    disabled={isLoading}
+                    type="submit"
+                    className={`${compactButtonClass} w-full bg-cyan-600 text-white hover:bg-cyan-700`}
+                  >
+                    {isLoading ? <Loader2 className="animate-spin" size={15} /> : <FileCheck2 size={15} />}
+                    Save and next
+                  </button>
+                </MotionForm>
+              )}
+
+              {currentStep === 'experience' && (
+                <MotionForm
+                  key="experience"
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  onSubmit={handleAddExperience}
+                  className="space-y-4"
+                >
+                  <input required name="title" placeholder="Role or project title" className={inputClass} />
+                  <input required name="company" placeholder="Company, client, school, or organization" className={inputClass} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Start</span>
+                      <input type="date" name="start_date" className={inputClass} />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">End</span>
+                      <input type="date" name="end_date" className={inputClass} />
+                    </label>
+                  </div>
+                  <textarea
+                    required
+                    name="description"
+                    placeholder="What changed because of your work? Include metrics, scope, users, tools, or outcomes."
+                    className={`${inputClass} min-h-[120px] resize-none leading-6`}
+                  />
+                  <div className="relative">
+                    <LinkIcon className="absolute left-4 top-3.5 text-slate-400" size={16} />
+                    <input name="proof_url" placeholder="Proof URL: portfolio, GitHub, live site, certificate" className={`${inputClass} pl-11`} />
+                  </div>
+                  <button
+                    disabled={isLoading}
+                    type="submit"
+                    className={`${compactButtonClass} w-full bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950`}
+                  >
+                    {isLoading ? <Loader2 className="animate-spin" size={15} /> : <Layers3 size={15} />}
+                    Save proof and next
+                  </button>
+                </MotionForm>
+              )}
+
+              {currentStep === 'skills' && (
+                <MotionForm
+                  key="skills"
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  onSubmit={handleAddSkill}
+                  className="space-y-4"
+                >
+                  <input required name="skill_name" placeholder="Skill: React, Python, motion design, client communication" className={inputClass} />
+                  <select required name="source" className={inputClass}>
+                    <option value="none">Self-taught</option>
+                    <option value="project">Project backed</option>
+                    <option value="certificate">Certificate backed</option>
+                  </select>
+                  <button
+                    disabled={isLoading}
+                    type="submit"
+                    className={`${compactButtonClass} w-full bg-amber-500 text-slate-950 hover:bg-amber-400`}
+                  >
+                    {isLoading ? <Loader2 className="animate-spin" size={15} /> : <BadgeCheck size={15} />}
+                    Save skill and finish
+                  </button>
+                </MotionForm>
+              )}
+
+              {currentStep === 'finish' && (
+                <MotionDiv
+                  key="finish"
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-3 gap-3">
+                    <Metric label="Notes" value={rawImportText ? 'Ready' : 'Empty'} />
+                    <Metric label="Proof" value={experiences.length} />
+                    <Metric label="Skills" value={skills.length} />
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+                    <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">
+                      Finish runs a strict AI rewrite using your notes, saved story, proof points, and skills. It is instructed not to exaggerate and every AI line stays marked unverified until proof exists.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isOptimizing}
+                    onClick={handleOptimizeResume}
+                    className={`${compactButtonClass} w-full bg-fuchsia-600 text-white hover:bg-fuchsia-700`}
+                  >
+                    {isOptimizing ? <Loader2 className="animate-spin" size={15} /> : <Wand2 size={15} />}
+                    Finish with AI optimize
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadPDF}
+                    className={`${compactButtonClass} w-full border border-slate-200 bg-white text-slate-950 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-white`}
+                  >
+                    <Download size={15} />
+                    Export resume PDF
+                  </button>
+                </MotionDiv>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
+      </MotionDiv>
 
-        {/* The Scrollable Canvas (Mobile Friendly Panning) */}
-        <div className="flex-1 w-full h-[500px] lg:h-full overflow-x-auto overflow-y-auto custom-scrollbar pt-20 sm:pt-24 pb-16 sm:pb-20 px-4 sm:px-10 flex justify-start sm:justify-center">
-            <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} className="shrink-0 w-[800px]">
-                  <div ref={resumeRef} className="bg-white w-[800px] min-h-[1131px] p-10 sm:p-14 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.3)] rounded-sm text-black relative overflow-hidden" style={{ fontFamily: "'Inter', 'Helvetica Neue', Helvetica, sans-serif" }}>
-                    
-                    {/* Header */}
-                    <header className="mb-8 relative">
-                      <div className="flex justify-between items-end">
-                          <div>
-                              <h1 className="text-4xl sm:text-[3.5rem] font-black tracking-tighter text-black uppercase mb-1 leading-[0.9]">{user.name}</h1>
-                              <p className="text-lg sm:text-xl font-bold text-indigo-600 tracking-widest uppercase mt-3">{user.specialty || "Independent Talent"}</p>
-                          </div>
-                          {trustScore > 0 && (
-                              <div className="text-right pb-1">
-                                  <span className="flex items-center justify-end gap-1.5 text-[9px] sm:text-[10px] font-black text-indigo-800 uppercase tracking-widest"><ShieldCheck size={14} className="text-indigo-600"/> Platform Verified</span>
-                                  <span className="text-xs sm:text-sm font-bold text-gray-500">Trust Score: {trustScore}</span>
-                              </div>
-                          )}
+      <MotionDiv
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.08 }}
+        className="lg:col-span-7"
+      >
+        <div className="relative flex h-[620px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-inner dark:border-white/10 dark:bg-[#06080d] lg:h-full">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-white/10 dark:bg-slate-950/95">
+            <div className="flex items-center gap-3">
+              <div className={`h-2.5 w-2.5 rounded-full ${resumeData.isOptimized ? 'bg-fuchsia-500' : 'bg-cyan-500'}`} />
+              <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-700 dark:text-white">
+                {showVerifiedOnly ? 'Verified-only preview' : resumeData.isOptimized ? 'Optimized preview' : 'Live preview'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowVerifiedOnly((value) => !value)}
+                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition ${
+                  showVerifiedOnly
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-amber-200 bg-amber-50 text-amber-700'
+                }`}
+              >
+                <ToggleLeft size={13} />
+                {showVerifiedOnly ? 'Verified only' : 'Full resume'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadPDF}
+                className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950"
+              >
+                <Download size={13} />
+                Export
+              </button>
+            </div>
+          </div>
+
+          {/* THE ABSOLUTE SCALED WRAPPER FIX */}
+          <div 
+            ref={previewContainerRef}
+            className="flex-1 overflow-auto p-4 sm:p-8 flex justify-center items-start custom-scrollbar"
+          >
+            {/* Outer wrapper takes up the exact mathematical scaled size. 
+              flexShrink-0 ensures flexbox doesn't randomly compress it.
+            */}
+            <div 
+              style={{
+                width: 800 * previewScale,
+                height: 1131 * previewScale,
+                position: 'relative',
+                flexShrink: 0
+              }}
+            >
+              {/* Inner wrapper applies the scale without breaking flow */}
+              <div
+                style={{
+                  transform: `scale(${previewScale})`,
+                  transformOrigin: 'top left',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0
+                }}
+              >
+                {/* ACTUAL RESUME DOCUMENT 
+                  Hardcoded to 800x1131 (Standard A4 ratio)
+                */}
+                <div
+                  ref={resumeRef}
+                  className="h-[1131px] w-[800px] bg-white p-14 text-black shadow-[0_20px_60px_-24px_rgba(15,23,42,0.55)] box-border overflow-hidden"
+                  style={{ fontFamily: "'Inter', 'Helvetica Neue', Helvetica, sans-serif" }}
+                >
+                  <header className="border-b-4 border-slate-950 pb-7">
+                    <div className="flex items-start justify-between gap-8">
+                      <div>
+                        <p className="mb-3 text-[11px] font-black uppercase tracking-[0.28em] text-cyan-700">TeenVerse resume</p>
+                        <h1 className="max-w-[520px] text-[54px] font-black uppercase leading-[0.9] tracking-tight">
+                          {user?.name || 'Your Name'}
+                        </h1>
+                        <p className="mt-4 text-lg font-black uppercase tracking-[0.2em] text-slate-600">
+                          {user?.specialty || 'Independent Talent'}
+                        </p>
                       </div>
-                      <div className="w-full h-1 sm:h-1.5 bg-black mt-6"></div>
-                    </header>
-
-                    {/* Main Content Grid */}
-                    <div className="grid grid-cols-12 gap-8 sm:gap-10">
-                      
-                      <div className="col-span-8 space-y-8 sm:space-y-10">
-                        {/* Origin Story Section */}
-                        {journeyText && (
-                            <section>
-                              <h3 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] text-black mb-4 flex items-center gap-2"><span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-indigo-600"></span> Origin Story</h3>
-                              <p className="text-xs sm:text-sm text-gray-700 leading-relaxed font-medium text-justify whitespace-pre-wrap">{journeyText}</p>
-                            </section>
-                        )}
-
-                        {/* Professional Ledger */}
-                        <section>
-                          <h3 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] text-black mb-6 flex items-center gap-2"><span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-indigo-600"></span> Professional Ledger</h3>
-                          {experiences.length === 0 ? (
-                              <p className="text-xs sm:text-sm text-gray-400 italic">No experiences logged yet.</p>
-                          ) : (
-                              <div className="space-y-6 sm:space-y-8">
-                                {experiences.map((job) => (
-                                  <div key={job.id} className="relative">
-                                    <div className="flex justify-between items-start mb-1">
-                                      <div className="flex items-center gap-2">
-                                          <h4 className="font-black text-black text-base sm:text-lg uppercase tracking-tight">{job.title}</h4>
-                                          {job.is_verified && <span title="Verified" className="flex items-center justify-center w-3 h-3 sm:w-4 sm:h-4 bg-indigo-100 rounded-full text-indigo-600"><CheckCircle2 size={10} strokeWidth={3}/></span>}
-                                      </div>
-                                      <span className="text-[9px] sm:text-[10px] font-black text-gray-500 uppercase tracking-widest bg-gray-100 px-2 sm:px-3 py-1 rounded-sm border border-gray-200">
-                                        {job.start_date ? new Date(job.start_date).getFullYear() : 'N/A'} - {job.end_date ? new Date(job.end_date).getFullYear() : 'Present'}
-                                      </span>
-                                    </div>
-                                    <p className="text-xs sm:text-sm font-bold text-indigo-600 mb-2 sm:mb-3 uppercase tracking-wider">{job.company}</p>
-                                    <p className="text-xs sm:text-sm text-gray-700 leading-relaxed font-medium whitespace-pre-wrap">{job.description}</p>
-                                  </div>
-                                ))}
-                              </div>
-                          )}
-                        </section>
-                      </div>
-
-                      <div className="col-span-4 space-y-8 sm:space-y-10">
-                        {/* Skills */}
-                        <section>
-                          <h3 className="text-xs sm:text-sm font-black uppercase tracking-[0.2em] text-black mb-4 sm:mb-5 border-b-2 border-black pb-2">Capabilities</h3>
-                          {skills.length === 0 ? (
-                              <p className="text-[11px] sm:text-xs text-gray-400 italic">Awaiting capabilities...</p>
-                          ) : (
-                              <div className="flex flex-col gap-2 sm:gap-3">
-                                {skills.map((skill) => (
-                                  <div key={skill.id} className="text-xs sm:text-sm font-bold text-gray-800 flex items-center justify-between bg-gray-50 p-2 border border-gray-100 rounded-md">
-                                    <div className="flex items-center gap-2 sm:gap-3">
-                                        <div className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full shrink-0 ${skill.is_verified ? 'bg-indigo-600' : 'bg-gray-400'}`}></div> 
-                                        <span className="truncate">{skill.skill_name}</span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                          )}
-                        </section>
+                      <div className="w-40 border-l-2 border-slate-200 pl-5 text-right">
+                        <div className="flex items-center justify-end gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                          <ShieldCheck size={14} />
+                          Transparency first
+                        </div>
+                        <div className="mt-2 text-4xl font-black text-slate-950">{trustScore}</div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Trust score</div>
                       </div>
                     </div>
+                  </header>
+
+                  <div className="grid grid-cols-12 gap-10 pt-9">
+                    <main className="col-span-8 space-y-9">
+                      <ResumeSection title="Profile">
+                        {resumeData.journey ? (
+                          <p className="whitespace-pre-wrap text-[14px] font-medium leading-7 text-slate-700">{resumeData.journey}</p>
+                        ) : (
+                          <EmptyResumeText>Add your story, then finish with AI optimization.</EmptyResumeText>
+                        )}
+                      </ResumeSection>
+
+                      <ResumeSection title="Platform verified work">
+                        {platformWork.length ? (
+                          <div className="space-y-7">
+                            {platformWork.map((job) => (
+                              <article key={job.id} className="border-l-2 border-emerald-600 pl-5">
+                                <div className="flex items-start justify-between gap-4">
+                                  <div>
+                                    <h4 className="text-lg font-black uppercase tracking-tight text-slate-950">{job.jobs?.title || 'Platform project'}</h4>
+                                    <p className="mt-1 text-sm font-black uppercase tracking-[0.16em] text-emerald-700">TeenVerse platform verified</p>
+                                  </div>
+                                  <span className="rounded-md bg-emerald-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700">
+                                    {job.status}
+                                  </span>
+                                </div>
+                                <p className="mt-3 whitespace-pre-wrap text-[13px] font-medium leading-6 text-slate-700">
+                                  Work completed through TeenVerse. This item is backed by platform records and payment/application state.
+                                </p>
+                              </article>
+                            ))}
+                          </div>
+                        ) : (
+                          <EmptyResumeText>No platform-verified work yet.</EmptyResumeText>
+                        )}
+                      </ResumeSection>
+
+                      {!showVerifiedOnly && (
+                        <ResumeSection title="Self declared experience">
+                          {resumeData.experiences.length ? (
+                            <div className="space-y-7">
+                              {resumeData.experiences.map((job, index) => (
+                                <article key={job.id || `optimized-exp-${index}`} className="border-l-2 border-slate-950 pl-5">
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                      <h4 className="text-lg font-black uppercase tracking-tight text-slate-950">{job.title}</h4>
+                                      <p className="mt-1 text-sm font-black uppercase tracking-[0.16em] text-cyan-700">{job.company}</p>
+                                    </div>
+                                    <span
+                                      className={`rounded-md px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                        job.is_verified
+                                          ? 'bg-emerald-50 text-emerald-700'
+                                          : 'bg-amber-50 text-amber-700'
+                                      }`}
+                                    >
+                                      {job.is_verified ? 'Verified' : job.source === 'ai' ? 'AI generated' : 'Self declared'}
+                                    </span>
+                                  </div>
+                                  <p className="mt-3 whitespace-pre-wrap text-[13px] font-medium leading-6 text-slate-700">{job.description}</p>
+                                  {!job.is_verified && (
+                                    <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.16em] text-amber-800">
+                                      AI-generated or manual claim. Not verified.
+                                    </p>
+                                  )}
+                                </article>
+                              ))}
+                            </div>
+                          ) : (
+                            <EmptyResumeText>Add at least one role, project, or win.</EmptyResumeText>
+                          )}
+                        </ResumeSection>
+                      )}
+                    </main>
+
+                    <aside className="col-span-4 space-y-8">
+                      <ResumeSection title="Verified skills" compact>
+                        {groupedSkills.verified.length ? (
+                          <div className="space-y-2">
+                            {groupedSkills.verified.map((skill, index) => (
+                              <div
+                                key={skill.id || `skill-${index}`}
+                                className="flex items-center justify-between gap-3 border border-slate-200 px-3 py-2"
+                              >
+                                <span className="text-[12px] font-black uppercase tracking-[0.1em] text-slate-700">
+                                  {skill.skill_name}
+                                </span>
+                                <CheckCircle2 size={13} className="shrink-0 text-cyan-700" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <EmptyResumeText>No proof-backed skills yet.</EmptyResumeText>
+                        )}
+                      </ResumeSection>
+
+                      {!showVerifiedOnly && (
+                        <ResumeSection title="Self declared skills" compact>
+                          {groupedSkills.selfDeclared.length ? (
+                            <div className="space-y-2">
+                              {groupedSkills.selfDeclared.map((skill, index) => (
+                                <div
+                                  key={skill.id || `self-skill-${index}`}
+                                  className="flex items-center justify-between gap-3 border border-amber-200 bg-amber-50 px-3 py-2"
+                                >
+                                  <span className="text-[12px] font-black uppercase tracking-[0.1em] text-amber-900">
+                                    {skill.skill_name}
+                                  </span>
+                                  <span className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-700">Unverified</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <EmptyResumeText>No unverified skills listed.</EmptyResumeText>
+                          )}
+                        </ResumeSection>
+                      )}
+
+                      <ResumeSection title="Signal" compact>
+                        <div className="space-y-3 text-[12px] font-bold leading-5 text-slate-600">
+                          <p>Verified content is separated from manual and AI claims so the design cannot overstate trust.</p>
+                          {resumeData.isOptimized && (
+                            <p className="border-l-2 border-fuchsia-500 pl-3 text-fuchsia-700">AI-generated language present. Not verified.</p>
+                          )}
+                        </div>
+                      </ResumeSection>
+                    </aside>
                   </div>
-              </motion.div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </motion.div>
+      </MotionDiv>
+      
+      {/* Global CSS for scrollbar (if not already handled in index.css) */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+      `}} />
     </div>
   );
 };
+
+const Metric = ({ label, value }) => (
+  <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-white/10 dark:bg-white/5">
+    <div className="text-lg font-black text-slate-950 dark:text-white">{value}</div>
+    <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</div>
+  </div>
+);
+
+const ResumeSection = ({ title, children, compact = false }) => (
+  <section>
+    <h3
+      className={`mb-4 flex items-center gap-2 text-[12px] font-black uppercase tracking-[0.24em] text-slate-950 ${
+        compact ? 'border-b-2 border-slate-950 pb-2' : ''
+      }`}
+    >
+      {!compact && <span className="h-2 w-2 bg-cyan-600" />}
+      {title}
+    </h3>
+    {children}
+  </section>
+);
+
+const EmptyResumeText = ({ children }) => <p className="text-[13px] font-semibold italic leading-6 text-slate-400">{children}</p>;
 
 export default ResumeBuilder;
