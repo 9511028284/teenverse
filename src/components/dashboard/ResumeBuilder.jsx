@@ -768,7 +768,7 @@ const ResumeBuilder = ({ user, showToast }) => {
                   <header className="border-b-4 border-slate-950 pb-7">
                     <div className="flex items-start justify-between gap-8">
                       <div>
-                        <p className="mb-3 text-[11px] font-black uppercase tracking-[0.28em] text-cyan-700">TeenVerse resume</p>
+                        <p className="mb-3 text-[11px] font-black uppercase tracking-[0.28em] text-cyan-700">TeenVerseHub resume</p>
                         <h1 className="max-w-[520px] text-[54px] font-black uppercase leading-[0.9] tracking-tight">
                           {user?.name || 'Your Name'}
                         </h1>
