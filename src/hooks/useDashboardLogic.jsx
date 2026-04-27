@@ -26,10 +26,10 @@ const isSameDay = (dateString) => {
 // 🚀 NEW: Dynamic Commission Helper
 export const getCommissionRate = (planName) => {
     switch(planName) {
-        case 'Elite': return 0.03;   // 3%
-        case 'Pro': return 0.035;    // 3.5%
-        case 'Starter': return 0.04; // 4%
-        default: return 0.05;        // 5% (Basic)
+        case 'Elite': return 0.04;   // 3%
+        case 'Pro': return 0.06;    // 3.5%
+        case 'Starter': return 0.07; // 4%
+        default: return 0.10;        // 5% (Basic)
     }
 };
 

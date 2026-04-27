@@ -33,7 +33,7 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
       duration: 'Forever',
       icon: <Shield className="text-slate-400" size={26} strokeWidth={1.5} />,
       badge: null,
-      commission: '5%',
+      commission: '10%',
       features: [
         { text: '5 bids / month', included: true },
         { text: '1 resume / month', included: true },
@@ -51,13 +51,13 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
     {
       name: 'Starter',
       planId: 'starter',
-      priceAmount: 99,
-      price: '₹99',
-      monthlyPrice: '₹99',
-      duration: 'for 2 Years',
+      priceAmount: 149,
+      price: '₹149',
+      monthlyPrice: '₹149',
+      duration: 'for 1 Years',
       icon: <Zap className="text-cyan-500" size={26} strokeWidth={2} />,
       badge: '100 users only ⚡',
-      commission: '4%',
+      commission: '7%',
       features: [
         { text: '12 bids / month', included: true },
         { text: '2 resumes / month', included: true },
@@ -75,14 +75,14 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
     {
       name: 'Pro',
       planId: 'pro',
-      priceAmount: isAnnual ? 299 : 29,
-      price: '₹299',
-      monthlyPrice: '₹29',
+      priceAmount: isAnnual ? 199 : 999,
+      price: '₹199',
+      monthlyPrice: '₹999',
       duration: isAnnual ? '/ year' : '/ month',
       annualDiscount: '14%', 
       icon: <Gem className="text-fuchsia-500" size={28} strokeWidth={2} />,
       badge: 'Premium 💎',
-      commission: '3.5%',
+      commission: '6%',
       features: [
         { text: '18 bids / month', included: true },
         { text: '6 resumes / month', included: true },
@@ -100,14 +100,14 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
     {
       name: 'Elite',
       planId: 'elite',
-      priceAmount: isAnnual ? 599 : 59,
-      price: '₹599',
-      monthlyPrice: '₹59',
+      priceAmount: isAnnual ? 399 : 3999,
+      price: '₹399',
+      monthlyPrice: '₹3999',
       duration: isAnnual ? '/ year' : '/ month',
       annualDiscount: '15%', 
       icon: <Crown className="text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]" size={30} strokeWidth={2} />,
       badge: 'VIP Black 👑',
-      commission: '3%',
+      commission: '4%',
       features: [
         { text: 'Unlimited bids', included: true },
         { text: 'Unlimited resumes', included: true },
@@ -126,7 +126,7 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
 
   const faqs = [
     { q: "Can I cancel my subscription anytime?", a: "Yes! You can cancel anytime from your settings. You'll keep your premium features until the end of your billing cycle." },
-    { q: "How do the commission rates work?", a: "When you complete a job, we take a small cut to keep the platform running. Free users pay 5%, but Elite users only pay 3%—which saves you a ton of money as you scale!" },
+    { q: "How do the commission rates work?", a: "When you complete a job, we take a small cut to keep the platform running. Free users pay 10%, but Elite users only pay 3%—which saves you a ton of money as you scale!" },
     { q: "What does 'Higher visibility' mean?", a: "The algorithm pushes Pro and Elite profiles to the top of client search results and job application lists, meaning you get hired faster." }
   ];
 

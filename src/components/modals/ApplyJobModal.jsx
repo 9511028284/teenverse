@@ -20,10 +20,10 @@ const ApplyJobModal = ({ onClose, onSubmit, job, user, currentEnergy, setSelecte
   // 🚀 DYNAMIC COMMISSION LOGIC
   const getCommissionRate = (plan) => {
     switch (plan) {
-      case 'Elite': return 0.03;   // 3%
-      case 'Pro': return 0.035;    // 3.5%
-      case 'Starter': return 0.04; // 4%
-      default: return 0.05;        // 5% (Basic)
+      case 'Elite': return 0.04;   
+      case 'Pro': return 0.06;   
+      case 'Starter': return 0.07;
+      default: return 0.10;        
     }
   };
 
