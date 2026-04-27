@@ -76,8 +76,8 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
       name: 'Pro',
       planId: 'pro',
       priceAmount: isAnnual ? 199 : 999,
-      price: '₹199',
-      monthlyPrice: '₹999',
+      price: '₹999',
+      monthlyPrice: '₹199',
       duration: isAnnual ? '/ year' : '/ month',
       annualDiscount: '14%', 
       icon: <Gem className="text-fuchsia-500" size={28} strokeWidth={2} />,
@@ -101,8 +101,8 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
       name: 'Elite',
       planId: 'elite',
       priceAmount: isAnnual ? 399 : 3999,
-      price: '₹399',
-      monthlyPrice: '₹3999',
+      price: '₹3999',
+      monthlyPrice: '₹399',
       duration: isAnnual ? '/ year' : '/ month',
       annualDiscount: '15%', 
       icon: <Crown className="text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]" size={30} strokeWidth={2} />,
@@ -126,7 +126,7 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
 
   const faqs = [
     { q: "Can I cancel my subscription anytime?", a: "Yes! You can cancel anytime from your settings. You'll keep your premium features until the end of your billing cycle." },
-    { q: "How do the commission rates work?", a: "When you complete a job, we take a small cut to keep the platform running. Free users pay 10%, but Elite users only pay 3%—which saves you a ton of money as you scale!" },
+    { q: "How do the commission rates work?", a: "When you complete a job, we take a small cut to keep the platform running. Free users pay 10%, but Elite users only pay 4%—which saves you a ton of money as you scale!" },
     { q: "What does 'Higher visibility' mean?", a: "The algorithm pushes Pro and Elite profiles to the top of client search results and job application lists, meaning you get hired faster." }
   ];
 
