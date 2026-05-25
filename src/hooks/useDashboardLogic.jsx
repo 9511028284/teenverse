@@ -427,10 +427,17 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
     let stopForegroundMessages = () => {};
     listenForForegroundMessages((payload) => {
+      const title = payload.notification?.title || payload.data?.title || 'TeenVerse alert';
       const body = payload.notification?.body || payload.data?.body;
       if (!body) return;
 
       showToast(body, 'info');
+      showBrowserNotification({
+        title,
+        body,
+        tag: payload.data?.tag || `fcm-${Date.now()}`,
+        url: payload.data?.url || '/dashboard'
+      });
     }).then((unsubscribe) => {
       stopForegroundMessages = unsubscribe;
     });
