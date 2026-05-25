@@ -50,7 +50,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       jobs, services, filteredJobs, searchTerm, applications, referralStats, totalEarnings,
       badges, unlockedSkills, userLevel, progressPercent, zenMode, parentMode, profileForm,
       SAFE_QUIZZES, profileCardRef, isQuizLoading,
-      reportModal 
+      reportModal, notificationPermission
   } = state;
 
   const getTabIcon = () => {
@@ -142,6 +142,28 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                           <div className="p-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-white/5">
                              <span className="font-bold text-sm dark:text-white">Notifications</span>
                              <button onClick={actions.handleClearNotifications} className="text-xs font-medium text-indigo-500 hover:text-indigo-600">Clear All</button>
+                          </div>
+                          <div className="p-3 border-b border-gray-100 dark:border-white/5 bg-white dark:bg-[#1E293B]">
+                            {notificationPermission === 'granted' ? (
+                              <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                                Browser push alerts are enabled on this device.
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <button
+                                  type="button"
+                                  onClick={actions.handleEnablePushNotifications}
+                                  className="w-full rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-indigo-700"
+                                >
+                                  Enable push alerts
+                                </button>
+                                {notificationPermission === 'denied' && (
+                                  <p className="text-[11px] leading-4 text-amber-600 dark:text-amber-400">
+                                    Notifications are blocked. Allow them from your browser site settings.
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <div className="max-h-64 overflow-y-auto">
                             {notifications.length === 0 ? <div className="p-8 text-center text-gray-400 text-xs">No new alerts</div> : notifications.map(n => (

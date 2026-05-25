@@ -2,7 +2,7 @@ import { deleteToken, getMessaging, getToken, isSupported, onMessage } from 'fir
 import { app } from '../firebase';
 import { supabase } from '../supabase';
 
-const SERVICE_WORKER_PATH = new URL('../firebase-messaging-sw.js', import.meta.url);
+const SERVICE_WORKER_PATH = '/firebase-messaging-sw.js';
 const DEFAULT_ICON = '/teenverse.svg';
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 const SERVICE_WORKER_READY_TIMEOUT_MS = 4000;
@@ -41,7 +41,7 @@ export const registerNotificationServiceWorker = async () => {
 
   try {
     const registration = await navigator.serviceWorker.register(SERVICE_WORKER_PATH, {
-      type: 'module',
+      scope: '/',
     });
     return waitForActiveServiceWorker(registration);
   } catch (error) {
@@ -54,10 +54,10 @@ export const requestNotificationPermission = async (userId) => {
   if (getNotificationPermission() === 'unsupported') return 'unsupported';
   if (!VAPID_KEY) return 'missing-vapid-key';
 
-  const registration = await registerNotificationServiceWorker();
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return permission;
 
+  const registration = await registerNotificationServiceWorker();
   const messaging = await getMessagingInstance();
   if (!messaging || !registration) return 'unsupported';
 

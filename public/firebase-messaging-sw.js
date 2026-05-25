@@ -1,15 +1,17 @@
-import { initializeApp } from 'firebase/app';
-import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw';
+/* global importScripts, firebase */
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_firebase_apikeys,
-  authDomain: import.meta.env.VITE_firebase_authdomain,
+firebase.initializeApp({
+  apiKey: 'AIzaSyDmUKR4IQnKjacWiGBulmEpbePmLUsihaM',
+  authDomain: 'teenverse-app.firebaseapp.com',
   projectId: 'teenverse-app',
-  storageBucket: import.meta.env.VITE_firebase_bucket,
-  messagingSenderId: import.meta.env.VITE_firebase_messageid,
-  appId: import.meta.env.VITE_firebase_appId,
-};
+  storageBucket: 'teenverse-app.firebasestorage.app',
+  messagingSenderId: '194598066430',
+  appId: '1:194598066430:web:75febac18920121995edaf',
+});
 
+const messaging = firebase.messaging();
 const DEFAULT_URL = '/dashboard';
 const DEFAULT_ICON = '/teenverse.svg';
 
@@ -21,10 +23,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-const app = initializeApp(firebaseConfig);
-const messaging = getMessaging(app);
-
-onBackgroundMessage(messaging, (payload) => {
+messaging.onBackgroundMessage((payload) => {
   const title = payload.notification?.title || payload.data?.title || 'TeenVerse alert';
   const body = payload.notification?.body || payload.data?.body || 'You have a new TeenVerse update.';
   const url = payload.data?.url || DEFAULT_URL;
