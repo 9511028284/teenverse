@@ -1,5 +1,53 @@
 import { supabase } from '../supabase';
 
+const PUBLIC_PROFILE_CACHE_TTL_MS = 30_000;
+const PUBLIC_PROFILE_TIMEOUT_MS = 12_000;
+const PUBLIC_PROFILE_RATE_WINDOW_MS = 60_000;
+const PUBLIC_PROFILE_RATE_LIMIT = 24;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const publicProfileCache = new Map();
+const publicProfileInflight = new Map();
+const publicProfileRateBuckets = new Map();
+
+const withTimeout = (promise, timeoutMs, message) => {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+};
+
+const enforceLocalRateLimit = (bucketKey, limit = PUBLIC_PROFILE_RATE_LIMIT, windowMs = PUBLIC_PROFILE_RATE_WINDOW_MS) => {
+  const now = Date.now();
+  const bucket = publicProfileRateBuckets.get(bucketKey);
+
+  if (!bucket || bucket.resetAt <= now) {
+    publicProfileRateBuckets.set(bucketKey, { count: 1, resetAt: now + windowMs });
+    return { allowed: true };
+  }
+
+  if (bucket.count >= limit) {
+    return {
+      allowed: false,
+      retryAfterMs: bucket.resetAt - now,
+    };
+  }
+
+  bucket.count += 1;
+  return { allowed: true };
+};
+
+const safeProfileBundle = (bundle = {}) => ({
+  user: bundle.user || null,
+  badges: Array.isArray(bundle.badges) ? bundle.badges : [],
+  portfolio: Array.isArray(bundle.portfolio) ? bundle.portfolio : [],
+  projects: Array.isArray(bundle.projects) ? bundle.projects : [],
+  services: Array.isArray(bundle.services) ? bundle.services : [],
+  resume: bundle.resume || null,
+});
+
 // ==========================================
 // 1. DATA FETCHING (OPTIMIZED)
 // ==========================================
@@ -29,12 +77,12 @@ export const fetchDashboardData = async (user) => {
       jobsQuery = jobsQuery.eq('client_id', user.id);
     }
 
-    // 3. Applications Query (Limit 50) - ✅ FIXED: Added the jobs join to fetch the title
+    // 3. Applications Query (Limit 50) - include related project fields for portfolio/profile views
     let appsQuery = supabase
       .from('applications')
       .select(`
         *,
-        jobs ( title )
+        jobs ( title, category, budget, description, created_at )
       `)
       .order('created_at', { ascending: false })
       .limit(50);
@@ -89,6 +137,30 @@ export const searchJobsAPI = async (searchTerm) => {
   return data;
 };
 
+export const sendPushNotification = async ({
+  audience,
+  targetUserIds,
+  title = 'TeenVerse alert',
+  body,
+  url = '/dashboard',
+}) => {
+  if (!body) return { skipped: true };
+
+  try {
+    const { data, error } = await supabase.functions.invoke('send-fcm-notification', {
+      body: { audience, targetUserIds, title, body, url },
+    });
+
+    if (error) throw error;
+    return { data };
+  } catch (error) {
+    const errorBody = await error.context?.json?.().catch(() => null);
+    const message = errorBody?.error || error.message || 'Push notification send failed';
+    console.warn('Push notification send failed:', message, errorBody || error);
+    return { error: { ...error, message, details: errorBody } };
+  }
+};
+
 // ==========================================
 // 2. BASIC CRUD (JOBS & SERVICES)
 // ==========================================
@@ -104,6 +176,13 @@ export const createJob = async (jobData) => {
     console.error("❌ Supabase Insert Error:", error);
     return { error };
   }
+
+  await sendPushNotification({
+    audience: 'freelancers',
+    title: 'New job available',
+    body: data?.title ? `New job available: ${data.title}` : 'A new job is available on TeenVerse.',
+    url: '/dashboard',
+  });
 
   return { data };
 };
@@ -127,10 +206,12 @@ export const deleteService = async (serviceId) => {
 export const applyForJob = async (applicationData, jobTitle) => {
   const { error } = await supabase.from('applications').insert([applicationData]);
   if (!error) {
-    await supabase.from('notifications').insert([{ 
-      user_id: applicationData.client_id, 
-      message: `New application: ${jobTitle}` 
-    }]);
+    await sendPushNotification({
+      targetUserIds: [applicationData.client_id],
+      title: 'New application',
+      body: `New application: ${jobTitle}`,
+      url: '/dashboard',
+    });
   }
   return { error };
 };
@@ -142,10 +223,12 @@ export const updateApplicationStatus = async (appId, status, freelancerId) => {
     .eq('id', appId);
 
   if (!error) {
-    await supabase.from('notifications').insert([{ 
-      user_id: freelancerId, 
-      message: `Application ${status}` 
-    }]);
+    await sendPushNotification({
+      targetUserIds: [freelancerId],
+      title: 'Application updated',
+      body: `Application ${status}`,
+      url: '/dashboard',
+    });
   }
   return { error };
 };
@@ -382,6 +465,12 @@ export const requestRevision = async (appId, message, freelancerId) => {
     await supabase.from('notifications').insert([{ 
       user_id: freelancerId, message: `⚠️ Revision Requested: "${message.substring(0, 20)}..."` 
     }]);
+    await sendPushNotification({
+      targetUserIds: [freelancerId],
+      title: 'Revision requested',
+      body: `Revision Requested: "${message.substring(0, 40)}..."`,
+      url: '/dashboard',
+    });
   }
   return { error };
 };
@@ -453,43 +542,100 @@ export const updateUserProfile = async (userId, updates, table) => {
 };
 
 export const getPublicProfile = async (userId) => {
-  // 1. Fetch User Details
-  const { data: user, error } = await supabase
-    .from('freelancers') 
-    .select('id, name, bio, nationality, tag_line, unlocked_skills, created_at, social_links, cover_image')
-    .eq('id', userId)
-    .single();
-    
-  if (error) return { error };
+  if (!UUID_RE.test(String(userId || ''))) {
+    return { error: new Error('Invalid profile id') };
+  }
 
-  // 2. Fetch Badges
-  const { data: badges } = await supabase
-    .from('user_badges')
-    .select('name:badge_name, earned_at') 
-    .eq('user_id', userId);
+  const cached = publicProfileCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
 
-  // 3. Fetch Portfolio
-  const { data: portfolio } = await supabase
-    .from('portfolio_items')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+  if (publicProfileInflight.has(userId)) {
+    return publicProfileInflight.get(userId);
+  }
 
-  // 4. Fetch Latest Resume
-  const { data: resume } = await supabase
-    .from('resumes')
-    .select('content')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false }) 
-    .limit(1)
-    .single();
+  const rate = enforceLocalRateLimit(`public-profile:${userId}`);
+  if (!rate.allowed) {
+    return {
+      error: new Error(`Too many profile requests. Try again in ${Math.ceil(rate.retryAfterMs / 1000)}s.`),
+      rateLimited: true,
+    };
+  }
 
-  return { 
-      user, 
-      badges: badges || [], 
-      portfolio: portfolio || [], 
-      resume: resume?.content || null 
-  };
+  const request = (async () => {
+    try {
+      const { data, error } = await withTimeout(
+        supabase.rpc('get_public_profile_bundle', { p_user_id: userId }),
+        PUBLIC_PROFILE_TIMEOUT_MS,
+        'Public profile request timed out'
+      );
+
+      if (!error && data?.user) {
+        const value = safeProfileBundle(data);
+        publicProfileCache.set(userId, {
+          expiresAt: Date.now() + PUBLIC_PROFILE_CACHE_TTL_MS,
+          value,
+        });
+        return value;
+      }
+
+      if (error) {
+        console.warn('Public profile RPC unavailable, using safe fallback:', error.message || error);
+      }
+    } catch (err) {
+      console.warn('Public profile RPC failed, using safe fallback:', err.message || err);
+    }
+
+    // Fallback keeps sensitive application rows out of the browser. Project order
+    // history is intentionally only loaded through the hardened RPC above.
+    const [userRes, badgesRes, portfolioRes, servicesRes] = await Promise.all([
+      supabase
+        .from('freelancers')
+        .select('id, name, bio, nationality, tag_line, journey_statement, unlocked_skills, created_at, social_links, referral_code, cover_image, specialty, qualification, hourly_rate, current_plan, trust_score, trust_score_breakdown, risk_level')
+        .eq('id', userId)
+        .single(),
+      supabase
+        .from('user_badges')
+        .select('name:badge_name, earned_at')
+        .eq('user_id', userId),
+      supabase
+        .from('portfolio_items')
+        .select('id, title, content, created_at, user_id')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(12),
+      supabase
+        .from('services')
+        .select('id, title, name, description, category, service_category, specialty, status, price, starting_price, rate, created_at, freelancer_id')
+        .eq('freelancer_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(6),
+    ]);
+
+    if (userRes.error) return { error: userRes.error };
+
+    const value = safeProfileBundle({
+      user: userRes.data,
+      badges: badgesRes.data || [],
+      portfolio: portfolioRes.data || [],
+      projects: [],
+      services: servicesRes.data || [],
+      resume: null,
+    });
+
+    publicProfileCache.set(userId, {
+      expiresAt: Date.now() + PUBLIC_PROFILE_CACHE_TTL_MS,
+      value,
+    });
+
+    return value;
+  })().finally(() => {
+    publicProfileInflight.delete(userId);
+  });
+
+  publicProfileInflight.set(userId, request);
+  return request;
 };
 
 // ==========================================

@@ -14,6 +14,7 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+export { app, firebaseConfig };
 
 // Initialize and Export Firestore
 export const db = getFirestore(app);
@@ -21,6 +22,5 @@ export const db = getFirestore(app);
 // Initialize and Export Auth
 export const auth = getAuth(app);
 auth.useDeviceLanguage(); // Automatically formats +91 for India if needed
-
 
 

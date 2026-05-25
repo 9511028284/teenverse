@@ -359,6 +359,7 @@ const DashboardSidebar = ({
               {isClient && <SidebarItem id="pricing" icon={Crown} label="Pricing & Fees" {...navProps} />}
               {!isClient && <SidebarItem id="my-services" icon={Package} label="My Gigs" {...navProps} />}
               <SidebarItem id="applications" icon={FileText} label="Orders & Jobs" {...navProps} />
+              <SidebarItem id="portfolio" icon={FileText} label="Portfolio" color="text-cyan-500 dark:text-cyan-300 dark:drop-shadow-[0_0_8px_rgba(103,232,249,0.3)]" {...navProps} />
               <SidebarItem id="store" icon={ShoppingBag} label="Store" color="text-teal-500 dark:text-teal-300 dark:drop-shadow-[0_0_8px_rgba(45,212,191,0.35)]" {...navProps} />
               <SidebarItem id="messages" icon={MessageSquare} label="Messages" badge="New" {...navProps} />
 

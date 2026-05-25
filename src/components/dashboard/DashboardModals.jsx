@@ -1,8 +1,8 @@
 import React from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { 
-  Package, Eye, FileText, Lock, Sparkles, 
-  ShieldCheck, CloudUpload, Github, Linkedin, Instagram, Globe 
+  Package, Eye, FileText, Lock,
+  ShieldCheck, CloudUpload, Github, Linkedin, Instagram, Globe, Sparkles
 } from 'lucide-react';
 
 // UI
@@ -274,38 +274,12 @@ const DashboardModals = ({ user, logic, showToast }) => {
                           isClient={true} 
                           readOnly={true} 
                           onEditProfile={() => {}} 
+                          applications={[
+                              ...(publicProfileData.projects || []).map((item) => ({ ...item, freelancer_name: publicProfileData.user.name })),
+                              ...(publicProfileData.services || []).map((item) => ({ ...item, source: 'Gig / Service', status: item.status || 'Live', freelancer_name: publicProfileData.user.name })),
+                              ...(publicProfileData.portfolio || []).map((item) => ({ ...item, source: 'Portfolio Item', status: item.status || 'Live', freelancer_name: publicProfileData.user.name })),
+                          ]}
                       />
-                      
-                      {publicProfileData.portfolio?.length > 0 && (
-                          <div className="mt-8 pt-8 border-t border-gray-200/60 dark:border-white/10">
-                              {/* Premium Section Header */}
-                              <div className="flex items-center gap-3 mb-6">
-                                  <div className="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl border border-indigo-100 dark:border-indigo-500/20 shadow-sm">
-                                      <Sparkles size={18} className="text-indigo-600 dark:text-indigo-400"/>
-                                  </div>
-                                  <h3 className="text-lg font-bold text-gray-900 dark:text-white tracking-tight">
-                                      Portfolio Showcase
-                                  </h3>
-                              </div>
-
-                              {/* Portfolio Grid */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                  {publicProfileData.portfolio.map(item => (
-                                      <div 
-                                          key={item.id} 
-                                          className="group p-5 bg-white dark:bg-white/[0.02] rounded-2xl ring-1 ring-gray-200 dark:ring-white/10 hover:ring-indigo-500/50 dark:hover:ring-indigo-500/50 hover:shadow-xl hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300 ease-out cursor-default"
-                                      >
-                                          <h4 className="font-semibold text-gray-900 dark:text-white mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                                              {item.title}
-                                          </h4>
-                                          <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3 leading-relaxed">
-                                              {item.content}
-                                          </p>
-                                      </div>
-                                  ))}
-                              </div>
-                          </div>
-                      )}
                   </div>
 
                   {/* Sticky Footer Actions */}

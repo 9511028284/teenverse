@@ -110,9 +110,10 @@ const PostJobModal = ({ onClose, onSubmit }) => {
                 <select 
                   name="category" 
                   required
+                  defaultValue=""
                   className="w-full pl-11 pr-10 py-3.5 bg-white dark:bg-[#0B0F19] border border-gray-200 dark:border-white/10 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm text-gray-900 dark:text-white appearance-none cursor-pointer font-medium transition-all shadow-sm"
                 >
-                  <option value="" disabled selected>Select Category...</option>
+                  <option value="" disabled>Select Category...</option>
                   {Object.keys(LOCAL_CATEGORIES).map(cat => (
                       <option key={cat} value={cat}>{LOCAL_CATEGORIES[cat]}</option>
                   ))}

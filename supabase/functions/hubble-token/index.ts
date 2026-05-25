@@ -7,6 +7,9 @@ const TOKEN_TTL_SECONDS = 60;
 const ALLOWED_WEB_ORIGINS = new Set([
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  "https://app.teenversehub.in",
+  "https://teenversehub.in",
+  "https://www.teenversehub.in",
 ]);
 
 function getCorsHeaders(req: Request) {

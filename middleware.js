@@ -1,28 +1,37 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
-// 1. Initialize Redis using your exact Vercel credentials
-const redis = new Redis({
-  url: process.env.REDIS_URL,
-  token: process.env.VERCEL_OIDC_TOKEN,
-});
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.REDIS_URL;
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.REDIS_TOKEN;
+const redis = redisUrl && redisToken
+  ? new Redis({ url: redisUrl, token: redisToken })
+  : null;
 
 // 2. 🛡️ STRICT LIMITER: For sensitive routes (Login, Signup, OTP)
-const strictRatelimit = new Ratelimit({
-  redis: redis,
-  limiter: Ratelimit.slidingWindow(5, '1 m'),
-  analytics: true, 
-});
+const strictRatelimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(5, '1 m'),
+      analytics: true,
+    })
+  : null;
 
 // 3. 🛡️ STANDARD LIMITER: For general app usage (Feed, Profiles, etc.)
-const standardRatelimit = new Ratelimit({
-  redis: redis,
-  limiter: Ratelimit.slidingWindow(30, '10 s'),
-  analytics: false,
-});
+const standardRatelimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(30, '10 s'),
+      analytics: false,
+    })
+  : null;
 
 export default async function middleware(request) {
-  const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
+  if (!redis) {
+    console.warn('[SHIELD BYPASS] Missing Upstash Redis REST credentials; middleware rate limit disabled.');
+    return new Response(null, { headers: { 'x-middleware-next': '1' } });
+  }
+
+  const ip = (request.headers.get('x-forwarded-for') || '127.0.0.1').split(',')[0].trim();
   const url = new URL(request.url);
   const path = url.pathname;
 
@@ -73,5 +82,5 @@ export default async function middleware(request) {
 }
 
 export const config = {
-  matcher: '/api/:path*',
+  matcher: ['/api/:path*'],
 };

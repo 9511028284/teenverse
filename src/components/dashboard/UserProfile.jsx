@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../supabase';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
+import Portfolio from './Portfolio';
 
 const MotionDiv = motion.div;
 
@@ -224,7 +225,19 @@ const ResumeEmpty = ({ children }) => (
   </div>
 );
 
-const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, readOnly = false, showToast }) => {
+const UserProfile = ({
+  user,
+  badges,
+  userLevel,
+  unlockedSkills,
+  onEditProfile,
+  isClient = false,
+  readOnly = false,
+  showToast,
+  applications = [],
+  jobs = [],
+  services = [],
+}) => {
   const socials = user?.social_links || {};
   const [resumeData, setResumeData] = useState(null);
   const [userExtras, setUserExtras] = useState(null);
@@ -235,11 +248,18 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
   const [resumeViewMode, setResumeViewMode] = useState('verified');
   const [verifiedResume, setVerifiedResume] = useState(null);
   const [fullResume, setFullResume] = useState(null);
+  const [showPortfolioModal, setShowPortfolioModal] = useState(false);
 
   const resumeRef = useRef(null);
   const canViewFullResume = !readOnly;
   const activeResume = resumeViewMode === 'full' && canViewFullResume ? fullResume || verifiedResume : verifiedResume;
   const trustBand = getTrustBand(activeResume?.trust_score || user?.trust_score || 0);
+  const profileProjects = useMemo(() => [
+    ...applications,
+    ...jobs.map((job) => ({ ...job, source: 'Posted Project', status: job.status || 'Live' })),
+    ...services.map((service) => ({ ...service, source: 'Gig / Service', status: service.status || 'Live' })),
+  ], [applications, jobs, services]);
+  const hasPortfolioPreview = profileProjects.length > 0;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -247,14 +267,37 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
       setIsResumeLoading(true);
 
       try {
+        const resumeQuery = readOnly
+          ? Promise.resolve({ data: null })
+          : supabase
+              .from('resumes')
+              .select('content')
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+        const experienceQuery = supabase
+          .from('resume_experiences')
+          .select(readOnly
+            ? 'id, title, company, description, start_date, end_date, is_verified, source, proof_status'
+            : '*')
+          .eq('user_id', user.id)
+          .order('start_date', { ascending: false });
+
+        const skillsQuery = supabase
+          .from('resume_skills')
+          .select(readOnly ? 'id, skill_name, is_verified, source, proof_status' : '*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (readOnly) {
+          experienceQuery.eq('is_verified', true);
+          skillsQuery.eq('is_verified', true);
+        }
+
         const [legacyResumeRes, extrasRes, verifiedViewRes, experienceRes, skillsRes] = await Promise.all([
-          supabase
-            .from('resumes')
-            .select('content')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
+          resumeQuery,
           supabase
             .from('freelancers')
             .select('specialty, qualification, resume_url, journey_statement, trust_score, trust_score_breakdown, risk_level, social_links')
@@ -265,16 +308,8 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
             .select('*')
             .eq('user_id', user.id)
             .maybeSingle(),
-          supabase
-            .from('resume_experiences')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('start_date', { ascending: false }),
-          supabase
-            .from('resume_skills')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false }),
+          experienceQuery,
+          skillsQuery,
         ]);
 
         const mergedUserExtras = {
@@ -282,7 +317,9 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
           specialty: extrasRes.data?.specialty || user?.specialty,
         };
 
-        const legacyResume = normalizeLegacyResume(legacyResumeRes.data?.content, { ...user, ...extrasRes.data }, mergedUserExtras);
+        const legacyResume = readOnly
+          ? null
+          : normalizeLegacyResume(legacyResumeRes.data?.content, { ...user, ...extrasRes.data }, mergedUserExtras);
         const verified = buildVerifiedResume({
           verifiedView: verifiedViewRes.data,
           legacyResume,
@@ -306,7 +343,7 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
     };
 
     fetchData();
-  }, [user]);
+  }, [readOnly, user]);
 
   const hasResumePreview = useMemo(() => {
     if (verifiedResume) return true;
@@ -687,6 +724,36 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
               </Card>
             )}
 
+            <Card
+              onClick={hasPortfolioPreview ? () => setShowPortfolioModal(true) : undefined}
+              className={`group border-cyan-200 bg-gradient-to-br from-cyan-50 to-teal-50 p-6 transition-all duration-500 dark:border-cyan-500/20 dark:from-cyan-500/10 dark:to-teal-500/5 ${
+                hasPortfolioPreview
+                  ? 'hover:from-cyan-100 hover:to-teal-100 dark:hover:from-cyan-500/20 dark:hover:to-teal-500/10'
+                  : 'opacity-75'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-50 bg-white shadow-md transition-transform duration-500 group-hover:scale-110 dark:border-transparent dark:bg-cyan-500/20">
+                    <Layers3 size={20} className="text-cyan-600 dark:text-cyan-400" />
+                  </div>
+                  <div>
+                    <p className="text-base font-black text-neutral-900 transition-colors duration-500 dark:text-white">View Portfolio</p>
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-neutral-500 transition-colors duration-500 dark:text-neutral-400">
+                      {hasPortfolioPreview ? `${profileProjects.length} safe project item${profileProjects.length === 1 ? '' : 's'}` : 'No project items yet'}
+                    </p>
+                  </div>
+                </div>
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-500 ${
+                  hasPortfolioPreview
+                    ? 'bg-cyan-100 group-hover:bg-cyan-600 dark:bg-cyan-500/20 dark:group-hover:bg-cyan-500'
+                    : 'bg-neutral-100 dark:bg-white/[0.05]'
+                }`}>
+                  <ArrowUpRight size={18} className={`transition-all duration-500 ${hasPortfolioPreview ? 'text-cyan-600 group-hover:rotate-45 group-hover:text-white dark:text-cyan-400' : 'text-neutral-400'}`} />
+                </div>
+              </div>
+            </Card>
+
             {userExtras?.resume_url && (
               <a href={userExtras.resume_url} target="_blank" rel="noopener noreferrer" className="block outline-none">
                 <Card className="flex items-center justify-center gap-2 border-neutral-200 p-5 hover:bg-white/80 dark:border-white/[0.05] dark:hover:bg-white/[0.05]">
@@ -700,6 +767,56 @@ const UserProfile = ({ user, badges, userLevel, unlockedSkills, onEditProfile, r
       </div>
 
       <AnimatePresence>
+        {showPortfolioModal && (
+          <MotionDiv
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-neutral-900/40 backdrop-blur-md dark:bg-black/80 sm:p-6"
+            onClick={() => setShowPortfolioModal(false)}
+          >
+            <MotionDiv
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(event) => event.stopPropagation()}
+              className="flex h-full w-full flex-col overflow-hidden rounded-none border border-neutral-200 bg-neutral-50 shadow-2xl dark:border-white/[0.1] dark:bg-[#0a0a0f] sm:h-[92vh] sm:max-w-[96rem] sm:rounded-[2.5rem]"
+            >
+              <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-5 dark:border-white/[0.05] dark:bg-[#0a0a0f] sm:px-8">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-100 dark:bg-cyan-500/20">
+                    <Layers3 size={18} className="text-cyan-600 dark:text-cyan-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-neutral-900 dark:text-white">Portfolio</p>
+                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
+                      Safe project showcase for {user?.name || 'Creator'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowPortfolioModal(false)}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-500 transition-all hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="custom-scrollbar flex-1 overflow-y-auto bg-neutral-100 px-4 py-6 dark:bg-[#030305] sm:px-8">
+                <Portfolio
+                  isClient={isClient}
+                  applications={readOnly ? [] : applications}
+                  jobs={readOnly ? [] : jobs}
+                  services={readOnly ? [] : services}
+                  publicProjects={readOnly ? profileProjects : []}
+                />
+              </div>
+            </MotionDiv>
+          </MotionDiv>
+        )}
+
         {showResumeModal && activeResume && (
           <MotionDiv
             initial={{ opacity: 0 }}

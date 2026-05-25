@@ -1,16 +1,17 @@
 import React from 'react';
 import { 
-  Save, User, Shield, Smartphone, Globe, Activity, CheckCircle, AlertTriangle, Clock, ChevronRight, ShieldCheck, Mail
+  Save, User, Shield, Smartphone, Globe, Activity, CheckCircle, AlertTriangle, Clock, ChevronRight, ShieldCheck, Mail,
+  LockKeyhole, Bell, CreditCard, LifeBuoy, ExternalLink, FileText, KeyRound
 } from 'lucide-react'; 
 import Button from '../ui/Button';
 
 // Reusable "Gen Z" Input Field
-const ModernInput = ({ label, icon: Icon, ...props }) => (
+const ModernInput = ({ label, icon: Icon, helper, className = '', ...props }) => (
   <div className="group space-y-1.5">
     <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest group-focus-within:text-indigo-500 transition-colors">
       {label}
     </label>
-    <div className="relative transition-all duration-300 transform group-focus-within:-translate-y-1">
+    <div className={`relative transition-all duration-300 transform ${props.disabled || props.readOnly ? '' : 'group-focus-within:-translate-y-1'}`}>
       {Icon && (
         <div className="absolute left-3 top-3.5 text-gray-400 group-focus-within:text-indigo-500 transition-colors">
           <Icon size={16} />
@@ -18,9 +19,10 @@ const ModernInput = ({ label, icon: Icon, ...props }) => (
       )}
       <input 
         {...props}
-        className={`w-full ${Icon ? 'pl-10' : 'pl-4'} pr-4 py-3.5 bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-2xl text-sm font-medium text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm group-hover:border-gray-300 dark:group-hover:border-white/20`}
+        className={`w-full ${Icon ? 'pl-10' : 'pl-4'} pr-4 py-3.5 bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-2xl text-sm font-medium text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all shadow-sm group-hover:border-gray-300 dark:group-hover:border-white/20 ${props.disabled || props.readOnly ? 'cursor-not-allowed opacity-75' : ''} ${className}`}
       />
     </div>
+    {helper && <p className="text-[10px] font-semibold leading-4 text-gray-400">{helper}</p>}
   </div>
 );
 
@@ -117,10 +119,11 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
               onChange={e => setProfileForm({...profileForm, name: e.target.value})} 
             />
             <ModernInput 
-              label="Phone" 
-              icon={Smartphone}
+              label="Mobile Number (Locked)" 
+              icon={LockKeyhole}
               value={profileForm.phone || ""} 
-              onChange={e => setProfileForm({...profileForm, phone: e.target.value})} 
+              readOnly
+              helper="Your login mobile number is locked for account safety. Contact support if it is wrong."
             />
             <ModernInput 
               label="Region / Nationality" 
@@ -233,6 +236,46 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
         )}
 
       </div>
+
+      {/* ACCOUNT SAFETY AND USEFUL SHORTCUTS */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white dark:bg-[#1E293B] p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+              <KeyRound size={20} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold dark:text-white">Account Safety</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Quick checks that keep your workspace trusted.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <SafetyItem icon={Smartphone} title="Mobile locked" desc="Cannot be changed after login." done />
+            <SafetyItem icon={ShieldCheck} title="KYC status" desc={statusUI.title} done={kycStatus === 'verified' || kycStatus === 'approved'} />
+            <SafetyItem icon={Shield} title="Parent Shield" desc={parentMode ? 'Sensitive actions restricted.' : 'Available when you need extra control.'} done={parentMode} />
+            <SafetyItem icon={CreditCard} title="Payment safety" desc="Escrow and payout records stay traceable." done />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-[#1E293B] p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+              <Bell size={20} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold dark:text-white">Useful Links</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Fast access to important account areas.</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <QuickLink href="http://teenversehub.in/legal#official-documents" icon={FileText} title="Legal documents" />
+            <QuickLink href="mailto:support@teenversehub.in" icon={LifeBuoy} title="Contact support" />
+            <QuickLink href="http://teenversehub.in/legal#privacy" icon={ExternalLink} title="Privacy policy" />
+          </div>
+        </div>
+      </div>
       
       {/* MOBILE SAVE BUTTON (Sticky to bottom) */}
       <div className="md:hidden fixed bottom-20 left-4 right-4 z-40">
@@ -249,5 +292,34 @@ const SettingsComp = ({ profileForm, setProfileForm, isClient, handleUpdateProfi
     </div>
   );
 };
+
+const SafetyItem = ({ icon: Icon, title, desc, done }) => (
+  <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4 dark:border-white/10 dark:bg-black/20">
+    <div className="flex items-start gap-3">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${done ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-gray-200 text-gray-500 dark:bg-white/10 dark:text-gray-400'}`}>
+        <Icon size={18} />
+      </div>
+      <div>
+        <h3 className="text-sm font-black text-gray-900 dark:text-white">{title}</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-5">{desc}</p>
+      </div>
+    </div>
+  </div>
+);
+
+const QuickLink = ({ href, icon: Icon, title }) => (
+  <a
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="flex items-center justify-between rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm font-bold text-gray-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 dark:border-white/10 dark:bg-black/20 dark:text-gray-200 dark:hover:border-indigo-400/30 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-300"
+  >
+    <span className="flex items-center gap-3">
+      <Icon size={16} />
+      {title}
+    </span>
+    <ExternalLink size={14} />
+  </a>
+);
 
 export default SettingsComp;

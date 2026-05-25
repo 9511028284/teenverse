@@ -5,12 +5,34 @@ import { toPng, toBlob } from 'html-to-image';
 import { jsPDF } from "jspdf";
 import { QUIZZES, APP_STATUS } from '../utils/constants';
 import { filterSubscriptionBadgesForPlan, getEffectivePlanName, getPlanLimits, normalizeExpiredSubscription } from '../utils/subscription';
+import {
+  getNotificationPermission,
+  listenForForegroundMessages,
+  requestNotificationPermission,
+  showBrowserNotification
+} from '../services/pushNotifications';
 
 // ------------------------------------------
 // 🚀 PRODUCTION CONFIGURATION
 // ------------------------------------------
 const KYC_MODE = 'production'; 
+const TEENVERSE_HOME_URL = 'https://teenversehub.in';
 // ------------------------------------------
+
+const buildInstagramStoryJoinUrl = (profile) => {
+  const url = new URL(TEENVERSE_HOME_URL);
+  url.searchParams.set('utm_source', 'instagram');
+  url.searchParams.set('utm_medium', 'story');
+  url.searchParams.set('utm_campaign', 'profile_card');
+
+  if (profile?.referral_code) {
+    url.searchParams.set('ref', profile.referral_code);
+  } else if (profile?.id) {
+    url.searchParams.set('creator', profile.id);
+  }
+
+  return url.toString();
+};
 
 // Helper: Robust Date Checker
 const isSameDay = (dateString) => {
@@ -140,6 +162,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
   // --- INTERACTION STATES ---
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState(getNotificationPermission);
   const [modal, setModal] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null); 
   const [selectedApp, setSelectedApp] = useState(null);
@@ -399,6 +422,75 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     return () => { isMounted = false; };
   }, [user, isClient, showToast]); 
 
+  useEffect(() => {
+    if (!user?.id) return undefined;
+
+    let stopForegroundMessages = () => {};
+    listenForForegroundMessages((payload) => {
+      const body = payload.notification?.body || payload.data?.body;
+      if (!body) return;
+
+      showToast(body, 'info');
+    }).then((unsubscribe) => {
+      stopForegroundMessages = unsubscribe;
+    });
+
+    const notificationsChannel = supabase
+      .channel(`dashboard-notifications-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          const notification = payload.new;
+          if (!notification?.message) return;
+
+          setNotifications(prev => [
+            notification,
+            ...prev.filter(item => item.id !== notification.id)
+          ].slice(0, 20));
+
+          showToast(notification.message, 'info');
+          showBrowserNotification({
+            title: 'TeenVerse alert',
+            body: notification.message,
+            tag: `notification-${notification.id || notification.created_at || Date.now()}`,
+            url: '/dashboard'
+          });
+        }
+      )
+      .subscribe();
+
+    const jobsChannel = isClient
+      ? null
+      : supabase
+          .channel(`freelancer-jobs-${user.id}`)
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'jobs' },
+            (payload) => {
+              const job = payload.new;
+              if (!job?.id) return;
+
+              setJobs(prev => [
+                job,
+                ...prev.filter(item => item.id !== job.id)
+              ].slice(0, 20));
+            }
+          )
+          .subscribe();
+
+    return () => {
+      stopForegroundMessages();
+      supabase.removeChannel(notificationsChannel);
+      if (jobsChannel) supabase.removeChannel(jobsChannel);
+    };
+  }, [user?.id, isClient, showToast]);
+
   // 🚀 SMART TRIGGER FOR PROFILE MODAL
   useEffect(() => {
      if (!isLoading && !isClient && needsProfileSetup && !showRewardModal && !modal && !hasPromptedProfile.current) {
@@ -425,6 +517,29 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     setShowRewardModal(false);
     hasCheckedReward.current = true;
     setIsClaiming(false);
+  };
+
+  const handleEnablePushNotifications = async () => {
+    const permission = await requestNotificationPermission(user.id);
+    setNotificationPermission(permission);
+
+    if (permission === 'granted') {
+      showToast("Push alerts enabled.", "success");
+      await showBrowserNotification({
+        title: 'TeenVerse alerts enabled',
+        body: 'You will get alerts for new jobs, applications, and task updates.',
+        tag: 'push-alerts-enabled',
+        url: '/dashboard'
+      });
+    } else if (permission === 'denied') {
+      showToast("Notifications are blocked in your browser settings.", "warning");
+    } else if (permission === 'unsupported') {
+      showToast("This browser does not support push notifications.", "error");
+    } else if (permission === 'missing-vapid-key') {
+      showToast("Firebase VAPID key is missing. Add VITE_FIREBASE_VAPID_KEY.", "error");
+    } else {
+      showToast("Push alerts could not be enabled. Please try again.", "error");
+    }
   };
 
   // ------------------------------------------
@@ -666,7 +781,7 @@ const handlePostJob = async (e) => {
     };
     
     // 6. Save to Database
-    const { error } = await api.createJob(jobData);
+    const { data: createdJob, error } = await api.createJob(jobData);
     
     if (error) { 
         showToast(error.message, 'error'); 
@@ -681,7 +796,7 @@ const handlePostJob = async (e) => {
         showToast(isEliteBoolean ? 'Elite Project Posted Successfully!' : 'Project Posted Successfully!', 'success'); 
         
         setModal(null); 
-        setJobs([jobData, ...jobs]); 
+        setJobs([createdJob || jobData, ...jobs]); 
     }
 };
   
@@ -779,6 +894,12 @@ const handlePostJob = async (e) => {
         }
 
         showToast('W application! 🎯 Proposal sent.', 'success'); 
+        await api.sendPushNotification({
+            targetUserIds: [selectedJob.client_id],
+            title: 'New application',
+            body: `New application: ${selectedJob.title}`,
+            url: '/dashboard'
+        });
         
         const newApp = {
             id: data.application_id, 
@@ -820,6 +941,12 @@ const handlePostJob = async (e) => {
       if (success) {
          await logAction('ESCROW_FUNDED', { order_id: orderId, amount: app.bid_amount });
          showToast("Payment Confirmed! Order Started.", "success");
+         await api.sendPushNotification({
+             targetUserIds: [app.freelancer_id],
+             title: 'Application accepted',
+             body: 'Your application was accepted. The order has started.',
+             url: '/dashboard'
+         });
          setApplications(prev => prev.map(a => a.id == app.id ? { ...a, status: 'Accepted', started_at: new Date().toISOString(), is_escrow_held: true } : a));
          setTimeout(async () => {
              const { applications: newApps } = await api.fetchDashboardData(user);
@@ -858,6 +985,12 @@ const handlePostJob = async (e) => {
     else {
       await logAction('WORK_SUBMITTED', { app_id: selectedApp.id, has_link: true });
       showToast("Work Submitted Successfully!", "success");
+      await api.sendPushNotification({
+        targetUserIds: [selectedApp.client_id],
+        title: 'Work submitted',
+        body: 'A freelancer submitted work for your project.',
+        url: '/dashboard'
+      });
       setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, status: APP_STATUS.SUBMITTED, submitted_at: timestamp } : a));
       setSelectedApp(null);
     }
@@ -870,6 +1003,12 @@ const handlePostJob = async (e) => {
     if (!error) {
       await logAction('WORK_APPROVED', { app_id: app.id, freelancer_id: app.freelancer_id });
       showToast("Work Approved! Please release payment.", "success");
+      await api.sendPushNotification({
+        targetUserIds: [app.freelancer_id],
+        title: 'Work approved',
+        body: 'Your submitted work was approved.',
+        url: '/dashboard'
+      });
       setViewWorkApp(null);
     } else {
       setApplications(prevApps); 
@@ -994,6 +1133,12 @@ const handlePostJob = async (e) => {
     else { 
        await logAction('RELEASE_ESCROW', { app_id: appId, amount: amount });
        showToast("Payment Successful! Generating Invoice...", "success");
+       await api.sendPushNotification({
+         targetUserIds: [freelancerId],
+         title: 'Payment released',
+         body: 'Payment has been released for your project.',
+         url: '/dashboard'
+       });
        const targetApp = applications.find(a => a.id === appId);
        const invoicePath = await generateAndStoreInvoice(targetApp, amount);
 
@@ -1053,6 +1198,12 @@ const handlePostJob = async (e) => {
                     
                 if(!error) {
                     showToast("Payment Successful! Escrow Secured.", "success");
+                    await api.sendPushNotification({
+                        targetUserIds: [app.freelancer_id],
+                        title: 'Application accepted',
+                        body: 'Your application was accepted. The order has started.',
+                        url: '/dashboard'
+                    });
                     setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'Accepted', payment_status: 'Held' } : a));
                 } else {
                      showToast("Payment verified, but failed to update dashboard.", "error");
@@ -1099,6 +1250,21 @@ const handlePostJob = async (e) => {
                 if (action === 'review') return { ...a, client_rating: payload?.rating }; 
                 return a;
              }));
+             const statusPush = {
+                approve: 'Your submitted work was approved.',
+                pay: 'Payment is being processed for your project.',
+                reject: 'Your application or delivery was rejected.',
+                revision: 'A revision was requested for your project.',
+                review: 'You received a new review.'
+             }[action];
+             if (statusPush) {
+                await api.sendPushNotification({
+                    targetUserIds: [app.freelancer_id],
+                    title: 'Task update',
+                    body: statusPush,
+                    url: '/dashboard'
+                });
+             }
              showToast(action === 'pay' ? "Funds released to Admin for review." : "Action Successful!", "success");
              if (viewWorkApp) setViewWorkApp(null);
         }
@@ -1107,9 +1273,13 @@ const handlePostJob = async (e) => {
 
   const handleViewProfile = async (freelancerId) => {
     showToast("Fetching Profile...", "info");
-    const { user, badges, portfolio, resume, error } = await api.getPublicProfile(freelancerId);
-    if (error) { showToast("Could not load profile", "error"); } 
-    else { setPublicProfileData({ user, badges, portfolio, resume }); setViewProfileId(freelancerId); }
+    const { user, badges, portfolio, projects, services, resume, error } = await api.getPublicProfile(freelancerId);
+    if (error) {
+      showToast(error.message || "Could not load profile", "error");
+    } else {
+      setPublicProfileData({ user, badges, portfolio, projects, services, resume });
+      setViewProfileId(freelancerId);
+    }
   };
 
   const handleUpdateProfile = async (e) => {
@@ -1117,7 +1287,7 @@ const handlePostJob = async (e) => {
     if (parentMode) { showToast("Parent Mode Restricted", "error"); return; }
     
     const tableName = isClient ? 'clients' : 'freelancers';
-    const cleanUpdates = { name: profileForm.name, phone: profileForm.phone, nationality: profileForm.nationality };
+    const cleanUpdates = { name: profileForm.name, nationality: profileForm.nationality };
     if (!isClient) {
         Object.assign(cleanUpdates, { qualification: profileForm.qualification, specialty: profileForm.specialty, services: profileForm.services, upi: profileForm.upi, bank_name: profileForm.bank_name, account_number: profileForm.account_number, ifsc_code: profileForm.ifsc_code });
     } else { cleanUpdates.is_organisation = profileForm.is_organisation; }
@@ -1248,16 +1418,41 @@ const handlePostJob = async (e) => {
   const handleShareToInstagram = async () => {
     if (profileCardRef.current === null) return;
     try {
-      showToast("Preparing for Share...", "info");
+      showToast("Preparing Instagram-ready share...", "info");
       const blob = await toBlob(profileCardRef.current, { cacheBust: true, pixelRatio: 2 });
       if (!blob) throw new Error('Failed to generate image');
-      const file = new File([blob], `TeenVerse-${user.name}.png`, { type: 'image/png' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'My TeenVerse Profile', text: `Check out my freelancer profile! 🚀` });
-        showToast("Shared successfully!", "success");
+
+      const safeName = (user.name || 'TeenVerse-Creator').replace(/[^a-z0-9-]+/gi, '-').replace(/^-+|-+$/g, '');
+      const file = new File([blob], `TeenVerse-${safeName}.png`, { type: 'image/png' });
+      const storyJoinUrl = buildInstagramStoryJoinUrl(user);
+      const shareText = `${user.name || 'A TeenVerse creator'} on TeenVerseHub: ${user.specialty || user.tag_line || 'verified teen talent'}\nJoin from this story: ${storyJoinUrl}`;
+      const shareData = {
+        files: [file],
+        title: 'My TeenVerse Profile',
+        text: shareText,
+        url: storyJoinUrl,
+      };
+
+      try {
+        await navigator.clipboard?.writeText(storyJoinUrl);
+      } catch (_err) {
+        // Clipboard is a helpful bonus for Instagram link stickers, not a blocker.
+      }
+
+      if (navigator.canShare && navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+        showToast("Shared. Your story join link is copied for Instagram's link sticker.", "success");
+      } else if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: shareData.title, text: shareText });
+        showToast("Shared. Paste the copied link into Instagram's link sticker.", "success");
       } else {
-        const link = document.createElement('a'); link.download = `TeenVerse-${user.name}.png`; link.href = URL.createObjectURL(blob); link.click();
-        showToast("Sharing not supported. Downloading instead.", "info");
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `TeenVerse-${safeName}.png`;
+        link.href = objectUrl;
+        link.click();
+        URL.revokeObjectURL(objectUrl);
+        showToast("Downloaded card and copied the story join link for Instagram.", "info");
       }
     } catch (err) { if (err.name !== 'AbortError') showToast("Failed to share: " + err.message, "error"); }
   };
@@ -1402,7 +1597,7 @@ const handlePostJob = async (e) => {
     state: {
         isClient, tab, menuOpen, zenMode, isLoading, jobs, services, applications, notifications,
         referralStats, totalEarnings, showNotifications, modal, selectedJob, selectedApp,
-        energy, showRewardModal, isClaiming, viewProfileId, publicProfileData, editProfileModal,
+        notificationPermission, energy, showRewardModal, isClaiming, viewProfileId, publicProfileData, editProfileModal,
         kycFile, currentQuestionIndex, score, timelineApp, viewWorkApp, searchTerm, profileForm,
         paymentModal, parentMode, unlockedSkills, badges, portfolioItems, rawPortfolioText,
         isAiLoading, SAFE_QUIZZES, profileCardRef, currentXP, nextLevelXP, progressPercent,
@@ -1435,7 +1630,8 @@ const handlePostJob = async (e) => {
         handleDigilockerSuccess,
         handleRedeemReferral,
         handleSubscribe,
-        handleUseResume
+        handleUseResume,
+        handleEnablePushNotifications
     }
   };
 };

@@ -49,7 +49,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       tab, menuOpen, isLoading, isClient, energy, notifications, showNotifications,
       jobs, services, filteredJobs, searchTerm, applications, referralStats, totalEarnings,
       badges, unlockedSkills, userLevel, progressPercent, zenMode, parentMode, profileForm,
-      portfolioItems, rawPortfolioText, isAiLoading, SAFE_QUIZZES, profileCardRef, isQuizLoading,
+      SAFE_QUIZZES, profileCardRef, isQuizLoading,
       reportModal 
   } = state;
 
@@ -62,6 +62,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       'battles': <Swords size={20} className="text-rose-500"/>,
       'settings': <Settings size={20} className="text-gray-500"/>,
       'profile-card': <User size={20} className="text-purple-500"/>,
+      'portfolio': <Briefcase size={20} className="text-cyan-500"/>,
       'pricing': <Crown size={20} className="text-yellow-500"/>,
       'records': <ShieldCheck size={20} className="text-blue-500"/>,
       'store': <ShoppingBag size={20} className="text-teal-500"/>
@@ -238,13 +239,20 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                       />
                     )}
 
-                    {tab === 'portfolio' && !isClient && <Portfolio rawPortfolioText={rawPortfolioText} setRawPortfolioText={setters.setRawPortfolioText} handleAiGenerate={actions.handleAiGenerate} isAiLoading={isAiLoading} portfolioItems={portfolioItems} />}
+                    {tab === 'portfolio' && (
+                      <Portfolio
+                        isClient={isClient}
+                        applications={applications}
+                        jobs={jobs}
+                        services={services}
+                      />
+                    )}
                     
                     {tab === 'profile-card' && !isClient && (
                       <ProfileCard 
                         ref={profileCardRef} user={user} unlockedSkills={unlockedSkills} badges={badges} 
                         userLevel={userLevel} applications={applications} handleDownloadCard={actions.handleDownloadCard} 
-                        handleShareToInstagram={actions.handleShareToInstagram} showToast={showToast} 
+                        services={services} handleShareToInstagram={actions.handleShareToInstagram} showToast={showToast} 
                       />
                     )}
 
@@ -252,6 +260,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                      <UserProfile 
                        user={user} badges={badges} userLevel={userLevel} unlockedSkills={unlockedSkills} 
                        isClient={isClient} onEditProfile={() => setters.setEditProfileModal(true)} 
+                       applications={applications} jobs={jobs} services={services}
                      />
                     )}
 
