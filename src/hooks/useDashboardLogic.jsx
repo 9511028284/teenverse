@@ -17,6 +17,8 @@ import {
 // ------------------------------------------
 const KYC_MODE = 'production'; 
 const TEENVERSE_HOME_URL = 'https://teenversehub.in';
+const TEMP_DISABLE_FREELANCER_KYC_FOR_APPLICATIONS =
+  import.meta.env.VITE_TEMP_DISABLE_FREELANCER_KYC_FOR_APPLICATIONS !== 'false';
 // ------------------------------------------
 
 const buildInstagramStoryJoinUrl = (profile) => {
@@ -586,9 +588,14 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // ------------------------------------------
   const checkKycLock = (actionType) => {
     if (isClient) return true; 
+    const hasCompletedKyc = Boolean(
+        user?.is_kyc_verified || ['approved', 'verified'].includes(user?.kyc_status)
+    );
 
     if (actionType === 'apply_paid') {
-        if (!user.is_kyc_verified) {
+        if (TEMP_DISABLE_FREELANCER_KYC_FOR_APPLICATIONS) return true;
+
+        if (!hasCompletedKyc) {
             showToast("🔒 Identity verification required to apply for jobs.", "info");
             setModal('kyc_verification');
             return false;
@@ -596,7 +603,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     }
 
     if (actionType === 'withdraw_funds' || actionType === 'release_escrow') {
-        if (!user.is_kyc_verified) {
+        if (!hasCompletedKyc) {
             showToast("🔒 Identity verification required to receive funds.", "error");
             setModal('kyc_verification');
             return false;
