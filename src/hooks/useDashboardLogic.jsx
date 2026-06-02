@@ -300,10 +300,13 @@ export const useDashboardLogic = (user, setUser, showToast) => {
 
           if (!error) {
               setBadges(prev => [...prev, { name: newBadge, icon: badgeIcon }]);
-              showToast(`🎉 SECRET UNLOCKED: ${newBadge} Badge! +${energyBonus} Energy ⚡`, "success");
-              
-              await api.awardEnergy(user.id, energyBonus);
-              setEnergy(prev => prev + energyBonus);
+              const reward = await api.awardEnergy(user.id, energyBonus, 'secret_badge', newBadge);
+              if (reward.success) {
+                setEnergy(prev => prev + reward.amount);
+                showToast(`🎉 SECRET UNLOCKED: ${newBadge} Badge! +${reward.amount} Energy ⚡`, "success");
+              } else {
+                showToast(`🎉 SECRET UNLOCKED: ${newBadge} Badge!`, "success");
+              }
               
               await logAction('EXCLUSIVE_BADGE_UNLOCKED', { badge: newBadge });
           }
@@ -511,14 +514,12 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const claimReward = async () => {
     setIsClaiming(true);
     const today = new Date().toISOString().split('T')[0];
-    const rewardAmount = 10;
+    const reward = await api.claimDailyReward(user.id, today);
     
-    const { success } = await api.claimDailyReward(user.id, today);
-    
-    if (success) {
-        setEnergy(prev => prev + rewardAmount);
-        showToast(`⚡ +${rewardAmount} Energy Claimed!`, "success");
-        await logAction('DAILY_REWARD_CLAIMED', { date: today, amount: rewardAmount });
+    if (reward.success) {
+        setEnergy(prev => prev + reward.amount);
+        showToast(`⚡ +${reward.amount} Energy Claimed!`, "success");
+        await logAction('DAILY_REWARD_CLAIMED', { date: today, amount: reward.amount });
     } else {
         showToast("You have already claimed your reward for today!", "info");
     }
@@ -1342,13 +1343,13 @@ const handlePostJob = async (e) => {
           const { error } = await api.updateUserProfile(user.id, updates, 'freelancers');
           if (error) throw error;
 
-          showToast("Profile Complete! +10 Energy ⚡", "success");
           setUser({ ...user, ...updates });
           setNeedsProfileSetup(false);
           setModal(null);
           
-          await api.awardEnergy(user.id, 10);
-          setEnergy(prev => prev + 10);
+          const reward = await api.awardEnergy(user.id, 10, 'profile_complete');
+          if (reward.success) setEnergy(prev => prev + reward.amount);
+          showToast(`Profile Complete!${reward.success ? ` +${reward.amount} Energy ⚡` : ''}`, "success");
           
       } catch (err) {
           showToast("Failed to save profile: " + err.message, "error");
@@ -1378,9 +1379,9 @@ const handlePostJob = async (e) => {
     if (passed) {
       setTimeout(async () => {
         if (isGeneral) {
-             await api.awardEnergy(user.id, 2); 
-             setEnergy(prev => prev + 2);
-             showToast("🎉 Module Complete! +50 XP & +2 Energy ⚡", "success");
+             const reward = await api.awardEnergy(user.id, 2, 'quiz_general', categoryId);
+             if (reward.success) setEnergy(prev => prev + reward.amount);
+             showToast(`🎉 Module Complete! +50 XP${reward.success ? ` & +${reward.amount} Energy ⚡` : ''}`, "success");
              setModal(null); setScore(0); setCurrentQuestionIndex(0);
              return;
         }
@@ -1390,15 +1391,15 @@ const handlePostJob = async (e) => {
         await api.unlockSkill(user.id, newSkills); 
         setUser({ ...user, unlockedSkills: newSkills });
         
-        await api.awardEnergy(user.id, 5);
-        setEnergy(prev => prev + 5);
+        const reward = await api.awardEnergy(user.id, 5, 'skill_certified', categoryId);
+        if (reward.success) setEnergy(prev => prev + reward.amount);
         
         if (!badges.some(b => b.name === 'Skill Certified')) {
             setBadges(prev => [...prev, { name: 'Skill Certified', icon: 'Award' }]);
             await supabase.from('user_badges').insert({ user_id: user.id, badge_name: 'Skill Certified' });
         }
         
-        showToast("🏆 CERTIFIED! +500 XP & +5 Energy ⚡", "success");
+        showToast(`🏆 CERTIFIED! +500 XP${reward.success ? ` & +${reward.amount} Energy ⚡` : ''}`, "success");
         setModal(null); setScore(0); setCurrentQuestionIndex(0);
 
       }, 1000);

@@ -487,32 +487,35 @@ export const getEnergy = async (userId) => {
 };
 
 export const deductEnergy = async (userId, amount) => {
-  const { data: user, error: fetchError } = await supabase
-    .from('freelancers')
-    .select('energy_points') 
-    .eq('id', userId)
-    .single();
-
-  if (fetchError || !user) return { success: false, error: fetchError };
-
-  if (user.energy_points < amount) { 
-     return { success: false, error: { message: "Insufficient Energy Points" } };
-  }
-
-  const { error: updateError } = await supabase
-    .from('freelancers')
-    .update({ energy_points: user.energy_points - amount }) 
-    .eq('id', userId);
-
-  if (updateError) return { success: false, error: updateError };
-
-  return { success: true };
+  return {
+    success: false,
+    error: {
+      message: 'Energy spending must use a secured RPC for the specific action.',
+      userId,
+      amount,
+    },
+  };
 };
 
-export const awardEnergy = async (userId, amount) => {
-  const { data: user } = await supabase.from('freelancers').select('energy_points').eq('id', userId).single();
-  const { error } = await supabase.from('freelancers').update({ energy_points: (user?.energy_points || 0) + amount }).eq('id', userId);
-  return { error };
+export const awardEnergy = async (userId, amount, rewardType, context = 'default') => {
+  try {
+    const { data, error } = await supabase.rpc('claim_energy_reward', {
+      p_user_id: userId,
+      p_reward_type: rewardType,
+      p_context: context,
+    });
+
+    if (error) throw error;
+
+    return {
+      success: Boolean(data?.success),
+      amount: Number(data?.amount || 0),
+      expectedAmount: amount,
+      error: null,
+    };
+  } catch (err) {
+    return { success: false, amount: 0, expectedAmount: amount, error: err };
+  }
 };
 
 export const unlockSkill = async (userId, newSkills) => {
@@ -711,13 +714,17 @@ export const submitReview = async (appId, rating, tags = []) => {
 
 export const claimDailyReward = async (userId, date) => {
   try {
-    const { error } = await supabase.rpc('claim_daily_reward', { 
-      user_id: userId, 
-      today: date 
+    const { data, error } = await supabase.rpc('claim_daily_reward', {
+      p_user_id: userId,
+      p_today: date
     });
 
     if (error) throw error;
-    return { success: true };
+    return {
+      success: Boolean(data?.success),
+      amount: Number(data?.amount || 0),
+      reason: data?.reason,
+    };
   } catch (err) {
     console.error("Reward Claim Error:", err);
     return { success: false, error: err };
