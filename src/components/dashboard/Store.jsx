@@ -172,11 +172,14 @@ const Store = ({ user, setUser }) => {
       });
 
       if (setUser) {
-        setUser((currentUser) =>
-          currentUser?.id === user.id
-            ? { ...currentUser, wallet_balance: nextBalance }
-            : currentUser,
-        );
+        setUser((currentUser) => {
+          if (currentUser?.id !== user.id) return currentUser;
+
+          const currentBalance = Number(currentUser.wallet_balance) || 0;
+          if (currentBalance === nextBalance) return currentUser;
+
+          return { ...currentUser, wallet_balance: nextBalance };
+        });
       }
     } catch (error) {
       setWalletState((state) => ({
@@ -195,7 +198,7 @@ const Store = ({ user, setUser }) => {
   useEffect(() => {
     setWalletState((state) => ({
       ...state,
-      balance: Number(user?.wallet_balance) || 0,
+      balance: Number(user?.wallet_balance) || state.balance || 0,
     }));
   }, [user?.wallet_balance]);
 
