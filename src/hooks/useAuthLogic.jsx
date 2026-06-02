@@ -204,9 +204,31 @@ export const useAuthLogic = (onLogin) => {
     } else {
         const table = formData.role === 'client' ? 'clients' : 'freelancers';
         
-        await supabase.from('users').upsert({ id: uid, email: formData.email, full_name: formData.name });
-        const { error: dbError } = await supabase.from(table).upsert({ id: uid, ...profileData });
-        if (dbError) throw dbError;
+        const { error: userError } = await supabase
+          .from('users')
+          .upsert({ id: uid, email: formData.email, full_name: formData.name });
+        if (userError) throw userError;
+
+        const { error: dbError } = await supabase
+          .from(table)
+          .insert({ id: uid, ...profileData });
+
+        if (dbError?.code === '23505') {
+          const retryUpdates = {
+            name: profileData.name,
+            phone: profileData.phone,
+            nationality: profileData.nationality,
+            ...(formData.role === 'client' ? { is_organisation: profileData.is_organisation } : {})
+          };
+
+          const { error: updateError } = await supabase
+            .from(table)
+            .update(retryUpdates)
+            .eq('id', uid);
+          if (updateError) throw updateError;
+        } else if (dbError) {
+          throw dbError;
+        }
 
         window.location.href = '/termsagreement';
     }
