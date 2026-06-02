@@ -7,7 +7,6 @@ import {
   RefreshCw,
   RotateCcw,
   ShoppingBag,
-  Sparkles,
   Wallet,
   XCircle,
 } from 'lucide-react';
@@ -27,28 +26,6 @@ const REQUIRED_ENV = [
   { label: 'Supabase URL', keys: ['VITE_SUPABASE_URL'] },
   { label: 'Supabase anon or publishable key', keys: ['VITE_SUPABASE_ANON_KEY'] },
 ];
-
-const STATUS_LABEL = {
-  loading: 'Starting',
-  token_loading: 'Authenticating',
-  token_ready: 'Connecting',
-  iframe_loaded: 'Handshaking',
-  connected: 'Live',
-  ready: 'Ready',
-  error: 'Error',
-  closed: 'Closed',
-};
-
-const STATUS_TONE = {
-  ready: 'success',
-  connected: 'success',
-  iframe_loaded: 'warning',
-  token_ready: 'warning',
-  token_loading: 'warning',
-  loading: 'warning',
-  error: 'danger',
-  closed: 'neutral',
-};
 
 const getEnvValue = (...keys) =>
   keys.map((key) => import.meta.env[key]).find(Boolean) || '';
@@ -402,12 +379,8 @@ const Store = ({ user, setUser }) => {
             </span>
             <div>
               <p className="hs-wordmark">Hubble Store</p>
-              <p className="hs-subtitle">Wallet balance powers every redemption</p>
+              <p className="hs-subtitle">Wallet balance and redemptions</p>
             </div>
-            <span className={`hs-env hs-env-${envConfig.env}`}>
-              <span />
-              {envConfig.env}
-            </span>
           </div>
 
           <div className="hs-header-right">
@@ -416,8 +389,6 @@ const Store = ({ user, setUser }) => {
               <span>{formatCurrency(walletState.balance)}</span>
               {walletState.loading && <Loader2 size={12} className="hs-spin" />}
             </div>
-
-            {!hasMissingEnv && <StatusPill status={status} />}
 
             <div className="hs-actions">
               <button
@@ -482,9 +453,9 @@ const Store = ({ user, setUser }) => {
 
           {!hasMissingEnv && status === 'closed' && (
             <Blocker
-              icon={<Sparkles size={22} strokeWidth={1.7} />}
+              icon={<ShoppingBag size={22} strokeWidth={1.7} />}
               title="Store closed"
-              body="Open it again whenever you are ready to redeem."
+              body="Open it again whenever you want to redeem."
               tone="neutral"
               action={{ label: 'Reopen', onClick: reloadStore }}
             />
@@ -492,10 +463,6 @@ const Store = ({ user, setUser }) => {
 
           {shouldShowIframe && (
             <div className="hs-iframe-wrap">
-              <div className="hs-status-float">
-                <StatusPill status={status} small />
-              </div>
-
               {showBlockingOverlay && (
                 <div className="hs-iframe-overlay">
                   <Loader2 size={24} strokeWidth={1.7} className="hs-spin" />
@@ -517,7 +484,6 @@ const Store = ({ user, setUser }) => {
         <footer className="hs-metrics">
           <Metric label="Balance" value={formatCurrency(walletState.balance)} />
           <Metric label="Coin rate" value="1 coin = ₹1" />
-          <Metric label="SSO" value={tokenState.received ? 'JWT ready' : 'Pending'} />
           {walletState.lastSyncedAt && <Metric label="Synced" value={walletState.lastSyncedAt} />}
         </footer>
 
@@ -551,18 +517,6 @@ const Store = ({ user, setUser }) => {
   );
 };
 
-const StatusPill = ({ status, small = false }) => {
-  const tone = STATUS_TONE[status] || 'neutral';
-  const label = STATUS_LABEL[status] || status;
-
-  return (
-    <span className={`hs-status hs-status-${tone}${small ? ' hs-status-sm' : ''}`}>
-      <span className="hs-status-dot" />
-      {label}
-    </span>
-  );
-};
-
 const Metric = ({ label, value }) => (
   <div className="hs-metric">
     <span className="hs-metric-label">{label}</span>
@@ -585,71 +539,53 @@ const Blocker = ({ icon, title, body, tone, action }) => (
 );
 
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
-
   .hs-root {
     --hs-bg: #f8fafc;
-    --hs-surface: rgba(255,255,255,0.92);
+    --hs-surface: #ffffff;
     --hs-surface-solid: #ffffff;
-    --hs-card: rgba(15,23,42,0.04);
-    --hs-card-hover: rgba(15,23,42,0.08);
-    --hs-border: rgba(15,23,42,0.10);
-    --hs-border-hi: rgba(15,23,42,0.18);
+    --hs-card: #f1f5f9;
+    --hs-card-hover: #e2e8f0;
+    --hs-border: #e2e8f0;
+    --hs-border-hi: #cbd5e1;
     --hs-text: #0f172a;
     --hs-muted: #64748b;
     --hs-faint: #94a3b8;
-    --hs-primary: #6366f1;
-    --hs-primary-hi: #4f46e5;
-    --hs-teal: #0f766e;
+    --hs-primary: #334155;
+    --hs-primary-hi: #0f172a;
     --hs-success: #16a34a;
-    --hs-warning: #d97706;
     --hs-danger: #e11d48;
-    --hs-primary-soft: rgba(99,102,241,0.10);
-    --hs-teal-soft: rgba(15,118,110,0.10);
-    --hs-success-soft: rgba(22,163,74,0.10);
-    --hs-warning-soft: rgba(217,119,6,0.10);
-    --hs-danger-soft: rgba(225,29,72,0.10);
-    --hs-overlay: rgba(248,250,252,0.88);
-    --hs-shadow: 0 18px 45px rgba(15,23,42,0.10);
-    --hs-r: 14px;
-    --hs-r-lg: 20px;
-    --hs-r-xl: 22px;
-    font-family: 'Syne', sans-serif;
+    --hs-danger-soft: #fff1f2;
+    --hs-overlay: rgba(248,250,252,0.92);
+    --hs-shadow: 0 1px 2px rgba(15,23,42,0.06);
+    --hs-r: 8px;
+    --hs-r-lg: 10px;
+    --hs-r-xl: 10px;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     color: var(--hs-text);
-    background:
-      linear-gradient(90deg, rgba(99,102,241,0.05) 1px, transparent 1px),
-      linear-gradient(0deg, rgba(15,118,110,0.04) 1px, transparent 1px),
-      var(--hs-bg);
-    background-size: 28px 28px;
+    background: var(--hs-bg);
   }
 
   .dark .hs-root {
     --hs-bg: #020617;
-    --hs-surface: rgba(15,23,42,0.88);
+    --hs-surface: #0f172a;
     --hs-surface-solid: #0f172a;
-    --hs-card: rgba(255,255,255,0.055);
-    --hs-card-hover: rgba(255,255,255,0.085);
-    --hs-border: rgba(255,255,255,0.08);
-    --hs-border-hi: rgba(255,255,255,0.15);
+    --hs-card: #111827;
+    --hs-card-hover: #1e293b;
+    --hs-border: #1e293b;
+    --hs-border-hi: #334155;
     --hs-text: #f8fafc;
     --hs-muted: #94a3b8;
     --hs-faint: #64748b;
-    --hs-primary: #818cf8;
-    --hs-primary-hi: #a5b4fc;
-    --hs-teal: #2dd4bf;
+    --hs-primary: #cbd5e1;
+    --hs-primary-hi: #f8fafc;
     --hs-success: #4ade80;
-    --hs-warning: #fbbf24;
     --hs-danger: #fb7185;
-    --hs-primary-soft: rgba(129,140,248,0.16);
-    --hs-teal-soft: rgba(45,212,191,0.12);
-    --hs-success-soft: rgba(74,222,128,0.12);
-    --hs-warning-soft: rgba(251,191,36,0.12);
     --hs-danger-soft: rgba(251,113,133,0.12);
-    --hs-overlay: rgba(2,6,23,0.86);
-    --hs-shadow: 0 20px 55px rgba(0,0,0,0.30);
+    --hs-overlay: rgba(2,6,23,0.90);
+    --hs-shadow: 0 1px 2px rgba(0,0,0,0.24);
   }
 
   .hs-header {
@@ -661,10 +597,9 @@ const css = `
     justify-content: space-between;
     gap: 12px;
     flex-wrap: wrap;
-    padding: 13px 18px;
+    padding: 14px 18px;
     border-bottom: 1px solid var(--hs-border);
     background: var(--hs-surface);
-    backdrop-filter: blur(20px);
   }
   .hs-header-left,
   .hs-header-right {
@@ -679,58 +614,26 @@ const css = `
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 12px;
-    color: white;
-    background: linear-gradient(135deg, var(--hs-primary), var(--hs-teal));
-    box-shadow: 0 10px 26px rgba(99,102,241,0.20);
+    border-radius: var(--hs-r);
+    color: var(--hs-text);
+    background: var(--hs-card);
+    border: 1px solid var(--hs-border);
   }
   .hs-wordmark {
     margin: 0;
-    font-size: 13px;
-    font-weight: 800;
-    letter-spacing: 0.02em;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0;
     color: var(--hs-text);
   }
   .hs-subtitle {
-    margin: 2px 0 0;
-    font-size: 10px;
-    font-weight: 600;
+    margin: 3px 0 0;
+    font-size: 12px;
+    font-weight: 500;
     color: var(--hs-muted);
-  }
-  .hs-env {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 9px;
-    border-radius: 999px;
-    border: 1px solid var(--hs-border);
-    background: var(--hs-card);
-    color: var(--hs-muted);
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-  .hs-env span {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
-    box-shadow: 0 0 8px currentColor;
-  }
-  .hs-env-production {
-    color: var(--hs-success);
-    border-color: rgba(22,163,74,0.26);
-    background: var(--hs-success-soft);
-  }
-  .hs-env-development {
-    color: var(--hs-warning);
-    border-color: rgba(217,119,6,0.26);
-    background: var(--hs-warning-soft);
   }
 
   .hs-wallet,
-  .hs-status,
   .hs-btn {
     border: 1px solid var(--hs-border-hi);
     background: var(--hs-card);
@@ -739,53 +642,15 @@ const css = `
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    padding: 6px 12px;
-    border-radius: 999px;
+    padding: 7px 11px;
+    border-radius: var(--hs-r);
     color: var(--hs-text);
-    font-family: 'DM Mono', monospace;
+    font-family: inherit;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 650;
     transition: opacity 0.2s;
   }
   .hs-wallet-syncing { opacity: 0.55; }
-
-  .hs-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    color: var(--hs-muted);
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .hs-status-sm {
-    padding: 4px 8px;
-    font-size: 9px;
-  }
-  .hs-status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
-  }
-  .hs-status-success {
-    color: var(--hs-success);
-    background: var(--hs-success-soft);
-    border-color: rgba(22,163,74,0.26);
-  }
-  .hs-status-warning {
-    color: var(--hs-warning);
-    background: var(--hs-warning-soft);
-    border-color: rgba(217,119,6,0.26);
-  }
-  .hs-status-danger {
-    color: var(--hs-danger);
-    background: var(--hs-danger-soft);
-    border-color: rgba(225,29,72,0.26);
-  }
 
   .hs-actions {
     display: flex;
@@ -801,7 +666,7 @@ const css = `
     border-radius: var(--hs-r);
     color: var(--hs-muted);
     cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
   }
   .hs-btn:hover:not(:disabled) {
     background: var(--hs-card-hover);
@@ -812,13 +677,12 @@ const css = `
   .hs-btn:disabled { opacity: 0.35; cursor: not-allowed; }
   .hs-btn-hi {
     color: var(--hs-primary);
-    background: var(--hs-primary-soft);
-    border-color: rgba(99,102,241,0.24);
+    background: var(--hs-card);
+    border-color: var(--hs-border-hi);
   }
   .hs-btn-hi:hover:not(:disabled) {
-    color: white;
-    background: linear-gradient(135deg, var(--hs-primary), var(--hs-teal));
-    box-shadow: 0 12px 28px rgba(99,102,241,0.18);
+    color: var(--hs-primary-hi);
+    background: var(--hs-card-hover);
   }
 
   .hs-canvas {
@@ -827,24 +691,17 @@ const css = `
   }
   .hs-iframe-wrap {
     position: relative;
-    padding: 16px;
-  }
-  .hs-status-float {
-    position: absolute;
-    top: 26px;
-    left: 26px;
-    z-index: 10;
+    padding: 14px;
   }
   .hs-iframe-overlay {
     position: absolute;
-    inset: 16px;
+    inset: 14px;
     z-index: 20;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: var(--hs-r-xl);
     background: var(--hs-overlay);
-    backdrop-filter: blur(18px);
     color: var(--hs-muted);
   }
   .hs-iframe {
@@ -896,7 +753,7 @@ const css = `
     margin: 0;
     max-width: 360px;
     color: var(--hs-muted);
-    font-family: 'DM Mono', monospace;
+    font-family: inherit;
     font-size: 12px;
     line-height: 1.6;
   }
@@ -910,7 +767,7 @@ const css = `
     border: 1px solid var(--hs-border-hi);
     background: var(--hs-card);
     color: var(--hs-text);
-    font-family: 'Syne', sans-serif;
+    font-family: inherit;
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
@@ -924,7 +781,6 @@ const css = `
     flex-wrap: wrap;
     border-top: 1px solid var(--hs-border);
     background: var(--hs-surface);
-    backdrop-filter: blur(18px);
   }
   .hs-metric {
     flex: 1 1 auto;
@@ -938,22 +794,22 @@ const css = `
   .hs-metric:last-child { border-right: none; }
   .hs-metric-label {
     color: var(--hs-muted);
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.1em;
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0;
     text-transform: uppercase;
   }
   .hs-metric-value {
     color: var(--hs-text);
-    font-family: 'DM Mono', monospace;
+    font-family: inherit;
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 650;
   }
 
   .hs-debug {
     border-top: 1px dashed var(--hs-border);
     background: var(--hs-surface);
-    font-family: 'DM Mono', monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
   .hs-debug-toggle {
     padding: 10px 18px;
@@ -1021,10 +877,6 @@ const css = `
       min-height: 560px;
       height: 76dvh;
       border-radius: 16px;
-    }
-    .hs-status-float {
-      top: 18px;
-      left: 18px;
     }
   }
 `;
