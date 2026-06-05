@@ -64,9 +64,7 @@ const GithubIcon = memo(() => (
 
 const VisualLogoMark = memo(() => (
   <div className="inline-flex items-center justify-center gap-2 font-bold text-2xl tracking-tight select-none mb-10 box-border">
-    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500 via-fuchsia-500 to-amber-400 text-white font-black shadow-sm">
-      T
-    </span>
+   
     <span className="text-neutral-900 dark:text-zinc-50 tracking-tighter">.</span>
   </div>
 ));

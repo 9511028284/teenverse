@@ -74,8 +74,8 @@ export async function sha256Hex(value: string) {
 
 export async function assertTurnstile(captchaToken: unknown) {
   const secret = Deno.env.get("CLOUDFLARE_TURNSTILE_SECRET");
-  if (!secret) return;
-  if (!captchaToken) throw new Error("Security check failed.");
+  if (!captchaToken) throw new Error("Security check required.");
+  if (!secret) throw new Error("Security check is not configured.");
 
   const form = new FormData();
   form.append("secret", secret);
@@ -118,7 +118,7 @@ export function clientIp(req: Request) {
 }
 
 export function safeAuthError(error: unknown, fallback = "We couldn't complete this request. Please try again.") {
-  if (error instanceof Error && /rate|too many|valid indian mobile|security check|invalid or expired otp|send otp first|enter the otp|phone verification required/i.test(error.message)) {
+  if (error instanceof Error && /rate|too many|valid indian mobile|security check|invalid or expired otp|send otp first|enter the otp|phone verification required|unauthorized/i.test(error.message)) {
     return error.message;
   }
   return fallback;

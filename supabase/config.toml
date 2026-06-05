@@ -445,6 +445,11 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/complete-signup/index.ts"
 
+[functions.check-phone-verification]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/check-phone-verification/index.ts"
+
 [functions.generate-r2-url]
 enabled = true
 verify_jwt = true

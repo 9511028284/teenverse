@@ -47,9 +47,10 @@ Deno.serve(async (req: Request) => {
 
     const { data: verifiedPhone, error: verificationError } = await supabaseAdmin
       .from("phone_otp_verifications")
-      .select("phone, expires_at")
+      .select("phone, expires_at, consumed_by")
       .eq("phone", phone)
       .gte("expires_at", nowIso)
+      .or(`consumed_by.is.null,consumed_by.eq.${user.id}`)
       .maybeSingle();
 
     if (verificationError) throw verificationError;

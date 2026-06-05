@@ -6,14 +6,13 @@ import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { normalizeExpiredSubscription } from './utils/subscription';
 import { normalizeIndianPhone } from './utils/validators';
+import { getPendingSignupProfile, removePendingSignupProfile } from './utils/pendingSignupProfile';
 
 // --- Pages (Only App/Dashboard logic remains) ---
 import Auth from './pages/Auth'; 
 import Dashboard from './pages/Dashboard';
 import TermsAgreement from './pages/TermsAgreement'; 
 import AdminDashboard from './pages/AdminPage';
-
-const PENDING_SIGNUP_PROFILE_KEY = 'teenverse_pending_signup_profile';
 
 const buildPendingSignupPayload = (profile = {}) => ({
   role: profile.role || 'freelancer',
@@ -150,8 +149,7 @@ export default function App() {
 
     try {
       let completedPendingSignup = false;
-      const pendingRaw = window.localStorage.getItem(PENDING_SIGNUP_PROFILE_KEY);
-      const pendingProfile = pendingRaw ? JSON.parse(pendingRaw) : null;
+      const pendingProfile = getPendingSignupProfile();
       const pendingMatchesUser = pendingProfile?.email?.toLowerCase?.() === u.email?.toLowerCase?.();
 
       if (pendingMatchesUser && pendingProfile?.phone && !completingPendingSignupRef.current) {
@@ -164,7 +162,7 @@ export default function App() {
 
           if (error || !data?.success) throw new Error(data?.error || 'Profile completion failed');
 
-          window.localStorage.removeItem(PENDING_SIGNUP_PROFILE_KEY);
+          removePendingSignupProfile();
           completedPendingSignup = true;
         } catch (error) {
           console.warn('Pending signup completion failed:', error);

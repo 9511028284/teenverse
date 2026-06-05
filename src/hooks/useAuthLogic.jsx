@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { setRememberedSessionPreference, supabase } from '../supabase'; 
 import { PASSWORD_SECURITY_ERROR, getPasswordSecurityStatus } from '../utils/passwordSecurity';
 import { isValidEmail, normalizeIndianPhone, toMsg91Identifier } from '../utils/validators';
+import { getPendingSignupProfile, removePendingSignupProfile, setPendingSignupProfile } from '../utils/pendingSignupProfile';
 
 // Safe environment boundary extractions with clean short-circuits
 const CLOUDFLARE_SITE_KEY = typeof window !== 'undefined' ? (import.meta.env.VITE_CLOUDFLARE_SITE_KEY || null) : null;
@@ -91,9 +92,32 @@ export const useAuthLogic = (onLogin) => {
 
   const getSignupPayload = () => buildSignupPayload(formData);
 
-  const completeSignupProfile = async (payload = getSignupPayload()) => {
+  const validateSignupPayload = () => {
+    if (!formData.name.trim() || formData.name.trim().length < 2) {
+      throw new Error('Enter your full name.');
+    }
+
+    if (!isValidEmail(formData.email)) {
+      throw new Error('Enter a valid email address.');
+    }
+
+    if (!formData.source) {
+      throw new Error('Please select how you discovered TeenVerseHub.');
+    }
+
+    if (formData.role === 'freelancer' && (!formData.dob || !age)) {
+      throw new Error('Select your date of birth.');
+    }
+
+    getPhoneIdentifiers();
+  };
+
+  const completeSignupProfile = async (payload = null) => {
+    const signupPayload = payload || getSignupPayload();
+    if (!payload) validateSignupPayload();
+
     const { data, error } = await supabase.functions.invoke('complete-signup', {
-      body: payload,
+      body: signupPayload,
     });
 
     if (error || !data?.success) {
@@ -102,6 +126,16 @@ export const useAuthLogic = (onLogin) => {
 
     return data;
   };
+
+  const checkPhoneVerification = useCallback(async (phone) => {
+    if (!phone) return false;
+    const { data, error } = await supabase.functions.invoke('check-phone-verification', {
+      body: { phone },
+    });
+
+    if (error || !data?.success) return false;
+    return Boolean(data.verified);
+  }, []);
 
   // Centralized data cleaning engine
   const updateField = (field, value) => {
@@ -161,14 +195,7 @@ export const useAuthLogic = (onLogin) => {
       if (freelancerData?.phone?.length > 5 || clientData?.phone?.length > 5) {
          onLogin(`Welcome back!`);
       } else {
-         let pendingProfile = null;
-         if (typeof window !== 'undefined') {
-           try {
-             pendingProfile = JSON.parse(window.localStorage.getItem('teenverse_pending_signup_profile') || 'null');
-           } catch {
-             pendingProfile = null;
-           }
-         }
+         const pendingProfile = getPendingSignupProfile();
 
          const pendingMatchesUser = pendingProfile?.email?.toLowerCase?.() === user.email?.toLowerCase?.();
 
@@ -181,15 +208,33 @@ export const useAuthLogic = (onLogin) => {
                body: buildSignupPayload(pendingProfile),
              });
              if (error || !data?.success) throw new Error(data?.error || AUTH_GENERIC_ERROR);
-             window.localStorage.removeItem('teenverse_pending_signup_profile');
+             removePendingSignupProfile();
              window.location.href = '/termsagreement';
              return;
            } catch (error) {
              const message = error?.message || AUTH_GENERIC_ERROR;
              const needsPhoneVerification = /phone verification/i.test(message);
              showToast(needsPhoneVerification ? "Phone verification expired. Please verify your mobile number again." : message);
-             setIsPhoneVerified(!needsPhoneVerification);
-             setStep(needsPhoneVerification ? 3 : 4);
+             if (needsPhoneVerification) {
+               setSocialUser(user);
+               setFormData(prev => ({
+                 ...prev,
+                 ...pendingProfile,
+                 email: user.email || pendingProfile.email || '',
+               }));
+               setIsPhoneVerified(false);
+               if (pendingProfile?.dob) {
+                 const birthDate = new Date(pendingProfile.dob);
+                 const today = new Date();
+                 let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+                 const monthDifference = today.getMonth() - birthDate.getMonth();
+                 if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) calculatedAge--;
+                 setAge(calculatedAge);
+               }
+               setViewMode('signup');
+               setStep(3);
+               return;
+             }
            } finally {
              setLoading(false);
              completingPendingSignupRef.current = false;
@@ -204,7 +249,9 @@ export const useAuthLogic = (onLogin) => {
            name: pendingProfile?.name || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || '', 
            role: pendingProfile?.role || 'freelancer' 
          }));
-         if (pendingMatchesUser && pendingProfile?.phone) setIsPhoneVerified(true);
+         if (pendingMatchesUser && pendingProfile?.phone) {
+           setIsPhoneVerified(await checkPhoneVerification(pendingProfile.phone));
+         }
          if (pendingMatchesUser && pendingProfile?.dob) {
            const birthDate = new Date(pendingProfile.dob);
            const today = new Date();
@@ -219,7 +266,7 @@ export const useAuthLogic = (onLogin) => {
     } catch {
       showToast("Session redirection fault encountered.");
     }
-  }, [onLogin, showToast]);
+  }, [checkPhoneVerification, onLogin, showToast]);
 
   // ─── AUTH INTERLOCK EVENTS ──────────────────────────────────────────────────
   useEffect(() => {
@@ -264,24 +311,35 @@ export const useAuthLogic = (onLogin) => {
   };
 
   const handleFinalSubmit = async () => {
-    if (viewMode !== 'login' && !agreedToTerms) return showToast("You must review and accept the Terms & Privacy configuration.");
-    if (viewMode !== 'login' && !formData.source) return showToast("Please select how you discovered our network platform.");
+    if (viewMode === 'login') {
+      if (!isValidEmail(formData.email) || !formData.password) return showToast(LOGIN_ERROR);
+    }
+
+    if (viewMode !== 'login') {
+      if (!agreedToTerms) return showToast("You must review and accept the Terms & Privacy configuration.");
+      try {
+        validateSignupPayload();
+      } catch (error) {
+        return showToast(error.message || AUTH_GENERIC_ERROR);
+      }
+    }
     
     setLoading(true);
     try {
       if (viewMode === 'login') {
-        if (!isValidEmail(formData.email) || !formData.password) return showToast(LOGIN_ERROR);
         setRememberedSessionPreference(rememberMe);
         const { error } = await supabase.auth.signInWithPassword({
-            email: formData.email, password: formData.password, options: { captchaToken } 
+            email: formData.email.trim().toLowerCase(), password: formData.password, options: { captchaToken } 
         });
         if (error) throw new Error(LOGIN_ERROR);
       } else {
         await completeSignup();
       }
+      turnstileRef.current?.reset?.();
+      setCaptchaToken(null);
     } catch (err) {
       showToast(err.message || AUTH_GENERIC_ERROR);
-      if (turnstileRef.current) turnstileRef.current.reset();
+      turnstileRef.current?.reset?.();
       setCaptchaToken(null); 
     } finally {
       setLoading(false);
@@ -313,13 +371,13 @@ export const useAuthLogic = (onLogin) => {
         }
 
         if (typeof window !== 'undefined') {
-          window.localStorage.setItem('teenverse_pending_signup_profile', JSON.stringify(signupPayload));
+          setPendingSignupProfile(signupPayload);
         }
         setVerificationSent(true);
     } else {
         await completeSignupProfile();
         if (typeof window !== 'undefined') {
-          window.localStorage.removeItem('teenverse_pending_signup_profile');
+          removePendingSignupProfile();
         }
 
 
@@ -346,6 +404,8 @@ export const useAuthLogic = (onLogin) => {
         setIsPhoneVerified(false);
         setFormData(prev => ({ ...prev, phone: e164Phone }));
         showToast("OTP sent to your mobile number.", "success");
+        turnstileRef.current?.reset?.();
+        setCaptchaToken(null);
     } catch (err) {
         showToast(err.message || "We couldn't send the OTP. Please try again.");
     } finally {
@@ -414,10 +474,12 @@ export const useAuthLogic = (onLogin) => {
         
       setShowResetVerify(true);
       showToast(RESET_SENT_MESSAGE, "success");
+      turnstileRef.current?.reset?.();
+      setCaptchaToken(null);
     } catch {
       showToast(RESET_SENT_MESSAGE, "success");
       setShowResetVerify(true);
-      if (turnstileRef.current) turnstileRef.current.reset();
+      turnstileRef.current?.reset?.();
       setCaptchaToken(null);
     } finally {
       setLoading(false);
