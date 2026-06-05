@@ -1,16 +1,32 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from './supabase'; 
 import Toast from './components/ui/Toast';
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { normalizeExpiredSubscription } from './utils/subscription';
+import { normalizeIndianPhone } from './utils/validators';
 
 // --- Pages (Only App/Dashboard logic remains) ---
 import Auth from './pages/Auth'; 
 import Dashboard from './pages/Dashboard';
 import TermsAgreement from './pages/TermsAgreement'; 
 import AdminDashboard from './pages/AdminPage';
+
+const PENDING_SIGNUP_PROFILE_KEY = 'teenverse_pending_signup_profile';
+
+const buildPendingSignupPayload = (profile = {}) => ({
+  role: profile.role || 'freelancer',
+  name: String(profile.name || '').trim(),
+  email: String(profile.email || '').trim().toLowerCase(),
+  phone: normalizeIndianPhone(profile.phone),
+  nationality: profile.nationality || 'India',
+  source: profile.source || '',
+  dob: profile.dob || '',
+  gender: profile.gender || 'Other',
+  org: profile.org || '',
+  referralCode: profile.referralCode || '',
+});
 
 // --- 1. Helper Wrappers ---
 const LegalWrapper = () => {
@@ -64,6 +80,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
   const [loading, setLoading] = useState(true);
+  const completingPendingSignupRef = useRef(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -110,6 +127,11 @@ export default function App() {
     }
   }, [location, navigate]);
 
+  const showToast = useCallback((message, type = 'success') => { 
+      setToast({ message, type });
+      setTimeout(() => setToast(null), 4000); 
+  }, []);
+
   const handleSession = useCallback(async function handleSessionImpl(session, attempts = 0) {
     const currentPath = location.pathname;
     
@@ -127,6 +149,36 @@ export default function App() {
     const u = session.user;
 
     try {
+      let completedPendingSignup = false;
+      const pendingRaw = window.localStorage.getItem(PENDING_SIGNUP_PROFILE_KEY);
+      const pendingProfile = pendingRaw ? JSON.parse(pendingRaw) : null;
+      const pendingMatchesUser = pendingProfile?.email?.toLowerCase?.() === u.email?.toLowerCase?.();
+
+      if (pendingMatchesUser && pendingProfile?.phone && !completingPendingSignupRef.current) {
+        completingPendingSignupRef.current = true;
+
+        try {
+          const { data, error } = await supabase.functions.invoke('complete-signup', {
+            body: buildPendingSignupPayload(pendingProfile),
+          });
+
+          if (error || !data?.success) throw new Error(data?.error || 'Profile completion failed');
+
+          window.localStorage.removeItem(PENDING_SIGNUP_PROFILE_KEY);
+          completedPendingSignup = true;
+        } catch (error) {
+          console.warn('Pending signup completion failed:', error);
+          showToast(
+            /phone verification/i.test(error?.message || '')
+              ? 'Phone verification expired. Please verify your mobile number again.'
+              : 'Finish account setup to unlock your full dashboard.',
+            'error',
+          );
+        } finally {
+          completingPendingSignupRef.current = false;
+        }
+      }
+
       // 1. ADMIN
       const { data: adminCheck } = await supabase.from('admins').select('*').eq('email', u.email).maybeSingle();
       if (adminCheck) {
@@ -140,18 +192,26 @@ export default function App() {
 
       // 2. CLIENT
       let { data: c } = await supabase.from('clients').select('*').eq('id', u.id).maybeSingle();
-      if (c) { 
+      if (c?.phone?.length > 5) { 
           setUser({ ...c, type: 'client' }); 
-          if (currentPath === '/' || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
+          if (completedPendingSignup && !isTermsPage) {
+              navigate('/termsagreement');
+          } else if (currentPath === '/' || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
               navigate('/dashboard');
           }
+          setLoading(false);
+          return;
+      }
+      if (c) {
+          setUser(null);
+          if (currentPath !== '/') navigate('/');
           setLoading(false);
           return;
       }
 
       // 3. FREELANCER
       let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
-      if (f) { 
+      if (f?.phone?.length > 5) { 
           const normalized = normalizeExpiredSubscription(f);
           if (normalized !== f) {
               try {
@@ -163,9 +223,17 @@ export default function App() {
           }
           f = normalized;
           setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] });
-          if (currentPath === '/' || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
+          if (completedPendingSignup && !isTermsPage) {
+              navigate('/termsagreement');
+          } else if (currentPath === '/' || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
               navigate('/dashboard');
           }
+          setLoading(false);
+          return;
+      }
+      if (f) {
+          setUser(null);
+          if (currentPath !== '/') navigate('/');
           setLoading(false);
           return;
       }
@@ -198,7 +266,7 @@ export default function App() {
       console.error("Profile Error:", err);
       setLoading(false);
     }
-  }, [location.pathname, navigate]);
+  }, [location.pathname, navigate, showToast]);
 
   // Auth & Session Logic
   useEffect(() => {
@@ -234,11 +302,6 @@ export default function App() {
 
   const toggleTheme = () => setDarkMode(!darkMode);
   
-  const showToast = (message, type = 'success') => { 
-      setToast({ message, type });
-      setTimeout(() => setToast(null), 4000); 
-  };
-
  if (loading) {
     return (
       <div className="h-[100dvh] w-full bg-[#050505] flex items-center justify-center text-indigo-500">

@@ -1,33 +1,38 @@
+'use client'
+
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Check, ShieldAlert, Scale, ArrowLeft } from 'lucide-react';
 
-// --- 1. PREMIUM DYNAMIC TOAST ---
+// ─── 1. MINIMAL DYNAMIC TOAST ────────────────────────────────────────────────
 export const Toast = ({ toast }) => (
   <AnimatePresence>
     {toast && (
       <motion.div 
-         initial={{ opacity: 0, y: -40, scale: 0.8, filter: "blur(10px)" }}
-         animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-         exit={{ opacity: 0, y: -20, scale: 0.9, filter: "blur(10px)" }}
-         transition={{ type: "spring", stiffness: 400, damping: 25 }}
-         className="fixed top-6 left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-6 z-[100] w-[90%] md:w-auto"
+         initial={{ opacity: 0, y: -18, scale: 0.96 }}
+         animate={{ opacity: 1, y: 0, scale: 1 }}
+         exit={{ opacity: 0, y: -14, scale: 0.98 }}
+         transition={{ duration: 0.28, ease: [0.25, 1, 0.5, 1] }}
+         className="fixed top-4 left-1/2 z-[100] w-[calc(100vw-1rem)] max-w-[420px] -translate-x-1/2 sm:top-6 sm:w-[min(420px,calc(100vw-2rem))]"
+         role="status"
+         aria-live="polite"
       >
         <div className={`
-          px-5 py-4 rounded-2xl shadow-2xl border flex items-center gap-4 backdrop-blur-2xl transition-colors duration-300
+          min-h-14 rounded-[28px] border px-4 py-3 shadow-[0_18px_50px_-28px_rgba(0,0,0,0.75)] backdrop-blur-2xl transition-colors duration-150
+          flex items-start gap-3 bg-zinc-950/95 text-white dark:bg-white/95 dark:text-zinc-950
           ${toast.type === 'success' 
-            ? 'bg-green-50/90 dark:bg-green-500/10 border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-400 shadow-green-500/20' 
-            : 'bg-red-50/90 dark:bg-red-500/10 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400 shadow-red-500/20'
+            ? 'border-emerald-400/30 dark:border-emerald-300/50' 
+            : 'border-rose-400/30 dark:border-rose-300/50'
           }
         `}>
-           <div className={`p-2 rounded-xl ${toast.type === 'success' ? 'bg-green-100 dark:bg-green-500/20' : 'bg-red-100 dark:bg-red-500/20'}`}>
-             {toast.type === 'success' ? <Check size={20} strokeWidth={3} /> : <ShieldAlert size={20} strokeWidth={3} />}
+           <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${toast.type === 'success' ? 'bg-emerald-400/15 text-emerald-300 dark:bg-emerald-500/10 dark:text-emerald-600' : 'bg-rose-400/15 text-rose-300 dark:bg-rose-500/10 dark:text-rose-600'}`}>
+             {toast.type === 'success' ? <Check size={16} strokeWidth={2.5} /> : <ShieldAlert size={16} strokeWidth={2.5} />}
            </div>
-           <div>
-             <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-0.5">
-               {toast.type === 'success' ? 'System Success' : 'System Alert'}
+           <div className="min-w-0 flex-1 space-y-0.5 text-left">
+             <p className={`text-[10px] font-mono font-bold uppercase tracking-wider ${toast.type === 'success' ? 'text-emerald-300 dark:text-emerald-600' : 'text-rose-300 dark:text-rose-600'}`}>
+               {toast.type === 'success' ? 'Success' : 'Security Alert'}
              </p>
-             <span className="font-bold text-sm leading-tight block">{toast.message}</span>
+             <span className="block whitespace-normal break-words text-sm font-semibold leading-snug text-white dark:text-zinc-950">{toast.message}</span>
            </div>
         </div>
       </motion.div>
@@ -35,101 +40,92 @@ export const Toast = ({ toast }) => (
   </AnimatePresence>
 );
 
-// --- 2. SEGMENTED STEP INDICATOR ---
+// ─── 2. FLAT STEP INDICATOR ──────────────────────────────────────────────────
 export const StepIndicator = ({ step }) => (
-    <div className="flex gap-2 mb-8 justify-center items-center">
-        {[1, 2, 3, 4].map(i => (
-            <motion.div 
-                key={i} 
-                layout 
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className={`h-2 rounded-full transition-colors duration-500 relative overflow-hidden ${
-                    step === i 
-                        ? 'w-12 bg-indigo-600 dark:bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)]' 
-                        : step > i 
-                            ? 'w-8 bg-indigo-300 dark:bg-indigo-900' 
-                            : 'w-2 bg-slate-200 dark:bg-white/10'
-                }`}
-            >
-                {/* Glossy shine effect for active step */}
-                {step === i && (
-                    <motion.div 
-                        initial={{ x: '-100%' }}
-                        animate={{ x: '200%' }}
-                        transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                        className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/50 to-transparent skew-x-12"
-                    />
-                )}
-            </motion.div>
-        ))}
-    </div>
+  <div className="flex gap-1.5 mb-6 justify-center items-center select-none">
+    {[1, 2, 3, 4].map(i => (
+      <div 
+        key={i} 
+        className={`h-1 rounded-full transition-all duration-300 ${
+          step === i 
+            ? 'w-10 bg-indigo-600 dark:bg-zinc-100' 
+            : step > i 
+              ? 'w-6 bg-indigo-200 dark:bg-zinc-800' 
+              : 'w-2 bg-neutral-100 dark:bg-zinc-900'
+        }`}
+      />
+    ))}
+  </div>
 );
 
-// --- 3. TACTILE SOCIAL BUTTON ---
+// ─── 3. RESTRUCTURED SOCIAL BUTTON ───────────────────────────────────────────
 export const SocialButton = ({ icon, onClick, label }) => (
-    <button 
-      type="button" 
-      onClick={onClick} 
-      title={label}
-      className="flex-1 bg-black dark:bg-white/9 border border-slate-200 dark:border-white/10 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:bg-slate-50 dark:hover:bg-white/10 p-4 rounded-2xl flex justify-center items-center transition-all duration-300 group relative overflow-hidden shadow-sm hover:shadow-lg dark:shadow-none active:scale-95" 
-    >
-        {/* Hover Aura */}
-        <div className="absolute inset-0 bg-indigo-500/10 dark:bg-indigo-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-        <div className="relative transform group-hover:-translate-y-1 transition-transform duration-300">{icon}</div>
-    </button>
-);
-
-// --- 4. VISION PRO STYLE FLOATING NOTIF ---
-// (Now supports a 3D icon URL for maximum aesthetic)
-export const FloatingNotif = ({ icon: Icon, image3DUrl, title, sub, delay, x, y }) => (
-    <motion.div 
-        initial={{ opacity: 0, scale: 0.8, filter: "blur(10px)" }}
-        animate={{ 
-            opacity: [0, 1, 1, 0], 
-            scale: [0.8, 1, 1, 0.9],
-            y: [0, -15, -15, -30], 
-            x: [0, x, x, x + 20],
-            filter: ["blur(10px)", "blur(0px)", "blur(0px)", "blur(10px)"]
-        }}
-        transition={{ duration: 6, delay: delay, repeat: Infinity, repeatDelay: 5, ease: "easeInOut" }}
-        className="absolute z-20 bg-white/80 dark:bg-black/40 backdrop-blur-2xl border border-white/40 dark:border-white/10 p-3 rounded-3xl flex items-center gap-4 shadow-2xl dark:shadow-[0_20px_40px_rgba(0,0,0,0.5)] w-56 pointer-events-none"
-        style={{ top: y, left: x }}
-    >
-        <div className="relative w-12 h-12 flex-shrink-0 flex items-center justify-center bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-500/20 dark:to-purple-600/20 rounded-2xl border border-white/50 dark:border-white/10 shadow-inner">
-            {image3DUrl ? (
-                <img src={image3DUrl} alt="icon" className="w-10 h-10 object-contain drop-shadow-md" />
-            ) : (
-                <Icon size={20} className="text-indigo-600 dark:text-indigo-400" />
-            )}
-        </div>
-        <div className="flex flex-col">
-            <div className="text-[9px] font-black text-slate-400 dark:text-gray-400 uppercase tracking-widest">{title}</div>
-            <div className="text-sm font-bold text-slate-800 dark:text-white leading-tight mt-0.5">{sub}</div>
-        </div>
-    </motion.div>
-);
-
-// --- 5. EDITORIAL BACK BUTTON ---
-export const BackButton = ({ onClick, label = "Return" }) => (
-    <button 
-      onClick={onClick} 
-      className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/10 mb-8 text-xs font-black uppercase tracking-widest transition-all group active:scale-95 shadow-sm"
-    >
-        <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform duration-300"/> {label}
-    </button>
-);
-
-// --- 6. CYBERPUNK / BLUEPRINT FOOTER ---
-export const LegalFooter = ({ mobile }) => (
-    <div className={`mt-8 pt-6 border-t border-slate-200 dark:border-white/10 text-[10px] text-slate-500 dark:text-gray-500 leading-tight font-mono uppercase tracking-wide ${mobile ? 'md:hidden' : 'hidden md:block'}`}>
-        <div className="flex items-center gap-2 mb-3 opacity-80 hover:opacity-100 transition-opacity cursor-default group">
-            <div className="p-1.5 rounded-md bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                <Scale size={12} />
-            </div>
-            <span>
-                <span className="font-bold text-slate-700 dark:text-gray-300">Legal Protocol: </span> TeenVerseHub is a technology intermediary
-            </span>
-        </div>
-        <p className="opacity-50">© 2026 TeenVerseHub Matrix. All rights secured via cryptographic hash.</p>
+  <button 
+    type="button" 
+    onClick={onClick} 
+    title={label}
+    className="flex-1 h-11 border border-neutral-200 bg-white hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/80 rounded-xl flex items-center justify-center transition-all shadow-sm active:scale-[0.99] group" 
+  >
+    <div className="text-neutral-700 dark:text-zinc-300 group-hover:scale-105 transition-transform duration-150">
+      {icon}
     </div>
+  </button>
+);
+
+// ─── 4. FLAT EDITORIAL FLOATING NOTIFICATION ─────────────────────────────────
+export const FloatingNotif = ({ icon: Icon, image3DUrl, title, sub, delay, x, y }) => {
+  const reduced = useReducedMotion();
+  if (reduced) return null;
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: y + 10 }}
+      animate={{ 
+        opacity: [0, 1, 1, 0], 
+        y: [y + 10, y, y, y - 10],
+      }}
+      transition={{ duration: 6, delay: delay, repeat: Infinity, repeatDelay: 4, ease: "easeInOut" }}
+      className="absolute z-20 bg-white/90 border border-neutral-200 p-3 rounded-xl flex items-center gap-3 shadow-md dark:border-zinc-800 dark:bg-zinc-900/90 w-52 pointer-events-none text-left"
+      style={{ top: y, left: x }}
+    >
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-50 border border-neutral-100 dark:bg-zinc-800 dark:border-zinc-700">
+        {image3DUrl ? (
+          <img src={image3DUrl} alt="" className="w-5 h-5 object-contain" />
+        ) : (
+          <Icon size={14} className="text-neutral-700 dark:text-zinc-300" />
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className="text-[9px] font-mono font-bold text-neutral-400 dark:text-zinc-500 uppercase tracking-wider truncate">{title}</div>
+        <div className="text-xs font-bold text-neutral-900 dark:text-zinc-100 truncate mt-0.5">{sub}</div>
+      </div>
+    </motion.div>
+  );
+};
+
+// ─── 5. TYPOGRAPHIC BACK BUTTON ──────────────────────────────────────────────
+export const BackButton = ({ onClick, label = "Return" }) => (
+  <button 
+    type="button"
+    onClick={onClick} 
+    className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-neutral-900 dark:hover:text-zinc-200 transition-colors mb-6 group border-none bg-transparent p-0"
+  >
+    <ArrowLeft size={13} className="transition-transform duration-150 group-hover:-translate-x-0.5" />
+    <span>{label}</span>
+  </button>
+);
+
+// ─── 6. MINIMALIST PLATFORM LEGAL FINE PRINT ─────────────────────────────────
+export const LegalFooter = ({ mobile }) => (
+  <div className={`pt-4 border-t border-neutral-100 dark:border-zinc-900 text-[11px] leading-relaxed text-neutral-400 dark:text-zinc-500 ${mobile ? 'md:hidden' : 'hidden md:block'}`}>
+    <div className="flex items-start gap-2 text-left mb-2">
+      <Scale size={13} className="text-neutral-400 shrink-0 mt-0.5" />
+      <p className="font-medium">
+        <span className="font-bold text-neutral-700 dark:text-zinc-400">Legal Framework:</span> TeenVerseHub operates strictly as a secure technology intermediary workspace.
+      </p>
+    </div>
+    <p className="font-mono text-[10px]" style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+      &copy; 2026 TeenVerseHub. All rights protected.
+    </p>
+  </div>
 );
