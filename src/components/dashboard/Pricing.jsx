@@ -76,7 +76,7 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
     {
       name: 'Pro',
       planId: 'pro',
-      priceAmount: isAnnual ? 199 : 999,
+      priceAmount: isAnnual ? 999 : 199, // ✨ FIXED: Large price for annual, small price for monthly
       price: '₹999',
       monthlyPrice: '₹199',
       duration: isAnnual ? '/ year' : '/ month',
@@ -101,7 +101,7 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
     {
       name: 'Elite',
       planId: 'elite',
-      priceAmount: isAnnual ? 399 : 3999,
+      priceAmount: isAnnual ? 3999 : 399, // ✨ FIXED: Large price for annual, small price for monthly
       price: '₹3999',
       monthlyPrice: '₹399',
       duration: isAnnual ? '/ year' : '/ month',
@@ -440,7 +440,7 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
                  <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Subscription Summary</h4>
                  
                  <div className="flex justify-between items-center text-sm text-slate-600 dark:text-gray-400 mb-3">
-                   <span>{plan.name} Plan ({isAnnual && plan.name !== 'Starter' ? 'Annually' : plan.name === 'Starter' ? '2 Years' : 'Monthly'})</span>
+                   <span>{plan.name} Plan ({isAnnual && plan.name !== 'Starter' ? 'Annually' : plan.name === 'Starter' ? '1 Years' : 'Monthly'})</span>
                    <span className="font-bold text-slate-900 dark:text-white">₹{totalCost.toFixed(2)}</span>
                  </div>
                  
