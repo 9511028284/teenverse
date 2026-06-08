@@ -12,6 +12,19 @@ const PLAN_DURATIONS: Record<string, number> = {
   Elite: 1,
 };
 
+const PLAN_NAME_ALIASES: Record<string, string> = {
+  base: "Basic",
+  basic: "Basic",
+  starter: "Starter",
+  pro: "Pro",
+  elite: "Elite",
+};
+
+const normalizePlanName = (planName?: string | null) => {
+  const key = (planName || "Basic").trim().toLowerCase();
+  return PLAN_NAME_ALIASES[key] ?? "Basic";
+};
+
 const getDurationMonths = (planName: string, isAnnual: boolean) => {
   if (planName === "Starter") return PLAN_DURATIONS.Starter;
   return isAnnual ? 12 : (PLAN_DURATIONS[planName] ?? 1);
@@ -76,10 +89,15 @@ serve(async (req) => {
       walletDeduction = 0,
       isAnnual = false,
       useWallet = false,
-      orderId,
+      orderId: payloadOrderId,
+      order_id: payloadOrderIdSnake,
+      cashfreeOrderId,
+      cashfree_order_id: cashfreeOrderIdSnake,
     } = payload;
+    const orderId = payloadOrderId || payloadOrderIdSnake || cashfreeOrderId || cashfreeOrderIdSnake || null;
+    const selectedPlanName = normalizePlanName(planName);
 
-    if (!["Starter", "Pro", "Elite"].includes(planName)) {
+    if (!["Starter", "Pro", "Elite"].includes(selectedPlanName)) {
       throw new Error("Invalid plan selected.");
     }
 
@@ -99,14 +117,15 @@ serve(async (req) => {
       throw new Error("Freelancer profile not found.");
     }
 
-    const hasPremiumPlan = existingProfile.current_plan && existingProfile.current_plan !== "Basic";
+    const currentPlan = normalizePlanName(existingProfile.current_plan);
+    const hasPremiumPlan = currentPlan !== "Basic";
     const isNotExpired = existingProfile.plan_expires_at &&
       new Date(existingProfile.plan_expires_at) > new Date();
 
     if (hasPremiumPlan && isNotExpired) {
       const expiryDate = new Date(existingProfile.plan_expires_at).toLocaleDateString();
       throw new Error(
-        `You already have an active ${existingProfile.current_plan} subscription. You cannot switch plans until it expires on ${expiryDate}.`,
+        `You already have an active ${currentPlan} subscription. You cannot switch plans until it expires on ${expiryDate}.`,
       );
     }
 
@@ -117,8 +136,8 @@ serve(async (req) => {
 
     const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc("grant_subscription_access", {
       p_user_id: user.id,
-      p_plan_name: planName,
-      p_duration_months: getDurationMonths(planName, isAnnual),
+      p_plan_name: selectedPlanName,
+      p_duration_months: getDurationMonths(selectedPlanName, isAnnual),
       p_paid_amount: finalPayable,
       p_wallet_amount: walletAmount,
       p_order_id: orderId ?? null,
@@ -136,7 +155,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Successfully upgraded to ${planName}!`,
+        message: `Successfully upgraded to ${selectedPlanName}!`,
         profile,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },

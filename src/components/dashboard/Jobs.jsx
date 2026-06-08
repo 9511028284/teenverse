@@ -380,7 +380,7 @@ const Jobs = ({
   };
 
   return (
-    <div className="min-h-screen space-y-8 animate-fade-in pb-20 relative">
+    <div className={`min-h-screen animate-fade-in pb-20 relative ${isClient ? 'mx-auto w-full max-w-6xl space-y-6' : 'space-y-8'}`}>
       
     {/* --- COMMAND BAR --- */}
       <div className="sticky top-6 z-[100] mx-auto max-w-4xl px-4">
@@ -481,8 +481,8 @@ const Jobs = ({
 
       {/* --- AI MATCH RESULTS --- */}
       {aiResults && isClient && (
-        <div className="px-4 mt-12 mb-8 animate-fade-in-up">
-            <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+        <div className="mx-auto w-full max-w-5xl px-4 mt-10 mb-6 animate-fade-in-up">
+            <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center justify-center gap-2 text-center">
                 <Sparkles size={18} className="text-indigo-500"/> Top Recommended Professionals
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -499,15 +499,15 @@ const Jobs = ({
       )}
 
       {/* --- MAIN FEED --- */}
-      <div className="px-4 mt-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+      <div className={isClient ? 'mx-auto w-full max-w-5xl px-4 mt-2' : 'px-4 mt-4'}>
+          <div className={`flex flex-col mb-6 gap-4 ${isClient ? 'items-center text-center' : 'md:flex-row md:items-center justify-between'}`}>
               
               {isClient ? (
                   <div>
-                      <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
+                      <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight flex flex-wrap items-center justify-center gap-2">
                           Verified Talent Directory <ShieldCheck className="text-emerald-500" size={24}/>
                       </h2>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">Browse our curated list of top-rated professionals ready for your next project.</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium max-w-2xl mx-auto">Browse our curated list of top-rated professionals ready for your next project.</p>
                   </div>
               ) : (
                   <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight uppercase italic">
@@ -544,10 +544,10 @@ const Jobs = ({
 
       {/* --- EMPTY STATE --- */}
       {((!isClient && publicMissions.length === 0) || (isClient && freelancersList.length === 0)) && (
-        <div className={`flex flex-col items-center justify-center ${isClient ? 'py-12' : 'py-32 border-2 border-dashed border-gray-200 dark:border-white/5 rounded-[40px] bg-gray-50 dark:bg-[#0B0F19] m-4 text-center'}`}>
+        <div className={`flex flex-col items-center justify-center ${isClient ? 'mx-auto w-full max-w-5xl px-4 pb-12' : 'py-32 border-2 border-dashed border-gray-200 dark:border-white/5 rounded-[40px] bg-gray-50 dark:bg-[#0B0F19] m-4 text-center'}`}>
            
            {isClient ? (
-               <div className="w-full max-w-5xl mx-auto bg-white dark:bg-[#0F172A] border border-gray-200 dark:border-white/10 rounded-[2rem] p-8 md:p-12 shadow-xl">
+               <div className="w-full bg-white dark:bg-[#0F172A] border border-gray-200 dark:border-white/10 rounded-[2rem] p-8 md:p-12 shadow-xl">
                    <div className="text-center mb-10">
                        <h3 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white mb-4">Hire Top-Tier Talent, Risk-Free</h3>
                        <p className="text-gray-500 dark:text-gray-400 text-sm md:text-base max-w-2xl mx-auto leading-relaxed">

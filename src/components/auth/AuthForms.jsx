@@ -64,8 +64,8 @@ const GithubIcon = memo(() => (
 
 const VisualLogoMark = memo(() => (
   <div className="inline-flex items-center justify-center gap-2 font-bold text-2xl tracking-tight select-none mb-10 box-border">
-   
-    <span className="text-neutral-900 dark:text-zinc-50 tracking-tighter">.</span>
+    
+    <span className="text-neutral-900 dark:text-zinc-50 tracking-tighter"></span>
   </div>
 ));
 
@@ -292,7 +292,7 @@ export const LoginView = memo(({ state, actions, turnstileRef }) => {
           <motion.div variants={itemVariants} className="mt-5 box-border">
               {state.CLOUDFLARE_SITE_KEY && (
                   <div className="flex justify-center py-2 bg-neutral-50 dark:bg-zinc-900/50 border border-neutral-200 dark:border-zinc-800 rounded-xl mb-4 min-h-[65px] items-center box-border">
-                      <Turnstile ref={turnstileRef} siteKey={state.CLOUDFLARE_SITE_KEY} onSuccess={actions.setCaptchaToken} theme="light" />
+                      <Turnstile ref={turnstileRef} siteKey={state.CLOUDFLARE_SITE_KEY} onSuccess={actions.setCaptchaToken} onExpire={() => actions.setCaptchaToken(null)} onError={() => actions.setCaptchaToken(null)} theme="light" />
                   </div>
               )}
               <ActionButton onClick={actions.handleFinalSubmit} loading={state.loading}>
@@ -502,7 +502,7 @@ export const SignupView = memo(({ state, actions, turnstileRef }) => {
 
                       {state.CLOUDFLARE_SITE_KEY && (
                           <div className="flex justify-center py-2 bg-neutral-50 dark:bg-zinc-900/50 border border-neutral-200 dark:border-zinc-800 rounded-xl min-h-[65px] items-center box-border w-full">
-                              <Turnstile ref={turnstileRef} siteKey={state.CLOUDFLARE_SITE_KEY} onSuccess={actions.setCaptchaToken} theme="light" />
+                              <Turnstile ref={turnstileRef} siteKey={state.CLOUDFLARE_SITE_KEY} onSuccess={actions.setCaptchaToken} onExpire={() => actions.setCaptchaToken(null)} onError={() => actions.setCaptchaToken(null)} theme="light" />
                           </div>
                       )}
                       
@@ -544,7 +544,7 @@ export const ForgotPasswordView = memo(({ state, actions, turnstileRef }) => {
                        
                       {state.CLOUDFLARE_SITE_KEY && (
                           <div className="flex justify-center py-2 bg-neutral-50 dark:bg-zinc-900/50 border border-neutral-200 dark:border-zinc-800 rounded-xl min-h-[65px] items-center box-border w-full">
-                              <Turnstile ref={turnstileRef} siteKey={state.CLOUDFLARE_SITE_KEY} onSuccess={actions.setCaptchaToken} theme="light" />
+                              <Turnstile ref={turnstileRef} siteKey={state.CLOUDFLARE_SITE_KEY} onSuccess={actions.setCaptchaToken} onExpire={() => actions.setCaptchaToken(null)} onError={() => actions.setCaptchaToken(null)} theme="light" />
                           </div>
                       )}
                       <ActionButton loading={state.loading}>

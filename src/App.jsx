@@ -11,6 +11,7 @@ import { getPendingSignupProfile, removePendingSignupProfile } from './utils/pen
 // --- Pages (Only App/Dashboard logic remains) ---
 import Auth from './pages/Auth'; 
 import Dashboard from './pages/Dashboard';
+import ClientDashboard from './pages/ClientDashboard';
 import TermsAgreement from './pages/TermsAgreement'; 
 import AdminDashboard from './pages/AdminPage';
 
@@ -110,7 +111,7 @@ export default function App() {
 
           // Internal App Routing
           case 'auth': navigate('/'); break; // Auth is now the root page
-          case 'dashboard': navigate('/dashboard'); break;
+          case 'dashboard': navigate(user?.type === 'client' ? '/client-dashboard' : '/dashboard'); break;
           case 'legal': window.location.href = 'http://teenversehub.in/legal#official-documents'; break;
           case 'admin': navigate('/admin'); break;
           default: navigate('/'); 
@@ -194,8 +195,8 @@ export default function App() {
           setUser({ ...c, type: 'client' }); 
           if (completedPendingSignup && !isTermsPage) {
               navigate('/termsagreement');
-          } else if (currentPath === '/' || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
-              navigate('/dashboard');
+          } else if (currentPath === '/' || (!currentPath.startsWith('/client-dashboard') && !isTermsPage && !isPublic)) {
+              navigate('/client-dashboard');
           }
           setLoading(false);
           return;
@@ -329,7 +330,7 @@ export default function App() {
 
         {/* Legal & Onboarding */}
         <Route path="/legal" element={<LegalWrapper />} />
-        <Route path="/termsagreement" element={<TermsAgreement onAgree={() => navigate('/dashboard')} />} />
+        <Route path="/termsagreement" element={<TermsAgreement onAgree={() => navigate(user?.type === 'client' ? '/client-dashboard' : '/dashboard')} />} />
         <Route path="/parent-approval" element={<ParentApprovalWrapper />} />
 
         {/* Secure Dashboards */}
@@ -342,8 +343,23 @@ export default function App() {
             ) : <Navigate to="/" />
         } />
 
+        <Route path="/client-dashboard/*" element={
+            user?.type === 'client' ? (
+                <ClientDashboard 
+                    user={user} 
+                    setUser={setUser} 
+                    onLogout={async () => { await supabase.auth.signOut(); navigate('/'); showToast('Logged out successfully'); }} 
+                    showToast={showToast} 
+                    darkMode={darkMode} 
+                    toggleTheme={toggleTheme} 
+                />
+            ) : user?.type === 'freelancer' ? <Navigate to="/dashboard" /> : <Navigate to="/" />
+        } />
+
         <Route path="/dashboard/*" element={
-            user && (user.type === 'client' || user.type === 'freelancer') ? (
+            user?.type === 'client' ? (
+                <Navigate to="/client-dashboard" />
+            ) : user?.type === 'freelancer' ? (
                 <Dashboard 
                     user={user} 
                     setUser={setUser} 

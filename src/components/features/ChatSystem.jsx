@@ -48,15 +48,19 @@ const processCashfreePayment = async (params, onSuccess, onFail) => {
       }
     });
 
-    if (orderError || !orderData?.payment_session_id) throw new Error("Order creation failed.");
+    const createdOrderId = orderData?.order_id || orderData?.orderId;
+    if (orderError || !orderData?.payment_session_id || !createdOrderId) throw new Error("Order creation failed.");
 
     await cashfree.checkout({ paymentSessionId: orderData.payment_session_id, redirectTarget: "_modal" });
 
     const { data: verifyData } = await supabase.functions.invoke('payment-gateway', {
-      body: { action: 'VERIFY_ORDER', orderId: orderData.order_id, appId: params.appId }
+      body: { action: 'VERIFY_ORDER', orderId: createdOrderId, appId: params.appId }
     });
 
-    if (verifyData?.success) onSuccess(verifyData);
+    if (verifyData?.success) {
+      const verifiedOrderId = verifyData.order_id || verifyData.orderId || verifyData?.order?.order_id || createdOrderId;
+      onSuccess({ ...verifyData, order_id: verifiedOrderId, orderId: verifiedOrderId });
+    }
     else onFail("Payment not completed or failed.");
 
   } catch (err) {

@@ -118,7 +118,8 @@ const processCashfreePayment = async (params, onSuccess, onFail) => {
       }
     });
 
-    if (orderError || !orderData?.payment_session_id) throw new Error("Order creation failed.");
+    const createdOrderId = orderData?.order_id || orderData?.orderId;
+    if (orderError || !orderData?.payment_session_id || !createdOrderId) throw new Error("Order creation failed.");
 
     await cashfree.checkout({
       paymentSessionId: orderData.payment_session_id,
@@ -126,11 +127,12 @@ const processCashfreePayment = async (params, onSuccess, onFail) => {
     });
 
     const { data: verifyData } = await supabase.functions.invoke('payment-gateway', {
-      body: { action: 'VERIFY_ORDER', orderId: orderData.order_id, appId: params.appId }
+      body: { action: 'VERIFY_ORDER', orderId: createdOrderId, appId: params.appId }
     });
 
     if (verifyData?.success) {
-      onSuccess(verifyData);
+      const verifiedOrderId = verifyData.order_id || verifyData.orderId || verifyData?.order?.order_id || createdOrderId;
+      onSuccess({ ...verifyData, order_id: verifiedOrderId, orderId: verifiedOrderId });
     } else {
       onFail("Payment not completed or failed.");
     }
@@ -1170,7 +1172,7 @@ const handlePostJob = async (e) => {
   };
 
   const handleAppAction = async (action, app, payload = null) => {
-    if (action === 'view_profile') { handleViewProfile(app.freelancer_id); return; }
+    if (action === 'view_profile') { handleViewProfile(app.freelancer_id || app.id); return; }
     
     if (action === 'withdraw_funds') {
         checkKycLock('withdraw_funds'); 
@@ -1505,7 +1507,7 @@ const handlePostJob = async (e) => {
             body: { 
                 planId: plan.planId, 
                 planName: plan.name, 
-                amount: walletDeduction, 
+                amount: 0, 
                 isAnnual, 
                 useWallet: true,
                 walletDeduction
@@ -1555,7 +1557,7 @@ const handlePostJob = async (e) => {
                     walletDeduction: walletDeduction,
                     isAnnual, 
                     useWallet: walletDeduction > 0,
-                    orderId: verifyData.order_id 
+                    orderId: verifyData.order_id || verifyData.orderId
                 }
             });
 

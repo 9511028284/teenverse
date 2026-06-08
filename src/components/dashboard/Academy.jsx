@@ -1,7 +1,7 @@
 import React from 'react';
 import { Trophy, ShieldCheck, Zap, Award, BookOpen, Star, BrainCircuit } from 'lucide-react';
 
-// --- 🟢 STATIC GENERAL QUIZZES (Hardcoded Content) ---
+// --- STATIC GENERAL QUIZZES ---
 const STATIC_QUIZZES = [
   {
     id: 'intro_freelance',
@@ -62,96 +62,112 @@ const STATIC_QUIZZES = [
 ];
 
 const Academy = ({ unlockedSkills, setModal, quizzes }) => {
-  
   const earnedBadges = Object.entries(quizzes).filter(([key]) => unlockedSkills.includes(key));
 
   return (
-    <div className="animate-fade-in pb-20 space-y-12">
+    <div className="animate-fade-in pb-20 space-y-8 sm:space-y-12">
       
-      {/* 1. HEADER */}
-      <div className="relative rounded-[40px] overflow-hidden bg-[#020617] border border-white/10 shadow-2xl group p-10">
-         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-soft-light"></div>
-         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/20 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/3"></div>
+      {/* 1. HERO ACADEMY BANNER */}
+      <div className="relative rounded-[32px] overflow-hidden bg-slate-900 border border-slate-200/60 dark:border-white/[0.05] shadow-[inset_0_3px_6px_rgba(255,255,255,0.1),_0_12px_28px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.08),_0_20px_40px_rgba(0,0,0,0.4)] p-8 sm:p-10">
+         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-overlay pointer-events-none" />
+         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/20 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3 pointer-events-none dark:bg-indigo-500/10" />
          
-         <div className="relative z-10">
-             <h2 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter mb-4">
-                TEEN<span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500">VERSEHUB</span> ACADEMY
+         <div className="relative z-10 space-y-2">
+             <span className="inline-flex items-center gap-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
+                Ecosystem Education
+             </span>
+             <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-none pt-1">
+                TEENVERSE<span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">HUB</span> ACADEMY
              </h2>
-             <p className="text-gray-400 max-w-lg font-light leading-relaxed">
-                Complete orientation modules to earn XP. Apply for jobs to unlock advanced skill certifications.
+             <p className="text-slate-400 max-w-lg text-xs sm:text-sm font-medium leading-relaxed pt-1">
+                Complete orientation modules to earn critical account energy. Apply for real-world projects to unlock verifiable skill badges.
              </p>
          </div>
       </div>
 
-      {/* 2. GENERAL TRAINING (STATIC QUIZZES) */}
-      <div>
-         <div className="flex items-center gap-4 mb-8">
-             <div className="h-px bg-white/10 flex-grow"></div>
-             <h3 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-3">
-                 <BrainCircuit className="text-blue-500" /> Basic Orientation
+      {/* 2. GENERAL TRAINING MODULES */}
+      <div className="space-y-6">
+         <div className="flex items-center gap-4">
+             <div className="h-px bg-slate-200 dark:bg-white/[0.05] flex-grow" />
+             <h3 className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                 <BrainCircuit size={14} className="text-indigo-500" /> Basic Orientation
              </h3>
-             <div className="h-px bg-white/10 flex-grow"></div>
+             <div className="h-px bg-slate-200 dark:bg-white/[0.05] flex-grow" />
          </div>
 
-         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {STATIC_QUIZZES.map((quiz) => (
                 <button 
                   key={quiz.id}
                   onClick={() => setModal({ type: 'quiz', category: 'general', data: quiz, isGeneral: true })}
-                  className="group relative h-full bg-[#0F172A] hover:bg-[#1E293B] border border-white/5 hover:border-blue-500/30 rounded-2xl p-6 text-left transition-all hover:-translate-y-1"
+                  className="group relative flex flex-col justify-between bg-white border border-slate-200/60 dark:bg-slate-900/40 dark:border-white/[0.05] rounded-[24px] p-6 text-left transition-all duration-300 ease-out outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_4px_12px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.06),_0_8px_24px_rgba(0,0,0,0.2)] hover:shadow-[inset_0_2px_4px_rgba(255,255,255,0.9),_0_16px_32px_rgba(99,102,241,0.08)] dark:hover:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.12),_0_16px_32px_rgba(99,102,241,0.12)] hover:border-indigo-500/20 dark:hover:border-indigo-500/30 hover:-translate-y-0.5"
                 >
-                    <div className="absolute top-4 right-4 text-blue-500/20 group-hover:text-blue-500 transition-colors">
-                        <Star size={24} fill="currentColor" />
+                    <div className="absolute top-5 right-5 text-slate-200 dark:text-white/[0.03] group-hover:text-indigo-500/40 transition-colors duration-300">
+                        <Star size={20} fill="currentColor" />
                     </div>
                     
-                    <div className="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                        <BookOpen size={20} />
-                    </div>
+                    <div>
+                      {/* Icon Shield Container */}
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-4 shadow-[inset_0_1px_2px_rgba(255,255,255,0.5)] dark:shadow-none transition-transform duration-300 group-hover:scale-105">
+                          <BookOpen size={18} strokeWidth={2.5} />
+                      </div>
 
-                    <h4 className="text-lg font-bold text-white mb-2">{quiz.title}</h4>
-                    <p className="text-xs text-gray-400 leading-relaxed mb-4">{quiz.description}</p>
+                      <h4 className="text-base font-black text-slate-900 dark:text-white tracking-tight mb-1.5">{quiz.title}</h4>
+                      <p className="text-xs font-medium text-slate-400 dark:text-slate-500 leading-normal mb-5 line-clamp-2">{quiz.description}</p>
+                    </div>
                     
-                    <div className="flex items-center gap-3 text-[10px] font-mono text-gray-500">
-                        <span className="flex items-center gap-1 text-yellow-500"><Zap size={10}/> +{quiz.xp} XP</span>
-                        <span className="flex items-center gap-1 text-indigo-400"><Trophy size={10}/> No Badge</span>
+                    {/* Footnote badging details */}
+                    <div className="flex items-center gap-3 text-[10px] font-bold font-mono pt-2 border-t border-slate-100 dark:border-white/[0.04] w-full">
+                        <span className="flex items-center gap-1 text-yellow-500"><Zap size={10} fill="currentColor"/> +{quiz.xp} XP</span>
+                        <span className="flex items-center gap-1 text-slate-400 dark:text-slate-500"><Trophy size={10}/> Base Cert</span>
                     </div>
                 </button>
             ))}
          </div>
       </div>
 
-      {/* 3. CERTIFICATES GRID (EARNED ONLY) */}
+      {/* 3. CERTIFICATES GRID (EARNED CREDENTIALS ONLY) */}
       {earnedBadges.length > 0 && (
-          <div>
-             <div className="flex items-center gap-4 mb-8 mt-12">
-                 <div className="h-px bg-white/10 flex-grow"></div>
-                 <h3 className="text-xl font-bold text-white uppercase tracking-widest flex items-center gap-3">
-                     <ShieldCheck className="text-emerald-500" /> Verified Credentials
+          <div className="space-y-6">
+             <div className="flex items-center gap-4 mt-4">
+                 <div className="h-px bg-slate-200 dark:bg-white/[0.05] flex-grow" />
+                 <h3 className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                     <ShieldCheck size={14} className="text-emerald-500" /> Verified Credentials
                  </h3>
-                 <div className="h-px bg-white/10 flex-grow"></div>
+                 <div className="h-px bg-slate-200 dark:bg-white/[0.05] flex-grow" />
              </div>
              
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {earnedBadges.map(([key, quiz]) => (
-                    <div key={key} className="group relative">
-                        <div className="absolute -inset-0.5 rounded-[24px] bg-gradient-to-br from-emerald-400 to-cyan-500 opacity-20 blur"></div>
-                        <div className="relative h-full bg-[#09090b] rounded-[22px] p-6 overflow-hidden border border-emerald-500/20">
-                            <div className="absolute top-0 right-0 p-4 opacity-50">
-                                <Award size={80} className="text-emerald-500/10 rotate-12"/>
+                    <div key={key} className="group relative" style={{ isolation: 'isolate' }}>
+                        
+                        {/* Glow Layer */}
+                        <div className="absolute -inset-px rounded-[24px] bg-gradient-to-br from-emerald-400 to-cyan-500 opacity-0 group-hover:opacity-15 blur-md transition-opacity duration-500 pointer-events-none" />
+                        
+                        {/* Core Certificate Base Plate */}
+                        <div className="relative h-full bg-white border border-slate-200/80 rounded-[24px] p-5 overflow-hidden transition-all duration-300 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_4px_16px_rgba(16,185,129,0.02)] dark:bg-slate-900/60 dark:border-emerald-500/20 dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.06),_0_12px_28px_rgba(0,0,0,0.3)]">
+                            
+                            {/* Watermarked Icon Motif Background */}
+                            <div className="absolute -bottom-2 -right-2 p-0 text-emerald-500/[0.03] dark:text-emerald-500/[0.02] pointer-events-none select-none transition-transform duration-500 group-hover:rotate-6 group-hover:scale-105">
+                                <Award size={110} strokeWidth={1} />
                             </div>
-                            <div className="flex items-center gap-4 mb-6">
-                                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20">
-                                    <ShieldCheck size={24} />
+
+                            <div className="flex items-start gap-4 mb-5">
+                                <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 flex items-center justify-center shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.6)] dark:shadow-none">
+                                    <ShieldCheck size={22} strokeWidth={2.5} />
                                 </div>
-                                <div>
-                                    <h4 className="text-lg font-bold text-white leading-none mb-1">{quiz.title}</h4>
-                                    <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Verified Proficient</span>
+                                <div className="min-w-0 flex-1">
+                                    <h4 className="text-base font-black text-slate-900 dark:text-white tracking-tight leading-tight truncate mb-1">{quiz.title}</h4>
+                                    <span className="inline-block bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">
+                                        Verified Proficient
+                                    </span>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-auto">
-                                <span className="flex items-center gap-1 text-yellow-500"><Zap size={10}/> Earned</span>
-                                <span className="w-1 h-1 bg-gray-700 rounded-full"></span>
-                                <span>{new Date().toLocaleDateString()}</span>
+
+                            <div className="flex items-center gap-2.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pt-3 border-t border-slate-100 dark:border-white/[0.04]">
+                                <span className="flex items-center gap-1 text-yellow-500"><Zap size={11} fill="currentColor"/> Active</span>
+                                <span className="w-1 h-1 bg-slate-300 dark:bg-slate-700 rounded-full" />
+                                <span className="font-mono text-[9px] font-black">{new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                             </div>
                         </div>
                     </div>

@@ -270,7 +270,7 @@ export const createEscrowSession = async (appId, amount, freelancerId, customerP
     });
 
     if (error) throw error;
-    return { paymentSessionId: data.payment_session_id, orderId: data.order_id, error: null };
+    return { paymentSessionId: data.payment_session_id, orderId: data.order_id || data.orderId, error: null };
   } catch (err) {
     console.error("Payment Session Error:", err);
     return { error: err };

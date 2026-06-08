@@ -540,7 +540,7 @@ export const useAuthLogic = (onLogin) => {
     },
     refs: { turnstileRef },
     actions: {
-      setViewMode, setStep, setResetOtp, setNewPassword, setAgreedToTerms,
+      setViewMode, setStep, setResetOtp, setShowResetVerify, setNewPassword, setAgreedToTerms,
       setCaptchaToken, setRememberMe, setPhoneOtp, updateField, showToast, setIsPhoneVerified, setVerificationSent,
       handleNext, handleBack: () => setStep(s => s - 1), 
       handleFinalSubmit, handleSendPhoneOtp, handleRetryPhoneOtp, handleVerifyPhoneOtp, 

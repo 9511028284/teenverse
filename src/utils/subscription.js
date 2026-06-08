@@ -5,6 +5,19 @@ export const BASE_PLAN_LIMITS = {
   plan_expires_at: null,
 };
 
+const PLAN_NAME_ALIASES = {
+  base: 'Basic',
+  basic: 'Basic',
+  starter: 'Starter',
+  pro: 'Pro',
+  elite: 'Elite',
+};
+
+export const normalizePlanName = (planName = 'Basic') => {
+  const key = String(planName || 'Basic').trim().toLowerCase();
+  return PLAN_NAME_ALIASES[key] || 'Basic';
+};
+
 export const PLAN_LIMITS = {
   Basic: { bids_remaining: 5, resumes_remaining: 1 },
   Starter: { bids_remaining: 12, resumes_remaining: 2 },
@@ -15,7 +28,7 @@ export const PLAN_LIMITS = {
 export const SUBSCRIPTION_BADGES = ['Starter', 'Pro', 'Elite'];
 
 export const isPremiumPlanActive = (userLike = {}) => {
-  const plan = userLike?.current_plan || 'Basic';
+  const plan = normalizePlanName(userLike?.current_plan);
   if (plan === 'Basic') return false;
 
   const expiry = userLike?.plan_expires_at ? new Date(userLike.plan_expires_at) : null;
@@ -23,12 +36,21 @@ export const isPremiumPlanActive = (userLike = {}) => {
 };
 
 export const getEffectivePlanName = (userLike = {}) => {
-  return isPremiumPlanActive(userLike) ? userLike.current_plan : 'Basic';
+  return isPremiumPlanActive(userLike) ? normalizePlanName(userLike?.current_plan) : 'Basic';
 };
 
 export const normalizeExpiredSubscription = (userLike = {}) => {
-  if (!userLike || isPremiumPlanActive(userLike) || (userLike.current_plan || 'Basic') === 'Basic') {
-    return userLike;
+  if (!userLike) return userLike;
+
+  const currentPlan = normalizePlanName(userLike.current_plan);
+  const hasPlanNameDrift = currentPlan !== (userLike.current_plan || 'Basic');
+
+  if (isPremiumPlanActive(userLike)) {
+    return hasPlanNameDrift ? { ...userLike, current_plan: currentPlan } : userLike;
+  }
+
+  if (currentPlan === 'Basic') {
+    return hasPlanNameDrift ? { ...userLike, current_plan: 'Basic' } : userLike;
   }
 
   return {
@@ -38,7 +60,7 @@ export const normalizeExpiredSubscription = (userLike = {}) => {
 };
 
 export const getPlanLimits = (planName = 'Basic') => {
-  return PLAN_LIMITS[planName] || PLAN_LIMITS.Basic;
+  return PLAN_LIMITS[normalizePlanName(planName)] || PLAN_LIMITS.Basic;
 };
 
 export const filterSubscriptionBadgesForPlan = (badges = [], userLike = {}) => {

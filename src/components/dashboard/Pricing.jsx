@@ -266,18 +266,21 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
         {freelancerPlans.map((plan) => {
           
           // 🚀 DETERMINE LOCK STATES FOR EACH CARD
+          const isBasePlan = plan.planId === 'basic';
+          const hasActivePremiumPlan = isPlanActive && currentUserPlan !== 'Basic';
           const isThisPlanCurrent = currentUserPlan === plan.name;
-          const isDisabled = isPlanActive || plan.planId === 'basic';
+          const isDisabled = isBasePlan || hasActivePremiumPlan;
+          const expiryLabel = planExpiryDate && !Number.isNaN(planExpiryDate.getTime())
+            ? ` (Expires ${planExpiryDate.toLocaleDateString()})`
+            : '';
           
           let buttonText = plan.cta;
-          if (plan.planId === 'basic') {
-              buttonText = 'Current Plan';
-          } else if (isPlanActive) {
-              if (isThisPlanCurrent) {
-                  buttonText = `Current (Expires ${planExpiryDate?.toLocaleDateString()})`;
-              } else {
-                  buttonText = 'Locked (Active Plan)';
-              }
+          if (isThisPlanCurrent) {
+              buttonText = isBasePlan ? 'Current Plan' : `Current${expiryLabel}`;
+          } else if (isBasePlan) {
+              buttonText = hasActivePremiumPlan ? 'Base Included' : 'Free Plan';
+          } else if (hasActivePremiumPlan) {
+              buttonText = 'Locked (Active Plan)';
           }
           
           return (

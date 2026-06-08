@@ -15,20 +15,32 @@ import Portfolio from './Portfolio';
 
 const MotionDiv = motion.div;
 
+const cn = (...classes) => classes.filter(Boolean).join(' ');
+
 const Card = ({ children, className = '', onClick, glow }) => (
   <MotionDiv
-    whileHover={onClick ? { scale: 0.98, y: -2 } : { y: -2 }}
-    whileTap={onClick ? { scale: 0.95 } : {}}
+    whileHover={onClick ? { scale: 0.985, y: -2 } : { y: -2 }}
+    whileTap={onClick ? { scale: 0.975 } : {}}
     onClick={onClick}
-    className={[
-      'relative overflow-hidden rounded-[2rem] border backdrop-blur-2xl transition-all duration-500 ease-out',
-      'bg-white/60 dark:bg-[#0a0a0f]/60 border-white/80 dark:border-white/[0.05] shadow-[0_8px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.5)]',
-      glow ? 'hover:border-purple-400/50 dark:hover:border-purple-400/40 hover:shadow-[0_0_40px_rgba(168,85,247,0.15)] dark:hover:shadow-[0_0_40px_rgba(168,85,247,0.2)]' : 'hover:border-neutral-300 dark:hover:border-white/[0.12]',
+    onKeyDown={(event) => {
+      if (!onClick || (event.key !== 'Enter' && event.key !== ' ')) return;
+      event.preventDefault();
+      onClick(event);
+    }}
+    role={onClick ? 'button' : undefined}
+    tabIndex={onClick ? 0 : undefined}
+    className={cn(
+      'relative overflow-hidden rounded-[28px] border backdrop-blur-xl transition-all duration-300 ease-out',
+      // LIGHT MODE: Soft pillowy glass
+      'bg-white/90 border-slate-200/60 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_4px_20px_rgba(99,102,241,0.02)]',
+      // DARK MODE: Cosmic clay depth
+      'dark:bg-slate-900/40 dark:border-white/[0.05] dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.06),_0_16px_36px_rgba(0,0,0,0.25)]',
+      glow ? 'hover:border-indigo-500/20 dark:hover:border-indigo-500/30 hover:shadow-[0_16px_32px_rgba(99,102,241,0.06)] dark:hover:shadow-[0_20px_40px_rgba(99,102,241,0.12)]' : 'hover:border-slate-300 dark:hover:border-white/[0.12]',
       onClick ? 'cursor-pointer' : '',
       className
-    ].join(' ')}
+    )}
   >
-    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/40 dark:from-white/[0.03] to-transparent transition-colors duration-500" />
+    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/20 dark:from-white/[0.02] to-transparent pointer-events-none" />
     <div className="relative z-10 h-full">{children}</div>
   </MotionDiv>
 );
@@ -36,15 +48,14 @@ const Card = ({ children, className = '', onClick, glow }) => (
 // --- EDITABLE/OWNER SOCIAL BUTTON ---
 const SocialBtn = ({ icon: Icon, href, label }) => {
   if (!href) return null;
-  const IconComponent = Icon;
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="group flex items-center gap-2 rounded-xl border border-neutral-200 bg-white/80 px-4 py-2.5 text-xs font-bold text-neutral-600 shadow-sm transition-all duration-500 hover:border-transparent hover:bg-gradient-to-r hover:from-indigo-500 hover:to-purple-500 hover:text-white hover:shadow-lg hover:shadow-purple-500/25 dark:border-white/[0.05] dark:bg-white/[0.03] dark:text-neutral-400 dark:hover:from-indigo-500/80 dark:hover:to-purple-500/80 dark:hover:text-white"
+      className="group flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.6),_0_2px_6px_rgba(0,0,0,0.02)] transition-all duration-300 ease-out hover:border-transparent hover:bg-indigo-600 hover:text-white hover:shadow-[0_8px_16px_rgba(79,70,229,0.25)] dark:border-white/[0.05] dark:bg-slate-950 dark:text-slate-400 dark:shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.2)] dark:hover:bg-indigo-500 dark:hover:text-white"
     >
-      <IconComponent size={16} className="transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:scale-110" />
+      <Icon size={14} strokeWidth={2.5} className="transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:scale-110" />
       <span className="hidden sm:inline">{label}</span>
     </a>
   );
@@ -52,30 +63,28 @@ const SocialBtn = ({ icon: Icon, href, label }) => {
 
 // --- LOCKED/CLIENT-VIEW SOCIAL BUTTON (PREVENTS PLATFORM LEAKAGE) ---
 const LockedSocialBtn = ({ icon: Icon, label }) => {
-  const IconComponent = Icon;
   return (
     <div 
       title="Platform Protected: External contact disabled until hired."
-      className="group flex cursor-not-allowed items-center gap-2 rounded-xl border border-emerald-200/50 bg-emerald-50/50 px-4 py-2.5 text-xs font-bold text-emerald-700 shadow-sm transition-all duration-500 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400"
+      className="group flex cursor-not-allowed items-center gap-2 rounded-xl border border-emerald-200/60 bg-emerald-50/60 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-emerald-700 shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.6)] dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400 dark:shadow-none"
     >
-      <IconComponent size={16} className="opacity-80" />
+      <Icon size={14} strokeWidth={2.5} className="opacity-80" />
       <span className="hidden sm:inline">{label} Verified</span>
-      <LockKeyhole size={12} className="ml-1 opacity-50" />
+      <LockKeyhole size={11} strokeWidth={2.5} className="ml-0.5 opacity-50" />
     </div>
   );
 };
 
 const StatBlock = ({ value, label, accentClass }) => (
-  <div className="group relative flex flex-1 flex-col items-center justify-center p-5 transition-all duration-500">
+  <div className="group relative flex flex-1 flex-col items-center justify-center p-5 transition-all duration-300 hover:bg-slate-50/40 dark:hover:bg-white/[0.01]">
     <span
-      className="bg-gradient-to-br from-neutral-900 to-neutral-500 bg-clip-text text-2xl font-black tracking-tight text-transparent transition-colors duration-500 dark:from-white dark:to-neutral-400 sm:text-3xl"
-      style={{ fontFamily: "'Sora', sans-serif" }}
+      className="bg-gradient-to-b from-slate-900 to-slate-500 bg-clip-text text-2xl font-black tracking-tight text-transparent transition-colors duration-300 dark:from-white dark:to-slate-400 sm:text-3xl font-mono"
     >
       {value}
     </span>
     <div className="mt-2 flex items-center gap-1.5">
-      <div className={`h-2 w-2 rounded-full shadow-[0_0_10px_currentColor] ${accentClass} transition-colors duration-500`} />
-      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-neutral-500 transition-colors duration-500 dark:text-neutral-400">{label}</span>
+      <div className={cn('h-1.5 w-1.5 rounded-full shadow-[0_0_8px_currentColor]', accentClass)} />
+      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">{label}</span>
     </div>
   </div>
 );
@@ -83,15 +92,16 @@ const StatBlock = ({ value, label, accentClass }) => (
 const TabBtn = ({ label, active, onClick }) => (
   <button
     onClick={onClick}
-    className={`relative rounded-full px-6 py-2.5 text-xs font-bold uppercase tracking-widest transition-all duration-500 ${
-      active ? 'text-white' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
-    }`}
+    className={cn(
+      'relative rounded-full px-5 py-2 text-xs font-black uppercase tracking-widest transition-all duration-300 outline-none',
+      active ? 'text-white' : 'text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-white'
+    )}
   >
     {active && (
       <MotionDiv
         layoutId="activeTabPill"
-        className="absolute inset-0 z-0 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.4)]"
-        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+        className="absolute inset-0 z-0 rounded-full bg-indigo-600 shadow-[inset_0_2px_4px_rgba(255,255,255,0.3),_0_8px_16px_rgba(79,70,229,0.25)] dark:bg-indigo-500"
+        transition={{ type: 'spring', stiffness: 380, damping: 28 }}
       />
     )}
     <span className="relative z-10">{label}</span>
@@ -188,43 +198,39 @@ const formatPeriod = (startDate, endDate) => {
 };
 
 const getTrustBand = (trustScore) => {
-  if (trustScore >= 80) return { label: 'High Trust', tone: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20' };
-  if (trustScore >= 50) return { label: 'Medium Trust', tone: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20' };
-  return { label: 'Low Trust', tone: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20' };
+  if (trustScore >= 80) return { label: 'High Trust', tone: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 border-emerald-100 dark:bg-emerald-500/10 dark:border-emerald-500/20' };
+  if (trustScore >= 50) return { label: 'Medium Trust', tone: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 border-amber-100 dark:bg-amber-500/10 dark:border-amber-500/20' };
+  return { label: 'Low Trust', tone: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 border-rose-100 dark:bg-rose-500/10 dark:border-rose-500/20' };
 };
 
 const ResumeChip = ({ children, tone = 'neutral' }) => {
   const toneClasses = {
-    neutral: 'bg-neutral-900 text-white',
-    verified: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-    warning: 'bg-amber-50 text-amber-700 border border-amber-200',
-    trust: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+    neutral: 'bg-slate-900 text-white',
+    verified: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.6)] dark:shadow-none',
+    warning: 'bg-amber-50 text-amber-700 border border-amber-200/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.6)] dark:shadow-none',
+    trust: 'bg-indigo-50 text-indigo-700 border border-indigo-200/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.6)] dark:shadow-none',
   };
 
   return (
-    <span className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${toneClasses[tone] || toneClasses.neutral}`}>
+    <span className={cn('rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wide', toneClasses[tone] || toneClasses.neutral)}>
       {children}
     </span>
   );
 };
 
 const ResumeSectionTitle = ({ icon: Icon, children }) => (
-  (() => {
-    const IconComponent = Icon;
-    return (
-  <h4 className="mb-4 flex items-center gap-2 border-b border-neutral-200 pb-2 text-[11px] font-black uppercase tracking-widest text-neutral-400">
-    <IconComponent size={14} className="text-neutral-900" /> {children}
+  <h4 className="mb-4 flex items-center gap-2 border-b border-slate-200/60 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:border-white/[0.04]">
+    <Icon size={14} strokeWidth={2.5} className="text-slate-900 dark:text-white" /> {children}
   </h4>
-    );
-  })()
 );
 
 const ResumeEmpty = ({ children }) => (
-  <div className="rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 px-4 py-6 text-center text-sm font-bold text-neutral-400">
+  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 dark:border-white/10 dark:bg-slate-950/20 px-4 py-6 text-center text-xs font-bold text-slate-400 dark:text-slate-500">
     {children}
   </div>
 );
 
+// --- MAIN COMPONENT ---
 const UserProfile = ({
   user,
   badges,
@@ -254,11 +260,13 @@ const UserProfile = ({
   const canViewFullResume = !readOnly;
   const activeResume = resumeViewMode === 'full' && canViewFullResume ? fullResume || verifiedResume : verifiedResume;
   const trustBand = getTrustBand(activeResume?.trust_score || user?.trust_score || 0);
+  
   const profileProjects = useMemo(() => [
     ...applications,
     ...jobs.map((job) => ({ ...job, source: 'Posted Project', status: job.status || 'Live' })),
     ...services.map((service) => ({ ...service, source: 'Gig / Service', status: service.status || 'Live' })),
   ], [applications, jobs, services]);
+  
   const hasPortfolioPreview = profileProjects.length > 0;
 
   useEffect(() => {
@@ -363,172 +371,93 @@ const UserProfile = ({
       const width = pdf.internal.pageSize.getWidth();
       pdf.addImage(dataUrl, 'PNG', 0, 0, width, (props.height * width) / props.width);
       pdf.save(`Resume-${(user?.name || 'Creator').replace(/\s+/g, '_')}.pdf`);
-      if (showToast) showToast('Downloaded!', 'success');
+      if (showToast) showToast('Downloaded successfully!', 'success');
     } catch {
-      if (showToast) showToast('Failed.', 'error');
+      if (showToast) showToast('Failed to compile PDF asset documentation.', 'error');
     } finally {
       setIsDownloading(false);
     }
   };
 
   return (
-    <div
-      className="relative min-h-screen overflow-hidden bg-[#f8fafc] pb-24 text-neutral-900 transition-colors duration-700 ease-in-out dark:bg-[#030305] dark:text-white"
-      style={{ fontFamily: "'DM Sans', sans-serif" }}
-    >
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;0,800&family=DM+Mono:wght@400;500&family=Sora:wght@700;800;900&display=swap');
+    <div className="relative min-h-screen bg-[#F4F6FA] text-slate-900 transition-colors duration-300 dark:bg-[#070A14] dark:text-white pb-16 px-0">
+      
+      {/* GLOBAL CYBER GRID ACCENTS */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-40 dark:opacity-20" aria-hidden="true">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(99,102,241,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(99,102,241,0.05)_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(circle_at_center,black_60%,transparent_100%)]" />
+        <div className="absolute top-[-10%] left-[10%] w-[70vw] h-[70vw] bg-gradient-to-tr from-indigo-500/10 via-purple-500/5 to-transparent rounded-full blur-[120px]" />
+      </div>
 
-        .cyber-grid {
-          position: absolute; inset: 0; z-index: 0;
-          background-image:
-            linear-gradient(to right, rgba(0,0,0,0.03) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(0,0,0,0.03) 1px, transparent 1px);
-          background-size: 40px 40px;
-          mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
-          -webkit-mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
-          transition: background-image 0.7s ease-in-out;
-        }
-        .dark .cyber-grid {
-          background-image:
-            linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
-        }
-
-        .ambient-spotlight {
-          position: absolute; top: -20%; left: 10%; width: 80vw; height: 80vw;
-          background: radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, rgba(56, 189, 248, 0.1) 40%, transparent 70%);
-          border-radius: 50%; pointer-events: none;
-          animation: drift 20s infinite alternate ease-in-out;
-          transition: background 0.7s ease-in-out;
-        }
-        .dark .ambient-spotlight {
-          background: radial-gradient(circle, rgba(168, 85, 247, 0.08) 0%, rgba(56, 189, 248, 0.05) 40%, transparent 70%);
-        }
-
-        @keyframes drift {
-          0% { transform: translate(0%, 0%) scale(1); }
-          100% { transform: translate(10%, 15%) scale(1.1); }
-        }
-
-        .skill-tag {
-          background: rgba(255,255,255,0.6); border: 1px solid rgba(0,0,0,0.05);
-          color: #4f46e5; border-radius: 10px; padding: 6px 14px;
-          font-size: 12px; font-family: 'DM Mono', monospace; font-weight: 600;
-          transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-          box-shadow: 0 2px 10px rgba(0,0,0,0.02);
-        }
-        .skill-tag:hover {
-          background: linear-gradient(135deg, #6366f1, #a855f7); border-color: transparent;
-          color: #fff; transform: translateY(-3px) scale(1.05);
-          box-shadow: 0 10px 20px rgba(168, 85, 247, 0.2);
-        }
-        .dark .skill-tag {
-          background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
-          color: #e2e8f0; box-shadow: none;
-        }
-        .dark .skill-tag:hover {
-          background: linear-gradient(135deg, #6366f1, #a855f7); border-color: transparent;
-          color: #fff; box-shadow: 0 10px 20px rgba(168, 85, 247, 0.3);
-        }
-
-        .badge-card {
-          background: rgba(255,255,255,0.5);
-          border: 1px solid rgba(0,0,0,0.04); border-radius: 20px;
-          transition: all 0.4s ease-out;
-        }
-        .badge-card:hover {
-          background: #fff; border-color: rgba(168,85,247,0.3);
-          transform: translateY(-5px); box-shadow: 0 15px 30px rgba(168,85,247,0.1);
-        }
-        .dark .badge-card {
-          background: rgba(255,255,255,0.02);
-          border: 1px solid rgba(255,255,255,0.05);
-        }
-        .dark .badge-card:hover {
-          background: rgba(255,255,255,0.05); border-color: rgba(168,85,247,0.4);
-          box-shadow: 0 15px 30px rgba(168,85,247,0.15);
-        }
-
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; transition: background 0.3s; }
-        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; }
-      `}</style>
-
-      <div className="ambient-spotlight" />
-      <div className="cyber-grid" />
-
-      <div className="relative z-10 mx-auto max-w-[64rem] space-y-6 px-4 pt-6 sm:px-6 sm:pt-10 lg:px-8">
+      <div className="relative z-10 mx-auto max-w-7xl space-y-6 px-0">
+          
+          {/* --- PROFILE BANNER CONTAINER PLATE --- */}
           <MotionDiv
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="relative overflow-hidden rounded-[2.5rem] border border-white/60 bg-white/40 shadow-[0_20px_40px_rgba(0,0,0,0.04)] backdrop-blur-3xl transition-all duration-700 dark:border-white/[0.05] dark:bg-white/[0.01] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)]"
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="relative overflow-hidden rounded-[32px] border border-white bg-white/70 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_12px_36px_rgba(0,0,0,0.03)] backdrop-blur-xl dark:border-white/[0.04] dark:bg-slate-900/40 dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.06),_0_20px_40px_rgba(0,0,0,0.3)]"
           >
-          <div className="group relative h-44 w-full overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-200 via-purple-100 to-pink-100 transition-colors duration-700 dark:from-indigo-900/40 dark:via-purple-900/20 dark:to-[#030305]" />
+          <div className="group relative h-40 w-full overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-200/60 via-purple-100/50 to-pink-100/60 dark:from-indigo-950/40 dark:via-purple-950/20 dark:to-slate-950" />
             {user?.cover_image && (
-              <img src={user.cover_image} className="absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-overlay transition-transform duration-1000 group-hover:scale-105 dark:opacity-30" alt="cover" />
+              <img src={user.cover_image} className="absolute inset-0 h-full w-full object-cover opacity-50 mix-blend-overlay dark:opacity-30" alt="cover mapping" />
             )}
 
             {!readOnly && (
               <button
                 onClick={onEditProfile}
-                className="absolute right-5 top-5 z-30 flex items-center gap-2 rounded-full border border-white bg-white/60 px-5 py-2.5 text-xs font-black uppercase tracking-widest text-neutral-900 shadow-xl backdrop-blur-xl transition-all duration-300 hover:scale-105 hover:bg-white active:scale-95 dark:border-white/10 dark:bg-black/40 dark:text-white dark:hover:bg-black/60"
+                className="absolute right-5 top-5 z-30 flex items-center gap-1.5 rounded-xl border border-white bg-white/70 px-4 py-2 text-xs font-black uppercase tracking-wider text-slate-900 shadow-md backdrop-blur-md transition-all hover:scale-105 dark:border-white/10 dark:bg-slate-900/80 dark:text-white"
               >
-                <Edit3 size={14} /> <span className="hidden sm:inline">Edit Profile</span>
+                <Edit3 size={13} strokeWidth={2.5} /> <span>Edit Profile</span>
               </button>
             )}
           </div>
 
-          <div className="relative z-20 -mt-20 px-6 pb-8 sm:px-10">
-            <div className="mb-6 flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
-              <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
-                <div className="group relative h-36 w-36 rounded-[2rem] border-2 border-white bg-white/50 p-2 shadow-[0_0_40px_rgba(0,0,0,0.1)] backdrop-blur-md transition-all duration-700 dark:border-white/10 dark:bg-neutral-900/50 dark:shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-                  <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-indigo-500 to-pink-500 opacity-20 blur-xl transition-opacity duration-500 group-hover:opacity-40 dark:opacity-30" />
+          <div className="relative z-20 -mt-16 px-6 pb-6 sm:px-8">
+            <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end text-left">
+                
+                {/* Clay Profile Shield Frame */}
+                <div className="group relative h-32 w-32 rounded-[24px] border-2 border-white bg-white/80 p-1.5 shadow-[inset_0_2px_4px_rgba(255,255,255,0.5),_0_8px_24px_rgba(0,0,0,0.05)] backdrop-blur-md dark:border-white/10 dark:bg-slate-950 dark:shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.4)] shrink-0">
                   <img
                     src={user?.avatar_url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix'}
-                    className="relative z-10 h-full w-full rounded-[1.5rem] bg-neutral-100 object-cover dark:bg-[#0a0a0f]"
-                    alt="avatar"
+                    className="h-full w-full rounded-[18px] bg-slate-100 object-cover dark:bg-slate-900"
+                    alt="avatar profile vector"
                   />
                 </div>
 
-                <div className="pb-3">
-                  <div className="mb-2 flex items-center gap-3">
-                    <h1
-                      className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-4xl font-black tracking-tighter text-transparent transition-colors duration-700 dark:from-indigo-400 dark:via-purple-400 dark:to-pink-400 sm:text-5xl"
-                      style={{ fontFamily: "'Sora', sans-serif" }}
-                    >
-                      {user?.name || 'Creator'}
-                    </h1>
-                    {badges.some((badge) => badge.name === 'Verified') && (
-                      <div className="rounded-full bg-white p-1.5 shadow-md dark:bg-neutral-800 dark:shadow-none">
-                        <ShieldCheck size={22} className="text-blue-500 dark:text-blue-400" />
+                <div className="pb-1">
+                  <div className="mb-1.5 flex items-center gap-2 flex-wrap">
+                    <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">{user?.name || 'Creator'}</h1>
+                    {badges.some((b) => b.name === 'Verified') && (
+                      <div className="rounded-full bg-white border border-slate-100 p-1 shadow-sm dark:bg-slate-800 dark:border-transparent">
+                        <ShieldCheck size={18} strokeWidth={2.5} className="text-blue-500 dark:text-blue-400" />
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 text-sm font-bold">
-                    <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-1 text-indigo-600 transition-colors duration-500 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
+                  
+                  <div className="flex items-center gap-2.5 text-xs font-bold">
+                    <span className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-2.5 py-0.5 text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400 font-mono">
                       @{user?.name?.split(' ')[0]?.toLowerCase() || 'user'}
                     </span>
-                    <span className="text-[10px] uppercase tracking-widest text-neutral-500 transition-colors duration-500 dark:text-neutral-400">{user?.tag_line || 'Digital Creator'}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">{user?.tag_line || 'Digital Creator'}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 rounded-full border border-amber-200 bg-gradient-to-r from-amber-100 to-orange-100 px-5 py-2.5 text-amber-700 shadow-lg shadow-amber-500/10 transition-all duration-500 dark:border-amber-500/20 dark:from-amber-500/10 dark:to-orange-500/10 dark:text-amber-400">
-                <Zap size={16} className="fill-amber-500 dark:fill-amber-400" />
-                <span className="text-xs font-black uppercase tracking-widest">Level {userLevel}</span>
+              {/* Claymorphic Level Badge Capsule */}
+              <div className="flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-orange-500 text-white px-4 py-2 rounded-xl shadow-[inset_0_2px_4px_rgba(255,255,255,0.4),_0_6px_14px_rgba(245,158,11,0.25)] select-none self-start sm:self-auto">
+                <Zap size={14} className="fill-white drop-shadow-sm" />
+                <span className="text-[11px] font-black uppercase tracking-wider">Level {userLevel}</span>
               </div>
             </div>
 
-            <p className="mb-8 max-w-3xl text-sm font-medium leading-relaxed text-neutral-600 transition-colors duration-500 dark:text-neutral-400 sm:text-base">
+            <p className="mb-6 max-w-3xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400 text-left">
               {user?.bio || 'No biography written yet. This creator prefers to let their work speak for itself.'}
             </p>
 
-            {/* SECURE SOCIAL LINKS (PREVENTS PLATFORM BYPASS) */}
-            <div className="flex flex-wrap gap-3">
+            {/* PLATFORM SECURED LINK BAR MAPS */}
+            <div className="flex flex-wrap gap-2">
               {!readOnly ? (
                 <>
                   <SocialBtn icon={Github} href={socials.github} label="GitHub" />
@@ -547,59 +476,63 @@ const UserProfile = ({
             </div>
           </div>
 
-          <div className="flex divide-x divide-neutral-200 border-t border-white/50 bg-white/30 backdrop-blur-md transition-colors duration-700 dark:divide-white/[0.05] dark:border-white/[0.05] dark:bg-white/[0.01]">
-            <StatBlock value={badges.length} label="Badges" accentClass="bg-pink-500 text-pink-500 dark:bg-pink-400" />
-            <StatBlock value={`Lvl.${userLevel}`} label="Rank" accentClass="bg-indigo-500 text-indigo-500 dark:bg-indigo-400" />
-            <StatBlock value={unlockedSkills.length} label="Skills" accentClass="bg-cyan-500 text-cyan-500 dark:bg-cyan-400" />
+          <div className="flex border-t border-slate-100 bg-slate-50/50 dark:border-white/[0.04] dark:bg-[#070A14]/20 divide-x divide-slate-100 dark:divide-white/[0.04]">
+            <StatBlock value={badges.length} label="Badges" accentClass="bg-pink-500 text-pink-500" />
+            <StatBlock value={`Lvl.${userLevel}`} label="Rank" accentClass="bg-indigo-500 text-indigo-500" />
+            <StatBlock value={unlockedSkills.length} label="Skills" accentClass="bg-cyan-500 text-cyan-500" />
             <StatBlock
               value={(user?.wallet_balance || 0) > 999 ? `₹${((user?.wallet_balance || 0) / 1000).toFixed(1)}k` : `₹${user?.wallet_balance || 0}`}
               label="Wallet"
-              accentClass="bg-emerald-500 text-emerald-500 dark:bg-emerald-400"
+              accentClass="bg-emerald-500 text-emerald-500"
             />
           </div>
-        </MotionDiv>
+          </MotionDiv>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* --- DUAL WORKSPACE LAYOUT GRIDS --- */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 items-start">
+          
+          {/* Left Bento Multi-tab Panel */}
           <Card className="flex flex-col p-6 sm:p-8 lg:col-span-2" glow>
-            <div className="mb-8 flex w-fit gap-2 rounded-full border border-neutral-200 bg-white/50 p-1.5 shadow-inner backdrop-blur-md transition-colors duration-500 dark:border-white/[0.05] dark:bg-black/30">
-              {['about', 'skills', 'achievements'].map((tab) => (
-                <TabBtn key={tab} label={tab} active={activeTab === tab} onClick={() => setActiveTab(tab)} />
+            <div className="mb-6 flex w-fit gap-1 rounded-full border border-slate-200 bg-slate-100/80 p-1 shadow-[inset_0_1px_2.5px_rgba(0,0,0,0.04)] dark:border-white/[0.04] dark:bg-slate-950/60 dark:shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.4)]">
+              {['about', 'skills', 'achievements'].map((t) => (
+                <TabBtn key={t} label={t} active={activeTab === t} onClick={() => setActiveTab(t)} />
               ))}
             </div>
 
-            <div className="flex-1">
+            <div className="flex-1 text-left">
               <AnimatePresence mode="wait">
                 {activeTab === 'about' && (
                   <motion.div
                     key="about"
-                    initial={{ opacity: 0, y: 15 }}
+                    initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-8"
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-6"
                   >
                     <div>
-                      <h3 className="mb-3 text-xl font-black text-neutral-900 transition-colors duration-500 dark:text-white">The Story</h3>
-                      <p className="font-medium leading-relaxed text-neutral-600 transition-colors duration-500 dark:text-neutral-400">
+                      <h3 className="mb-2 text-lg font-black text-slate-950 dark:text-white tracking-tight">The Story</h3>
+                      <p className="font-medium text-slate-500 dark:text-slate-400 text-sm leading-relaxed">
                         {user?.bio || 'Complete your profile to tell the world what you do.'}
                       </p>
                     </div>
 
                     {userExtras && (
-                      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                        <div className="rounded-[1.5rem] border border-indigo-100 bg-gradient-to-br from-indigo-50 to-purple-50 p-6 transition-colors duration-500 dark:border-indigo-500/20 dark:from-indigo-500/10 dark:to-purple-500/10">
-                          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm transition-colors duration-500 dark:bg-indigo-500/20">
-                            <Sparkles size={20} className="text-indigo-600 dark:text-indigo-400" />
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-purple-50/40 p-5 dark:border-indigo-500/10 dark:from-indigo-500/10 dark:to-purple-500/5 shadow-[inset_0_2px_4px_rgba(255,255,255,0.7)] dark:shadow-none">
+                          <div className="mb-3.5 flex h-10 w-10 items-center justify-center rounded-xl bg-white text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 border border-indigo-100/50 dark:border-transparent shadow-sm">
+                            <Sparkles size={16} strokeWidth={2.5} />
                           </div>
-                          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-neutral-500 transition-colors duration-500 dark:text-neutral-400">Specialty</p>
-                          <p className="text-base font-bold text-neutral-900 transition-colors duration-500 dark:text-white">{userExtras.specialty || 'Not specified'}</p>
+                          <p className="mb-1 text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Specialty Area</p>
+                          <p className="text-sm font-black text-slate-900 dark:text-white tracking-tight">{userExtras.specialty || 'Not specified'}</p>
                         </div>
-                        <div className="rounded-[1.5rem] border border-cyan-100 bg-gradient-to-br from-cyan-50 to-blue-50 p-6 transition-colors duration-500 dark:border-cyan-500/20 dark:from-cyan-500/10 dark:to-blue-500/10">
-                          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm transition-colors duration-500 dark:bg-cyan-500/20">
-                            <GraduationCap size={20} className="text-cyan-600 dark:text-cyan-400" />
+                        
+                        <div className="rounded-2xl border border-cyan-100 bg-gradient-to-br from-cyan-50/60 to-blue-50/40 p-5 dark:border-cyan-500/10 dark:from-cyan-500/10 dark:to-blue-500/5 shadow-[inset_0_2px_4px_rgba(255,255,255,0.7)] dark:shadow-none">
+                          <div className="mb-3.5 flex h-10 w-10 items-center justify-center rounded-xl bg-white text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-400 border border-cyan-100/50 dark:border-transparent shadow-sm">
+                            <GraduationCap size={16} strokeWidth={2.5} />
                           </div>
-                          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-neutral-500 transition-colors duration-500 dark:text-neutral-400">Qualification</p>
-                          <p className="text-base font-bold text-neutral-900 transition-colors duration-500 dark:text-white">{userExtras.qualification || 'Not specified'}</p>
+                          <p className="mb-1 text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Qualification Metric</p>
+                          <p className="text-sm font-black text-slate-900 dark:text-white tracking-tight">{userExtras.qualification || 'Not specified'}</p>
                         </div>
                       </div>
                     )}
@@ -609,22 +542,22 @@ const UserProfile = ({
                 {activeTab === 'skills' && (
                   <motion.div
                     key="skills"
-                    initial={{ opacity: 0, y: 15 }}
+                    initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.3 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2 }}
                   >
-                    <h3 className="mb-6 text-xl font-black text-neutral-900 transition-colors duration-500 dark:text-white">Verified Tech Stack</h3>
+                    <h3 className="mb-4 text-lg font-black text-slate-950 dark:text-white tracking-tight">Verified Tech Stack</h3>
                     {unlockedSkills.length > 0 ? (
-                      <div className="flex flex-wrap gap-3">
+                      <div className="flex flex-wrap gap-2.5">
                         {unlockedSkills.map((skill) => (
-                          <span key={skill} className="skill-tag">{skill}</span>
+                          <span key={skill} className="rounded-xl bg-slate-50 border border-slate-200 text-indigo-600 dark:bg-slate-950 dark:border-white/[0.04] dark:text-slate-300 text-xs font-bold px-3.5 py-1.5 shadow-[inset_0_1px_2px_rgba(255,255,255,0.8)] dark:shadow-none hover:scale-105 transition-all duration-200 cursor-default font-mono">{skill}</span>
                         ))}
                       </div>
                     ) : (
-                      <div className="rounded-[2rem] border-2 border-dashed border-neutral-200 bg-white/30 py-16 text-center transition-colors duration-500 dark:border-white/10 dark:bg-white/[0.01]">
-                        <Terminal size={32} className="mx-auto mb-4 text-neutral-400 dark:text-neutral-600" />
-                        <p className="text-base font-bold text-neutral-600 dark:text-neutral-400">No verified skills yet</p>
+                      <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/50 py-12 text-center dark:border-white/10 dark:bg-slate-950/20">
+                        <Terminal size={28} className="mx-auto mb-3 text-slate-400 dark:text-slate-600" />
+                        <p className="text-sm font-black text-slate-400 dark:text-slate-500">No verified skills unlocked yet</p>
                       </div>
                     )}
                   </motion.div>
@@ -633,32 +566,29 @@ const UserProfile = ({
                 {activeTab === 'achievements' && (
                   <motion.div
                     key="achievements"
-                    initial={{ opacity: 0, y: 15 }}
+                    initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.3 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2 }}
                   >
-                    <h3 className="mb-6 flex items-center justify-between text-xl font-black text-neutral-900 transition-colors duration-500 dark:text-white">
-                      Hall of Fame <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-bold uppercase tracking-widest text-neutral-500 dark:bg-white/[0.05]">{badges.length} Unlocked</span>
+                    <h3 className="mb-5 flex items-center justify-between text-lg font-black text-slate-950 dark:text-white tracking-tight">
+                      Hall of Fame <span className="rounded-full bg-slate-100 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200/40 dark:border-transparent">{badges.length} Unlocked</span>
                     </h3>
                     {badges.length > 0 ? (
-                      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                        {badges.map((badge, index) => (
-                          <div key={index} className="badge-card group relative aspect-square p-4">
-                            <div className="absolute inset-0 rounded-[20px] bg-gradient-to-t from-purple-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                            <div className="relative z-10 flex h-full flex-col items-center justify-center">
-                              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-[1.2rem] border border-neutral-100 bg-white shadow-sm transition-colors duration-500 dark:border-purple-500/20 dark:bg-purple-500/10">
-                                <Award size={24} className="text-purple-600 dark:text-purple-400" />
-                              </div>
-                              <span className="text-center text-xs font-bold text-neutral-700 transition-colors duration-500 dark:text-neutral-300">{badge.name}</span>
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        {badges.map((b, idx) => (
+                          <div key={idx} className="relative rounded-2xl bg-slate-50 border border-slate-200/60 p-4 overflow-hidden dark:bg-slate-950/40 dark:border-white/[0.05] shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.8)] dark:shadow-none hover:scale-105 transition-transform duration-300 flex flex-col items-center justify-center text-center group">
+                            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-white border border-indigo-50 text-indigo-600 dark:border-transparent dark:bg-indigo-500/10 dark:text-indigo-400 shadow-sm">
+                              <Award size={20} strokeWidth={2.5} />
                             </div>
+                            <span className="text-xs font-black tracking-tight text-slate-800 dark:text-slate-300">{b.name}</span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="rounded-[2rem] border-2 border-dashed border-neutral-200 bg-white/30 py-16 text-center transition-colors duration-500 dark:border-white/10 dark:bg-white/[0.01]">
-                        <Star size={32} className="mx-auto mb-4 text-neutral-400 dark:text-neutral-600" />
-                        <p className="text-base font-bold text-neutral-600 dark:text-neutral-400">No badges yet</p>
+                      <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/50 py-12 text-center dark:border-white/10 dark:bg-slate-950/20">
+                        <Star size={28} className="mx-auto mb-3 text-slate-400 dark:text-slate-600" />
+                        <p className="text-sm font-black text-slate-400 dark:text-slate-500">No ecosystem badges unlocked yet</p>
                       </div>
                     )}
                   </motion.div>
@@ -667,33 +597,34 @@ const UserProfile = ({
             </div>
           </Card>
 
-          <div className="flex flex-col gap-6">
-            <Card className="flex-1 p-6 sm:p-8" glow>
-              <div className="mb-8 flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 transition-colors duration-500 dark:text-neutral-500">Identity Card</p>
-                <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 shadow-sm transition-colors duration-500 ${trustBand.bg}`}>
-                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse dark:bg-emerald-400" />
-                  <span className={`text-[9px] font-black uppercase tracking-widest ${trustBand.tone}`}>{trustBand.label}</span>
+          {/* Right Action Stack Sidebar */}
+          <div className="flex flex-col gap-4 text-left">
+            <Card className="p-6 sm:p-7" glow>
+              <div className="mb-6 flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Identity Status</p>
+                <div className={cn('flex items-center gap-1.5 rounded-full border px-3 py-1 shadow-[inset_0_1px_2px_rgba(255,255,255,0.4)] dark:shadow-none', trustBand.bg)}>
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className={cn('text-[9px] font-black uppercase tracking-wider', trustBand.tone)}>{trustBand.label}</span>
                 </div>
               </div>
 
-              <div className="mb-8 border-b border-neutral-200 pb-8 transition-colors duration-500 dark:border-white/[0.05]">
-                <span className="bg-gradient-to-b from-neutral-900 to-neutral-400 bg-clip-text text-7xl font-black tracking-tighter text-transparent transition-colors duration-500 dark:from-white dark:to-neutral-600 sm:text-8xl" style={{ fontFamily: "'Sora', sans-serif" }}>
+              <div className="mb-6 border-b border-slate-100 pb-6 dark:border-white/[0.04] flex items-baseline">
+                <span className="bg-gradient-to-b from-slate-950 to-slate-400 bg-clip-text text-6xl sm:text-7xl font-black font-mono tracking-tighter text-transparent dark:from-white dark:to-slate-600">
                   {String(userLevel).padStart(2, '0')}
                 </span>
-                <span className="mt-5 ml-3 inline-block align-top text-xs font-black uppercase tracking-widest text-neutral-400 transition-colors duration-500 dark:text-neutral-500">Level</span>
+                <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">Rank Level</span>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {[
-                  { label: 'Badges Earned', value: badges.length, color: 'text-pink-500 dark:text-pink-400' },
-                  { label: 'Skills Verified', value: unlockedSkills.length, color: 'text-cyan-500 dark:text-cyan-400' },
-                  { label: 'KYC Status', value: 'Verified', color: 'text-indigo-500 dark:text-indigo-400', isIcon: true },
+                  { label: 'Badges Unlocked', value: badges.length, color: 'text-pink-500' },
+                  { label: 'Skills Authenticated', value: unlockedSkills.length, color: 'text-cyan-500' },
+                  { label: 'Ecosystem Verification', value: 'Verified', color: 'text-indigo-500', isIcon: true },
                 ].map(({ label, value, color, isIcon }) => (
-                  <div key={label} className="flex items-center justify-between rounded-xl px-2 py-3 transition-colors duration-300 hover:bg-white/50 dark:hover:bg-white/[0.02]">
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">{label}</span>
-                    <span className={`flex items-center gap-1.5 text-sm font-black ${color}`}>
-                      {isIcon && <CheckCircle size={14} className="mb-0.5" />} {value}
+                  <div key={label} className="flex items-center justify-between rounded-xl px-2.5 py-2.5 transition-colors hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</span>
+                    <span className={cn('flex items-center gap-1 text-xs font-black', color)}>
+                      {isIcon && <CheckCircle size={13} strokeWidth={2.5} />} {value}
                     </span>
                   </div>
                 ))}
@@ -703,62 +634,60 @@ const UserProfile = ({
             {hasResumePreview && (
               <Card
                 onClick={() => setShowResumeModal(true)}
-                className="group border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-6 transition-all duration-500 hover:from-indigo-100 hover:to-purple-100 dark:border-indigo-500/20 dark:from-indigo-500/10 dark:to-purple-500/5 dark:hover:from-indigo-500/20 dark:hover:to-purple-500/10"
+                className="group border-indigo-100 bg-gradient-to-br from-indigo-50/50 to-purple-50/30 p-5 hover:from-indigo-100/50 hover:to-purple-100/30 dark:border-indigo-500/10 dark:from-indigo-500/10 dark:to-purple-500/5 dark:hover:from-indigo-500/20 dark:hover:to-purple-500/10 shadow-[inset_0_2px_4px_rgba(255,255,255,0.7)] dark:shadow-none"
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-indigo-50 bg-white shadow-md transition-transform duration-500 group-hover:scale-110 dark:border-transparent dark:bg-indigo-500/20">
-                      <FileText size={20} className="text-indigo-600 dark:text-indigo-400" />
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-indigo-100 bg-white shadow-sm dark:border-transparent dark:bg-indigo-500/10">
+                      <FileText size={18} strokeWidth={2.5} className="text-indigo-600 dark:text-indigo-400" />
                     </div>
                     <div>
-                      <p className="text-base font-black text-neutral-900 transition-colors duration-500 dark:text-white">View Resume</p>
-                      <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-neutral-500 transition-colors duration-500 dark:text-neutral-400">
-                        {verifiedResume?.data_mode === 'verified' ? 'Trust-aware profile' : 'Legacy document'}
+                      <p className="text-sm font-black text-slate-900 dark:text-white tracking-tight">View Resume</p>
+                      <p className="mt-0.5 text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        {verifiedResume?.data_mode === 'verified' ? 'Ecosystem Verified Profile' : 'Legacy Resume Plate'}
                       </p>
                     </div>
                   </div>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 transition-colors duration-500 group-hover:bg-indigo-600 dark:bg-indigo-500/20 dark:group-hover:bg-indigo-500">
-                    <ArrowUpRight size={18} className="text-indigo-600 transition-all duration-500 group-hover:rotate-45 group-hover:text-white dark:text-indigo-400" />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
+                    <ArrowUpRight size={16} strokeWidth={2.5} className="group-hover:rotate-45 transition-transform" />
                   </div>
                 </div>
               </Card>
             )}
 
             <Card
-              onClick={hasPortfolioPreview ? () => setShowPortfolioModal(true) : undefined}
-              className={`group border-cyan-200 bg-gradient-to-br from-cyan-50 to-teal-50 p-6 transition-all duration-500 dark:border-cyan-500/20 dark:from-cyan-500/10 dark:to-teal-500/5 ${
-                hasPortfolioPreview
-                  ? 'hover:from-cyan-100 hover:to-teal-100 dark:hover:from-cyan-500/20 dark:hover:to-teal-500/10'
-                  : 'opacity-75'
-              }`}
+              onClick={() => setShowPortfolioModal(true)}
+              className={cn(
+                'group border-cyan-100 bg-gradient-to-br from-cyan-50/50 to-teal-50/30 p-5 dark:border-cyan-500/10 dark:from-cyan-500/10 dark:to-teal-500/5 shadow-[inset_0_2px_4px_rgba(255,255,255,0.7)] dark:shadow-none',
+                'hover:from-cyan-100/50 hover:to-teal-100/30 dark:hover:from-cyan-500/20 dark:hover:to-teal-500/10'
+              )}
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-50 bg-white shadow-md transition-transform duration-500 group-hover:scale-110 dark:border-transparent dark:bg-cyan-500/20">
-                    <Layers3 size={20} className="text-cyan-600 dark:text-cyan-400" />
+                <div className="flex items-center gap-3.5">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-100 bg-white shadow-sm dark:border-transparent dark:bg-cyan-500/10">
+                    <Layers3 size={18} strokeWidth={2.5} className="text-cyan-600 dark:text-cyan-400" />
                   </div>
                   <div>
-                    <p className="text-base font-black text-neutral-900 transition-colors duration-500 dark:text-white">View Portfolio</p>
-                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-neutral-500 transition-colors duration-500 dark:text-neutral-400">
-                      {hasPortfolioPreview ? `${profileProjects.length} safe project item${profileProjects.length === 1 ? '' : 's'}` : 'No project items yet'}
+                    <p className="text-sm font-black text-slate-900 dark:text-white tracking-tight">View Portfolio</p>
+                    <p className="mt-0.5 text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      {hasPortfolioPreview ? `${profileProjects.length} Verified Showcase Asset${profileProjects.length === 1 ? '' : 's'}` : 'Open portfolio workspace'}
                     </p>
                   </div>
                 </div>
-                <div className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-500 ${
-                  hasPortfolioPreview
-                    ? 'bg-cyan-100 group-hover:bg-cyan-600 dark:bg-cyan-500/20 dark:group-hover:bg-cyan-500'
-                    : 'bg-neutral-100 dark:bg-white/[0.05]'
-                }`}>
-                  <ArrowUpRight size={18} className={`transition-all duration-500 ${hasPortfolioPreview ? 'text-cyan-600 group-hover:rotate-45 group-hover:text-white dark:text-cyan-400' : 'text-neutral-400'}`} />
+                <div className={cn(
+                  'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-300',
+                  'bg-cyan-50 text-cyan-600 group-hover:bg-cyan-600 group-hover:text-white dark:bg-cyan-500/10 dark:text-cyan-400'
+                )}>
+                  <ArrowUpRight size={16} strokeWidth={2.5} className="group-hover:rotate-45 transition-transform" />
                 </div>
               </div>
             </Card>
 
             {userExtras?.resume_url && (
               <a href={userExtras.resume_url} target="_blank" rel="noopener noreferrer" className="block outline-none">
-                <Card className="flex items-center justify-center gap-2 border-neutral-200 p-5 hover:bg-white/80 dark:border-white/[0.05] dark:hover:bg-white/[0.05]">
-                  <ExternalLink size={16} className="text-neutral-400 dark:text-neutral-500" />
-                  <span className="text-xs font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-400">External Portfolio</span>
+                <Card className="flex items-center justify-center gap-2 border-slate-200/80 p-4 hover:bg-white dark:border-white/[0.04] dark:hover:bg-slate-900/60">
+                  <ExternalLink size={14} strokeWidth={2.5} className="text-slate-400 dark:text-slate-500" />
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">External Project Portfolio Link</span>
                 </Card>
               </a>
             )}
@@ -766,45 +695,47 @@ const UserProfile = ({
         </div>
       </div>
 
+      {/* --- OVERLAY MODALS LAYER --- */}
       <AnimatePresence>
+        
+        {/* Portfolio Overlayer Framework */}
         {showPortfolioModal && (
           <MotionDiv
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-neutral-900/40 backdrop-blur-md dark:bg-black/80 sm:p-6"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/20 dark:bg-slate-950/40 backdrop-blur-md p-4"
             onClick={() => setShowPortfolioModal(false)}
           >
             <MotionDiv
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.98, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              onClick={(event) => event.stopPropagation()}
-              className="flex h-full w-full flex-col overflow-hidden rounded-none border border-neutral-200 bg-neutral-50 shadow-2xl dark:border-white/[0.1] dark:bg-[#0a0a0f] sm:h-[92vh] sm:max-w-[96rem] sm:rounded-[2.5rem]"
+              exit={{ opacity: 0, scale: 0.98, y: 15 }}
+              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+              onClick={(e) => e.stopPropagation()}
+              className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 dark:border-white/[0.06] dark:bg-slate-950 shadow-2xl"
             >
-              <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-5 dark:border-white/[0.05] dark:bg-[#0a0a0f] sm:px-8">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-100 dark:bg-cyan-500/20">
-                    <Layers3 size={18} className="text-cyan-600 dark:text-cyan-400" />
+              <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4 dark:border-white/[0.05] dark:bg-slate-900/60">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-400">
+                    <Layers3 size={18} strokeWidth={2.5} />
                   </div>
-                  <div>
-                    <p className="text-sm font-black text-neutral-900 dark:text-white">Portfolio</p>
-                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
-                      Safe project showcase for {user?.name || 'Creator'}
+                  <div className="text-left">
+                    <p className="text-sm font-black text-slate-900 dark:text-white tracking-tight">Portfolio Showcase</p>
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mt-0.5">
+                      Verified credential logs linked to {user?.name}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowPortfolioModal(false)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-500 transition-all hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
                 >
-                  <X size={20} />
+                  <X size={18} strokeWidth={2.5} />
                 </button>
               </div>
 
-              <div className="custom-scrollbar flex-1 overflow-y-auto bg-neutral-100 px-4 py-6 dark:bg-[#030305] sm:px-8">
+              <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-slate-50 dark:bg-slate-950/40 p-6">
                 <Portfolio
                   isClient={isClient}
                   applications={readOnly ? [] : applications}
@@ -817,224 +748,226 @@ const UserProfile = ({
           </MotionDiv>
         )}
 
+        {/* Dynamic A4 Resume Builder Compiler Preview Panel */}
         {showResumeModal && activeResume && (
           <MotionDiv
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-neutral-900/40 backdrop-blur-md dark:bg-black/80 sm:p-6"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/20 dark:bg-slate-950/40 backdrop-blur-md p-4"
             onClick={() => setShowResumeModal(false)}
           >
             <MotionDiv
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.98, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              onClick={(event) => event.stopPropagation()}
-              className="flex h-full w-full flex-col overflow-hidden rounded-none border border-neutral-200 bg-neutral-50 shadow-2xl dark:border-white/[0.1] dark:bg-[#0a0a0f] sm:h-auto sm:max-h-[90vh] sm:max-w-5xl sm:rounded-[2.5rem]"
+              exit={{ opacity: 0, scale: 0.98, y: 15 }}
+              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+              onClick={(e) => e.stopPropagation()}
+              className="flex h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white dark:border-white/[0.06] dark:bg-slate-950 shadow-2xl"
             >
-              <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-5 dark:border-white/[0.05] dark:bg-[#0a0a0f] sm:px-8">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-500/20">
-                    <FileText size={18} className="text-indigo-600 dark:text-indigo-400" />
+              <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4 dark:border-white/[0.05] dark:bg-slate-900/60">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
+                    <FileText size={18} strokeWidth={2.5} />
                   </div>
-                  <div>
-                    <p className="text-sm font-black text-neutral-900 dark:text-white">Resume Profile</p>
-                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">{user?.name}</p>
+                  <div className="text-left">
+                    <p className="text-sm font-black text-slate-900 dark:text-white tracking-tight">Resume Document Ledger</p>
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mt-0.5">{user?.name}</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 flex-wrap">
                   {canViewFullResume && (
                     <button
-                      onClick={() => setResumeViewMode((mode) => (mode === 'verified' ? 'full' : 'verified'))}
-                      className={`flex items-center gap-2 rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-widest transition-all ${
+                      onClick={() => setResumeViewMode((m) => (m === 'verified' ? 'full' : 'verified'))}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-wider border transition-all outline-none',
                         resumeViewMode === 'verified'
-                          ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                          : 'border border-amber-200 bg-amber-50 text-amber-700'
-                      }`}
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : 'border-amber-200 bg-amber-50 text-amber-700'
+                      )}
                     >
-                      <ToggleLeft size={14} />
-                      {resumeViewMode === 'verified' ? 'Verified only' : 'Full resume'}
+                      <ToggleLeft size={13} strokeWidth={2.5} />
+                      {resumeViewMode === 'verified' ? 'Verified Only' : 'Full Resume'}
                     </button>
                   )}
                   <button
                     onClick={handleDownloadPDF}
                     disabled={isDownloading}
-                    className="flex items-center gap-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 px-5 py-2.5 text-[11px] font-black uppercase tracking-widest text-white transition-all hover:scale-105 hover:shadow-lg hover:shadow-purple-500/30 active:scale-95 disabled:opacity-50"
+                    className="flex items-center gap-1.5 rounded-xl bg-indigo-600 text-white px-4 py-1.5 text-[10px] font-black uppercase tracking-wider transition-all hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
                   >
-                    <Download size={14} /> {isDownloading ? 'Saving...' : 'Download PDF'}
+                    <Download size={13} strokeWidth={2.5} /> {isDownloading ? 'Compiling...' : 'PDF'}
                   </button>
                   <button
                     onClick={() => setShowResumeModal(false)}
-                    className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-500 transition-all hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
                   >
-                    <X size={20} />
+                    <X size={18} strokeWidth={2.5} />
                   </button>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto bg-neutral-100 px-4 py-8 dark:bg-[#030305] custom-scrollbar">
+              {/* Sub-A4 Document Viewer Canvas Body */}
+              <div className="flex-1 overflow-y-auto bg-slate-100 p-4 dark:bg-slate-900/20 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {isResumeLoading ? (
-                  <div className="flex h-full items-center justify-center">
-                    <div className="rounded-2xl border border-neutral-200 bg-white px-6 py-5 text-sm font-bold text-neutral-500 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-neutral-400">
-                      Loading trust-aware resume...
+                  <div className="flex h-64 items-center justify-center">
+                    <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 text-xs font-black text-slate-400 uppercase tracking-widest shadow-sm dark:border-white/[0.05] dark:bg-slate-900">
+                      Loading certified resume data vectors...
                     </div>
                   </div>
                 ) : (
-                  <div className="flex justify-center">
+                  <div className="flex justify-center text-left">
                     <div
                       ref={resumeRef}
-                      className="min-h-[297mm] w-full max-w-[210mm] rounded-2xl bg-white text-neutral-900 shadow-xl"
-                      style={{ fontFamily: "'DM Sans', sans-serif", padding: '14mm 16mm' }}
+                      className="min-h-[297mm] w-full max-w-[210mm] rounded-2xl bg-white text-slate-900 shadow-xl"
+                      style={{ padding: '16mm 18mm' }}
                     >
-                      <div className="mb-7 flex items-start justify-between gap-6 border-b-[3px] border-neutral-900 pb-5">
+                      <div className="mb-6 flex items-start justify-between gap-6 border-b-2 border-slate-900 pb-4">
                         <div>
-                          <h1 className="mb-2 text-4xl font-black uppercase leading-none tracking-tighter text-neutral-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+                          <h1 className="mb-1 text-3xl font-black uppercase tracking-tight text-slate-900">
                             {activeResume.full_name}
                           </h1>
-                          <p className="text-sm font-black uppercase tracking-[0.2em] text-indigo-600">{activeResume.professional_title}</p>
+                          <p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-600">{activeResume.professional_title}</p>
                         </div>
-                        <div className="flex flex-col items-end gap-2 text-right">
+                        <div className="flex flex-col items-end gap-1.5">
                           <ResumeChip tone="trust">{trustBand.label}</ResumeChip>
                           <ResumeChip tone={activeResume.risk_level === 'high' ? 'warning' : activeResume.risk_level === 'medium' ? 'warning' : 'verified'}>
-                            Risk: {activeResume.risk_level}
+                            Risk Status: {activeResume.risk_level}
                           </ResumeChip>
                         </div>
                       </div>
 
-                      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        <div className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Trust score</p>
-                          <p className="mt-2 text-2xl font-black text-neutral-900">{activeResume.trust_score ?? 0}</p>
+                      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 font-bold text-left">
+                        <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
+                          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Trust Score</p>
+                          <p className="mt-1 text-xl font-black text-slate-900 font-mono">{activeResume.trust_score ?? 0}</p>
                         </div>
-                        <div className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Verified work</p>
-                          <p className="mt-2 text-2xl font-black text-neutral-900">{activeResume.verified_platform_work?.length || 0}</p>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
+                          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Escrow Audits</p>
+                          <p className="mt-1 text-xl font-black text-slate-900 font-mono">{activeResume.verified_platform_work?.length || 0}</p>
                         </div>
-                        <div className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Verified skills</p>
-                          <p className="mt-2 text-2xl font-black text-neutral-900">{activeResume.verified_skills?.length || 0}</p>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
+                          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Badges Held</p>
+                          <p className="mt-1 text-xl font-black text-slate-900 font-mono">{activeResume.verified_skills?.length || 0}</p>
                         </div>
-                        <div className="rounded-2xl border border-neutral-100 bg-neutral-50 p-4">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Resume mode</p>
-                          <p className="mt-2 text-sm font-black uppercase text-neutral-900">{resumeViewMode === 'verified' || !canViewFullResume ? 'Verified only' : 'Full'}</p>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
+                          <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">View Bounds</p>
+                          <p className="mt-1 text-xs font-black uppercase text-slate-950">{resumeViewMode === 'verified' || !canViewFullResume ? 'Verified Only' : 'Full'}</p>
                         </div>
                       </div>
 
                       {activeResume.trust_score_breakdown?.length > 0 && (
-                        <div className="mb-8 flex flex-wrap gap-2">
-                          {activeResume.trust_score_breakdown.map((item, index) => (
-                            <ResumeChip key={`${item.label}-${index}`} tone={item.value < 0 ? 'warning' : item.value > 0 ? 'verified' : 'trust'}>
+                        <div className="mb-6 flex flex-wrap gap-1.5">
+                          {activeResume.trust_score_breakdown.map((item, i) => (
+                            <ResumeChip key={`${item.label}-${i}`} tone={item.value < 0 ? 'warning' : item.value > 0 ? 'verified' : 'trust'}>
                               {item.label}: {item.value > 0 ? `+${item.value}` : item.value}
                             </ResumeChip>
                           ))}
                         </div>
                       )}
 
-                      <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
-                        <div className="space-y-8 sm:col-span-2">
+                      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                        <div className="space-y-6 sm:col-span-2">
                           <section>
-                            <ResumeSectionTitle icon={Briefcase}>Profile</ResumeSectionTitle>
-                            <p className="text-sm font-medium leading-relaxed text-neutral-700">{activeResume.summary || 'No profile summary yet.'}</p>
+                            <ResumeSectionTitle icon={Briefcase}>Executive Journey Statement</ResumeSectionTitle>
+                            <p className="text-xs font-semibold leading-relaxed text-slate-600">{activeResume.summary || 'No platform profile overview logs initialized.'}</p>
                           </section>
 
                           <section>
-                            <ResumeSectionTitle icon={ShieldCheck}>Platform Verified Work</ResumeSectionTitle>
+                            <ResumeSectionTitle icon={ShieldCheck}>Platform Certified Protected Transactions</ResumeSectionTitle>
                             {activeResume.verified_platform_work?.length ? (
-                              <div className="space-y-5">
-                                {activeResume.verified_platform_work.map((item, index) => (
-                                  <div key={item.application_id || item.id || `verified-platform-${index}`} className="relative border-l-[3px] border-emerald-200 pl-4">
-                                    <div className="absolute -left-[7.5px] top-1.5 h-3 w-3 rounded-full border-[3px] border-white bg-emerald-500 shadow-sm" />
-                                    <div className="mb-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                      <h5 className="text-base font-black text-neutral-900">{item.title}</h5>
-                                      <ResumeChip tone="verified">{item.status || 'Verified'}</ResumeChip>
+                              <div className="space-y-4">
+                                {activeResume.verified_platform_work.map((item, i) => (
+                                  <div key={item.application_id || item.id || `verified-p-${i}`} className="relative border-l-2 border-emerald-300 pl-4">
+                                    <div className="absolute -left-[5px] top-1 h-2 w-2 rounded-full border border-white bg-emerald-500 shadow-sm" />
+                                    <div className="mb-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                      <h5 className="text-sm font-black text-slate-900 leading-tight">{item.title}</h5>
+                                      <ResumeChip tone="verified">{item.status || 'Verified Ledger'}</ResumeChip>
                                     </div>
-                                    <p className="text-sm font-medium leading-relaxed text-neutral-700">
-                                      This work record is backed by TeenVerse platform activity, application state, and payment flow.
+                                    <p className="text-[11px] font-semibold leading-relaxed text-slate-500">
+                                      This work record is fully verified by safe transaction logs, delivery assets verification, and locked smart-escrow payouts.
                                     </p>
                                   </div>
                                 ))}
                               </div>
                             ) : (
-                              <ResumeEmpty>No platform-verified work yet.</ResumeEmpty>
+                              <ResumeEmpty>No platform-verified transaction records verified yet.</ResumeEmpty>
                             )}
                           </section>
 
                           <section>
-                            <ResumeSectionTitle icon={CheckCircle}>Verified Experience</ResumeSectionTitle>
+                            <ResumeSectionTitle icon={CheckCircle}>Platform Verified History</ResumeSectionTitle>
                             {activeResume.verified_experiences?.length ? (
-                              <div className="space-y-6">
-                                {activeResume.verified_experiences.map((job, index) => (
-                                  <div key={job.id || `verified-exp-${index}`} className="relative border-l-[3px] border-indigo-100 pl-4">
-                                    <div className="absolute -left-[7.5px] top-1.5 h-3 w-3 rounded-full border-[3px] border-white bg-indigo-600 shadow-sm" />
-                                    <div className="mb-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                      <h5 className="text-base font-black text-neutral-900">{job.title}</h5>
+                              <div className="space-y-5">
+                                {activeResume.verified_experiences.map((job, i) => (
+                                  <div key={job.id || `verified-exp-${i}`} className="relative border-l-2 border-indigo-200 pl-4">
+                                    <div className="absolute -left-[5px] top-1 h-2 w-2 rounded-full border border-white bg-indigo-600 shadow-sm" />
+                                    <div className="mb-0.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                      <h5 className="text-sm font-black text-slate-900 leading-tight">{job.title}</h5>
                                       <ResumeChip tone="verified">{job.period || job.verified_label || 'Verified'}</ResumeChip>
                                     </div>
-                                    <p className="mb-2 text-sm font-bold uppercase tracking-wide text-neutral-500">{job.company}</p>
-                                    <p className="whitespace-pre-line text-sm font-medium leading-relaxed text-neutral-700">{job.description}</p>
+                                    <p className="mb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">{job.company}</p>
+                                    <p className="whitespace-pre-line text-xs font-semibold leading-relaxed text-slate-500">{job.description}</p>
                                   </div>
                                 ))}
                               </div>
                             ) : (
-                              <ResumeEmpty>No proof-backed experience yet.</ResumeEmpty>
+                              <ResumeEmpty>No verifiable external experience listed on records ledger.</ResumeEmpty>
                             )}
                           </section>
 
                           {resumeViewMode === 'full' && canViewFullResume && (
                             <section>
-                              <ResumeSectionTitle icon={BadgeAlert}>Self Declared Experience</ResumeSectionTitle>
+                              <ResumeSectionTitle icon={BadgeAlert}>Self Declared History Logs</ResumeSectionTitle>
                               {activeResume.self_declared_experiences?.length ? (
-                                <div className="space-y-6">
-                                  {activeResume.self_declared_experiences.map((job, index) => (
-                                    <div key={job.id || `self-exp-${index}`} className="relative border-l-[3px] border-amber-100 pl-4">
-                                      <div className="absolute -left-[7.5px] top-1.5 h-3 w-3 rounded-full border-[3px] border-white bg-amber-500 shadow-sm" />
-                                      <div className="mb-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <h5 className="text-base font-black text-neutral-900">{job.title}</h5>
-                                        <ResumeChip tone="warning">{job.source === 'ai' ? 'AI generated' : 'Unverified'}</ResumeChip>
+                                <div className="space-y-5">
+                                  {activeResume.self_declared_experiences.map((job, i) => (
+                                    <div key={job.id || `self-exp-${i}`} className="relative border-l-2 border-amber-200 pl-4">
+                                      <div className="absolute -left-[5px] top-1 h-2 w-2 rounded-full border border-white bg-amber-500 shadow-sm" />
+                                      <div className="mb-0.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                        <h5 className="text-sm font-black text-slate-900 leading-tight">{job.title}</h5>
+                                        <ResumeChip tone="warning">{job.source === 'ai' ? 'AI Compiled' : 'Unverified Parameter'}</ResumeChip>
                                       </div>
-                                      <p className="mb-2 text-sm font-bold uppercase tracking-wide text-neutral-500">{job.company}</p>
-                                      <p className="whitespace-pre-line text-sm font-medium leading-relaxed text-neutral-700">{job.description}</p>
+                                      <p className="mb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">{job.company}</p>
+                                      <p className="whitespace-pre-line text-xs font-semibold leading-relaxed text-slate-500">{job.description}</p>
                                     </div>
                                   ))}
                                 </div>
                               ) : (
-                                <ResumeEmpty>No self-declared experience listed.</ResumeEmpty>
+                                <ResumeEmpty>No self-declared experience items added yet.</ResumeEmpty>
                               )}
                             </section>
                           )}
                         </div>
 
-                        <div className="space-y-8">
+                        <div className="space-y-6">
                           <section>
-                            <ResumeSectionTitle icon={Layers3}>Trust Breakdown</ResumeSectionTitle>
+                            <ResumeSectionTitle icon={Layers3}>Trust Parameters</ResumeSectionTitle>
                             {activeResume.trust_score_breakdown?.length ? (
-                              <div className="space-y-3">
-                                {activeResume.trust_score_breakdown.map((item, index) => (
-                                  <div key={`${item.label}-${index}`} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">{item.label}</p>
-                                    <p className={`mt-2 text-sm font-black ${item.value < 0 ? 'text-amber-700' : 'text-neutral-900'}`}>
+                              <div className="space-y-2">
+                                {activeResume.trust_score_breakdown.map((item, i) => (
+                                  <div key={`${item.label}-${i}`} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 font-bold">
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{item.label}</p>
+                                    <p className={cn('mt-1 text-xs font-black font-mono', item.value < 0 ? 'text-amber-600' : 'text-slate-900')}>
                                       {item.value > 0 ? `+${item.value}` : item.value}
                                     </p>
                                   </div>
                                 ))}
                               </div>
                             ) : (
-                              <ResumeEmpty>Trust breakdown not available yet.</ResumeEmpty>
+                              <ResumeEmpty>Account balance breakdowns not available yet.</ResumeEmpty>
                             )}
                           </section>
 
                           {activeResume.education?.length > 0 && (
                             <section>
-                              <ResumeSectionTitle icon={GraduationCap}>Education</ResumeSectionTitle>
-                              <div className="space-y-4">
-                                {activeResume.education.map((edu, index) => (
-                                  <div key={`edu-${index}`} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
-                                    <h5 className="mb-1 text-sm font-black text-neutral-900">{edu.degree}</h5>
-                                    <p className="text-xs font-bold text-indigo-600">{edu.school}</p>
-                                    <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-neutral-400">{edu.year}</p>
+                              <ResumeSectionTitle icon={GraduationCap}>Education History</ResumeSectionTitle>
+                              <div className="space-y-2.5">
+                                {activeResume.education.map((edu, i) => (
+                                  <div key={`edu-${i}`} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 text-left">
+                                    <h5 className="text-xs font-black text-slate-900 leading-tight mb-0.5">{edu.degree}</h5>
+                                    <p className="text-[10px] font-bold text-indigo-600">{edu.school}</p>
+                                    <p className="mt-1 text-[9px] font-black text-slate-400 uppercase tracking-wider font-mono">{edu.year}</p>
                                   </div>
                                 ))}
                               </div>
@@ -1042,33 +975,33 @@ const UserProfile = ({
                           )}
 
                           <section>
-                            <ResumeSectionTitle icon={Terminal}>Verified Skills</ResumeSectionTitle>
+                            <ResumeSectionTitle icon={Terminal}>Verified Skills Ledger</ResumeSectionTitle>
                             {activeResume.verified_skills?.length ? (
-                              <div className="flex flex-wrap gap-2">
-                                {activeResume.verified_skills.map((skill, index) => (
-                                  <span key={skill.id || `verified-skill-${index}`} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 shadow-sm">
+                              <div className="flex flex-wrap gap-1.5">
+                                {activeResume.verified_skills.map((skill, i) => (
+                                  <span key={skill.id || `verified-skill-${i}`} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-700 font-mono shadow-[inset_0_1px_2px_rgba(255,255,255,0.4)]">
                                     {skill.skill_name}
                                   </span>
                                 ))}
                               </div>
                             ) : (
-                              <ResumeEmpty>No verified skills yet.</ResumeEmpty>
+                              <ResumeEmpty>No platform verified skills earned yet.</ResumeEmpty>
                             )}
                           </section>
 
                           {resumeViewMode === 'full' && canViewFullResume && (
                             <section>
-                              <ResumeSectionTitle icon={LockKeyhole}>Self Declared Skills</ResumeSectionTitle>
+                              <ResumeSectionTitle icon={LockKeyhole}>Self Declared Skills Ledger</ResumeSectionTitle>
                               {activeResume.self_declared_skills?.length ? (
-                                <div className="flex flex-wrap gap-2">
-                                  {activeResume.self_declared_skills.map((skill, index) => (
-                                    <span key={skill.id || `self-skill-${index}`} className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 shadow-sm">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {activeResume.self_declared_skills.map((skill, i) => (
+                                    <span key={skill.id || `self-skill-${i}`} className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-amber-700 font-mono shadow-[inset_0_1px_2px_rgba(255,255,255,0.4)]">
                                       {skill.skill_name}
                                     </span>
                                   ))}
                                 </div>
                               ) : (
-                                <ResumeEmpty>No self-declared skills listed.</ResumeEmpty>
+                                <ResumeEmpty>No manual skills vectors added.</ResumeEmpty>
                               )}
                             </section>
                           )}

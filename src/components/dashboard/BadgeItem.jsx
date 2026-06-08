@@ -15,113 +15,110 @@ const BadgeItem = ({ name, iconName }) => {
   const Icon = IconMap[iconName] || Award;
 
   // --- CONFIGURATION ---
-  // Deep color palettes for the "Cyber-Luxe" look
+  // Re-engineered for a rich Clay-Glass fusion across Light & Dark states
   const styles = {
     trust: {
-      bg: "from-blue-500/20 to-cyan-500/5",
-      border: "border-blue-400/50",
-      text: "text-blue-300",
-      glow: "shadow-[0_0_20px_rgba(59,130,246,0.5)]",
-      icon: "text-cyan-400",
+      bg: "from-blue-50/90 to-cyan-50/50 dark:from-blue-500/15 dark:to-cyan-500/5",
+      border: "border-blue-200/80 dark:border-blue-500/30",
+      text: "text-blue-700 dark:text-blue-300",
+      glow: "shadow-[0_8px_20px_rgba(59,130,246,0.25)]",
+      icon: "text-blue-500 dark:text-cyan-400",
       beam: "bg-blue-400"
     },
     fun: {
-      bg: "from-purple-500/20 to-fuchsia-500/5",
-      border: "border-purple-400/50",
-      text: "text-purple-300",
-      glow: "shadow-[0_0_20px_rgba(168,85,247,0.5)]",
-      icon: "text-fuchsia-400",
+      bg: "from-purple-50/90 to-fuchsia-50/50 dark:from-purple-500/15 dark:to-fuchsia-500/5",
+      border: "border-purple-200/80 dark:border-purple-500/30",
+      text: "text-purple-700 dark:text-purple-300",
+      glow: "shadow-[0_8px_20px_rgba(168,85,247,0.25)]",
+      icon: "text-purple-500 dark:text-fuchsia-400",
       beam: "bg-fuchsia-400"
     },
     skill: {
-      bg: "from-amber-500/20 to-orange-500/5",
-      border: "border-amber-400/50",
-      text: "text-amber-300",
-      glow: "shadow-[0_0_20px_rgba(245,158,11,0.5)]",
-      icon: "text-yellow-400",
+      bg: "from-amber-50/90 to-orange-50/50 dark:from-amber-500/15 dark:to-orange-500/5",
+      border: "border-amber-200/80 dark:border-amber-500/30",
+      text: "text-amber-700 dark:text-amber-300",
+      glow: "shadow-[0_8px_20px_rgba(245,158,11,0.25)]",
+      icon: "text-amber-500 dark:text-yellow-400",
       beam: "bg-amber-400"
     },
     work: {
-      bg: "from-emerald-500/20 to-teal-500/5",
-      border: "border-emerald-400/50",
-      text: "text-emerald-300",
-      glow: "shadow-[0_0_20px_rgba(16,185,129,0.5)]",
-      icon: "text-teal-400",
+      bg: "from-emerald-50/90 to-teal-50/50 dark:from-emerald-500/15 dark:to-teal-500/5",
+      border: "border-emerald-200/80 dark:border-emerald-500/30",
+      text: "text-emerald-700 dark:text-emerald-300",
+      glow: "shadow-[0_8px_20px_rgba(16,185,129,0.25)]",
+      icon: "text-emerald-500 dark:text-teal-400",
       beam: "bg-emerald-400"
     },
     safety: {
-      bg: "from-gray-800 to-gray-900",
-      border: "border-gray-500/50",
-      text: "text-gray-300",
-      glow: "shadow-[0_0_15px_rgba(255,255,255,0.1)]",
-      icon: "text-gray-400",
-      beam: "bg-white"
+      bg: "from-slate-100 to-slate-200/60 dark:from-slate-800/80 dark:to-slate-900/40",
+      border: "border-slate-300/80 dark:border-white/[0.06]",
+      text: "text-slate-600 dark:text-slate-300",
+      glow: "shadow-[0_8px_16px_rgba(0,0,0,0.05)]",
+      icon: "text-slate-500 dark:text-slate-400",
+      beam: "bg-slate-400 dark:bg-white"
     },
     
-    // 🚀 NEW: SUBSCRIPTION BADGES
+    // SUBSCRIPTION BADGES
     starter: {
-      bg: "from-cyan-500/20 via-blue-500/10 to-transparent",
-      border: "border-cyan-400/60",
-      text: "text-cyan-300",
-      glow: "shadow-[0_0_25px_rgba(6,182,212,0.6)]",
-      icon: "text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]",
+      bg: "from-cyan-50 via-blue-50/60 to-transparent dark:from-cyan-500/15 dark:via-blue-500/5 dark:to-transparent",
+      border: "border-cyan-300 dark:border-cyan-400/40",
+      text: "text-cyan-700 dark:text-cyan-300",
+      glow: "shadow-[0_10px_24px_rgba(6,182,212,0.3)]",
+      icon: "text-cyan-500 dark:text-cyan-400 drop-shadow-[0_0_6px_rgba(6,182,212,0.5)]",
       beam: "bg-cyan-400"
     },
     pro: {
-      bg: "from-fuchsia-600/30 via-purple-500/10 to-transparent",
-      border: "border-fuchsia-400/60",
-      text: "text-fuchsia-300",
-      glow: "shadow-[0_0_25px_rgba(217,70,239,0.6)]",
-      icon: "text-fuchsia-400 drop-shadow-[0_0_8px_rgba(217,70,239,0.8)]",
+      bg: "from-fuchsia-50 via-purple-50/60 to-transparent dark:from-fuchsia-600/20 dark:via-purple-500/5 dark:to-transparent",
+      border: "border-fuchsia-300 dark:border-fuchsia-400/40",
+      text: "text-fuchsia-700 dark:text-fuchsia-300",
+      glow: "shadow-[0_10px_24px_rgba(217,70,239,0.3)]",
+      icon: "text-fuchsia-500 dark:text-fuchsia-400 drop-shadow-[0_0_6px_rgba(217,70,239,0.5)]",
       beam: "bg-fuchsia-400"
     },
     elite: {
-      // 🔥 THE FIRE / VIP AESTHETIC 🔥
-      bg: "from-red-900/60 via-orange-600/30 to-yellow-500/10",
-      border: "border-orange-500/70 ring-1 ring-yellow-500/30",
-      text: "text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-red-500",
-      glow: "shadow-[0_0_30px_rgba(239,68,68,0.8)]",
-      icon: "text-yellow-400 drop-shadow-[0_0_12px_rgba(250,204,21,1)]",
+      // PREMIUM ULTRA-VIP FIRE GRADIENT
+      bg: "from-red-500/10 via-orange-500/10 to-yellow-500/5 dark:from-red-950/40 dark:via-orange-950/20 dark:to-yellow-950/10",
+      border: "border-orange-300 dark:border-orange-500/40 ring-1 ring-orange-200/50 dark:ring-yellow-500/10",
+      text: "text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-red-500 dark:from-yellow-300 dark:via-orange-400 dark:to-red-400 font-black",
+      glow: "shadow-[0_12px_28px_rgba(239,68,68,0.35)]",
+      icon: "text-orange-500 dark:text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.7)]",
       beam: "bg-gradient-to-t from-red-500 to-yellow-400"
     },
 
-    // 🐣 NEW: EASTER EGG BADGES
+    // EASTER EGG MODULES
     night: {
-      bg: "from-indigo-900/60 to-slate-900/40",
-      border: "border-indigo-400/50",
-      text: "text-indigo-300",
-      glow: "shadow-[0_0_20px_rgba(99,102,241,0.5)]",
-      icon: "text-indigo-400",
+      bg: "from-indigo-50 to-slate-100 dark:from-indigo-950/30 dark:to-slate-900/40",
+      border: "border-indigo-200/80 dark:border-indigo-500/20",
+      text: "text-indigo-700 dark:text-indigo-300",
+      glow: "shadow-[0_8px_20px_rgba(99,102,241,0.2)]",
+      icon: "text-indigo-500 dark:text-indigo-400",
       beam: "bg-indigo-400"
     },
     weekend: {
-      bg: "from-rose-500/20 to-orange-500/5",
-      border: "border-rose-400/50",
-      text: "text-rose-300",
-      glow: "shadow-[0_0_20px_rgba(244,63,94,0.5)]",
-      icon: "text-rose-400",
+      bg: "from-rose-50 to-orange-50 dark:from-rose-500/15 dark:to-orange-500/5",
+      border: "border-rose-200/80 dark:border-rose-500/20",
+      text: "text-rose-700 dark:text-rose-300",
+      glow: "shadow-[0_8px_20px_rgba(244,63,94,0.2)]",
+      icon: "text-rose-500 dark:text-rose-400",
       beam: "bg-rose-400"
     }
   };
 
-  // Logic to determine category
-  let cat = 'fun'; // Default
+  // Category Selector Logic
+  let cat = 'fun';
   
-  // Standard Categories
   if (['Verified Teen', 'Parent Approved', 'KYC Completed', 'Verified'].includes(name)) cat = 'trust';
   if (['First Gig', 'Rising Talent'].includes(name)) cat = 'work';
   if (['Skill Certified', 'Academy Graduate'].includes(name)) cat = 'skill';
   if (['Safe User', 'Community Safe'].includes(name)) cat = 'safety';
 
-  // Premium Subscription Categories
   if (name === 'Starter') cat = 'starter';
   if (name === 'Pro') cat = 'pro';
   if (name === 'Elite') cat = 'elite';
 
-  // Time-Based Easter Egg Categories
   if (name === 'Night Owl') cat = 'night';
   if (name === 'Weekend Warrior') cat = 'weekend';
-  if (name === 'Early Adopter') cat = 'skill'; // Uses the amber styling
+  if (name === 'Early Adopter') cat = 'skill';
 
   const style = styles[cat];
 
@@ -130,61 +127,60 @@ const BadgeItem = ({ name, iconName }) => {
       initial="rest"
       whileHover="hover"
       animate="rest"
-      className={`relative group overflow-hidden rounded-lg border ${style.border} bg-gradient-to-br ${style.bg} backdrop-blur-md cursor-default select-none`}
+      className={`relative group overflow-hidden rounded-xl border ${style.border} bg-gradient-to-br ${style.bg} backdrop-blur-md cursor-default select-none transition-colors duration-300 shadow-[inset_0_2px_4px_rgba(255,255,255,0.6)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.06)]`}
     >
       
-      {/* 1. NOISE TEXTURE OVERLAY */}
-      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none"></div>
+      {/* 1. GRAINY TEXTURE OVERLAY */}
+      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.12] mix-blend-overlay pointer-events-none" />
 
-      {/* 2. SCANNING BEAM */}
+      {/* 2. AMBIENT SHIFT SCANNING BEAM */}
       <motion.div 
         variants={{
           rest: { x: '-150%', opacity: 0 },
           hover: { 
             x: '150%', 
-            opacity: [0, 1, 0],
-            transition: { duration: 1, repeat: Infinity, ease: "linear" } 
+            opacity: [0, 0.4, 0],
+            transition: { duration: 1.2, repeat: Infinity, ease: "linear" } 
           }
         }}
-        className={`absolute inset-0 w-1/2 h-full skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/20 to-transparent z-10`}
+        className="absolute inset-0 w-1/2 h-full skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/40 to-transparent z-10"
       />
       
-      {/* 3. CONTENT CONTAINER */}
-      <div className={`relative z-20 flex items-center gap-2 px-3 py-1.5`}>
+      {/* 3. CORE VALUE FRAME CONTAINER */}
+      <div className="relative z-20 flex items-center gap-2 px-3.5 py-1.5">
         
-        {/* Animated Icon */}
+        {/* Claymorphic micro-scaling icon vector */}
         <motion.div
           variants={{
             rest: { rotate: 0, scale: 1 },
-            hover: { rotate: 360, scale: 1.2, transition: { type: "spring", stiffness: 200 } }
+            hover: { rotate: 15, scale: 1.15, transition: { type: "spring", stiffness: 260, damping: 12 } }
           }}
-          className={`${style.icon}`}
+          className={`${style.icon} flex items-center justify-center`}
         >
-           <Icon size={14} strokeWidth={3} />
+           <Icon size={14} strokeWidth={2.5} />
         </motion.div>
 
-        {/* Text with dynamic tracking */}
+        {/* Dense scannable tracking headers */}
         <motion.span 
           variants={{
-            rest: { letterSpacing: "0.05em" },
-            hover: { letterSpacing: "0.1em" }
+            rest: { letterSpacing: "0.03em" },
+            hover: { letterSpacing: "0.06em" }
           }}
-          className={`text-[10px] font-black uppercase ${style.text}`}
+          className={`text-[10px] font-black uppercase transition-all duration-200 ${style.text}`}
         >
           {name}
         </motion.span>
 
-        {/* Status Dot (Blinking) */}
-        <div className="flex h-1.5 w-1.5 relative ml-1">
-           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${style.beam}`}></span>
-           <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${style.beam}`}></span>
+        {/* Pulse beacon indicators */}
+        <div className="flex h-1.5 w-1.5 relative ml-0.5">
+           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-60 ${style.beam}`} />
+           <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${style.beam}`} />
         </div>
       </div>
 
-      {/* 4. ACTIVE BORDER GLOW */}
+      {/* 4. ACTIVE VOLUMETRIC BORDER FOOTPRINT GLOW */}
       <motion.div 
-        className={`absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${style.glow}`}
-        style={{ boxShadow: `inset 0 0 10px ${style.border}` }}
+        className={`absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none mix-blend-screen ${style.glow}`}
       />
       
     </motion.div>
