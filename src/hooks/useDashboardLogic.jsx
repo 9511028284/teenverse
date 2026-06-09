@@ -937,14 +937,102 @@ const handlePostJob = async (e) => {
     }
   };
 
-  const handleAcceptApplication = async (app) => {
+  const finalizeEscrowFunding = async (app, { orderId, walletDeduction = 0, walletBalance = null, message = "Payment Confirmed! Order Started." } = {}) => {
+      const fundedAt = new Date().toISOString();
+
+      await logAction('ESCROW_FUNDED', {
+         order_id: orderId,
+         amount: app.bid_amount,
+         wallet_amount: walletDeduction
+      });
+
+      showToast(message, "success");
+      await api.sendPushNotification({
+          targetUserIds: [app.freelancer_id],
+          title: 'Application accepted',
+          body: 'Your application was accepted. The order has started.',
+          url: '/dashboard'
+      });
+
+      if (walletDeduction > 0) {
+        setUser(prev => ({
+            ...prev,
+            wallet_balance: walletBalance ?? Math.max(0, (Number(prev?.wallet_balance) || 0) - walletDeduction)
+        }));
+      }
+
+      setApplications(prev => prev.map(a => a.id == app.id ? {
+          ...a,
+          status: 'Accepted',
+          payment_status: 'Held',
+          started_at: fundedAt,
+          is_escrow_held: true
+      } : a));
+
+      setTimeout(async () => {
+          const { applications: newApps } = await api.fetchDashboardData(user);
+          if(newApps) setApplications(newApps);
+      }, 1500);
+  };
+
+  const handleWalletEscrowFunding = async (app, walletDeduction, gatewayAmount = 0, orderId = null) => {
+      showToast(gatewayAmount > 0 ? "Verifying payment and wallet..." : "Funding escrow from wallet...", "info");
+
+      const { data, error } = await api.fundEscrowWithWallet({
+        appId: app.id,
+        walletDeduction,
+        gatewayAmount,
+        orderId
+      });
+
+      if (error || !data?.success) {
+        showToast(error?.message || data?.error || "Wallet payment failed.", "error");
+        return;
+      }
+
+      await finalizeEscrowFunding(app, {
+        orderId: data.orderId || orderId || `wallet-${app.id}`,
+        walletDeduction,
+        walletBalance: data.walletBalance,
+        message: walletDeduction > 0
+          ? "Wallet payment confirmed! Escrow secured."
+          : "Payment Confirmed! Order Started."
+      });
+  };
+
+  const handleAcceptApplication = async (app, checkout = {}) => {
     if (isClient && !checkKycLock('accept_job')) return; 
 
+    const totalAmount = Number(app.bid_amount) || 0;
+    const walletBalance = Number(user?.wallet_balance) || 0;
+    const walletDeduction = Math.min(
+      Math.max(Number(checkout?.walletDeduction) || 0, 0),
+      totalAmount
+    );
+    const requestedFinalPayable = Number(checkout?.finalPayable);
+    const finalPayable = Math.max(
+      0,
+      Number.isFinite(requestedFinalPayable)
+        ? requestedFinalPayable
+        : totalAmount - walletDeduction
+    );
+    const isUsingWallet = walletDeduction > 0;
+
+    if (isUsingWallet && walletBalance < walletDeduction) {
+      showToast("Insufficient wallet balance for this checkout.", "error");
+      return;
+    }
+
+    if (isUsingWallet && finalPayable === 0) {
+      await handleWalletEscrowFunding(app, walletDeduction, 0, null);
+      return;
+    }
+
     if (!cashfree.current) { showToast("Payment Gateway initializing... please wait.", "error"); return; }
-    showToast("Securing Payment Session...", "info");
+    showToast(isUsingWallet ? "Opening checkout for remaining amount..." : "Securing Payment Session...", "info");
     try {
       const { paymentSessionId, orderId, error } = await api.createEscrowSession(
-        app.id, app.bid_amount, app.freelancer_id, user.phone 
+        app.id, isUsingWallet ? finalPayable : totalAmount, app.freelancer_id, user.phone 
       );
       if (error) throw new Error(error.message || "Secure Session Failed");
       
@@ -952,7 +1040,13 @@ const handlePostJob = async (e) => {
           paymentSessionId: paymentSessionId,
           redirectTarget: "_modal",
       }).then(() => {
-          setTimeout(() => handlePaymentVerification(orderId, app), 2000);
+          setTimeout(() => {
+            if (isUsingWallet) {
+              handleWalletEscrowFunding(app, walletDeduction, finalPayable, orderId);
+            } else {
+              handlePaymentVerification(orderId, app);
+            }
+          }, 2000);
       });
     } catch (err) { showToast(err.message, "error"); }
   };
@@ -962,19 +1056,7 @@ const handlePostJob = async (e) => {
       const { success } = await api.verifyAndStartEscrow(orderId, app.id);
       
       if (success) {
-         await logAction('ESCROW_FUNDED', { order_id: orderId, amount: app.bid_amount });
-         showToast("Payment Confirmed! Order Started.", "success");
-         await api.sendPushNotification({
-             targetUserIds: [app.freelancer_id],
-             title: 'Application accepted',
-             body: 'Your application was accepted. The order has started.',
-             url: '/dashboard'
-         });
-         setApplications(prev => prev.map(a => a.id == app.id ? { ...a, status: 'Accepted', started_at: new Date().toISOString(), is_escrow_held: true } : a));
-         setTimeout(async () => {
-             const { applications: newApps } = await api.fetchDashboardData(user);
-             if(newApps) setApplications(newApps);
-         }, 1500);
+         await finalizeEscrowFunding(app, { orderId });
       } else { showToast("Payment verification failed. Check if money was deducted.", "warning"); }
   };
 
@@ -1304,7 +1386,7 @@ const handlePostJob = async (e) => {
         return;
     }
 
-    if (action === 'accept') { handleAcceptApplication(app); return; }
+    if (action === 'accept') { handleAcceptApplication(app, payload || {}); return; }
     
     if (action === 'pay' && !checkKycLock('release_escrow')) { return; }
     

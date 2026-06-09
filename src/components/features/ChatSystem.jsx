@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Send, ArrowLeft, Loader2, CheckCheck, Lock, Flag, MessageSquare, Rocket, Briefcase, Wifi, WifiOff, ShieldAlert } from 'lucide-react'; 
+import { Send, ArrowLeft, Loader2, CheckCheck, Lock, Flag, MessageSquare, Rocket, Briefcase, Wifi, WifiOff, ShieldAlert, Wallet } from 'lucide-react'; 
 import { supabase } from '../../supabase';
 import { useChat } from '../../hooks/useChat'; 
+import { fundEscrowWithWallet } from '../../services/dashboard.api';
 import Button from '../ui/Button'; 
 import Modal from '../ui/Modal';     
 import Input from '../ui/Input'; 
@@ -53,13 +54,18 @@ const processCashfreePayment = async (params, onSuccess, onFail) => {
 
     await cashfree.checkout({ paymentSessionId: orderData.payment_session_id, redirectTarget: "_modal" });
 
+    if (params.verifyWithPaymentGateway === false) {
+      await onSuccess({ order_id: createdOrderId, orderId: createdOrderId });
+      return;
+    }
+
     const { data: verifyData } = await supabase.functions.invoke('payment-gateway', {
       body: { action: 'VERIFY_ORDER', orderId: createdOrderId, appId: params.appId }
     });
 
     if (verifyData?.success) {
       const verifiedOrderId = verifyData.order_id || verifyData.orderId || verifyData?.order?.order_id || createdOrderId;
-      onSuccess({ ...verifyData, order_id: verifiedOrderId, orderId: verifiedOrderId });
+      await onSuccess({ ...verifyData, order_id: verifiedOrderId, orderId: verifiedOrderId });
     }
     else onFail("Payment not completed or failed.");
 
@@ -79,6 +85,8 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", show
   const [reportModalOpen, setReportModalOpen] = useState(false); 
   const [hireModalOpen, setHireModalOpen] = useState(false); 
   const [isSending, setIsSending] = useState(false); 
+  const [hireAmount, setHireAmount] = useState("");
+  const [useWalletForHire, setUseWalletForHire] = useState(false);
   
   const [conversations, setConversations] = useState([]);
   const [isLoadingInbox, setIsLoadingInbox] = useState(false);
@@ -88,6 +96,10 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", show
   const isClient = user?.type === 'client';
   const isUuid = (val) => typeof val === 'string' && val.includes('-');
   const isDirect = !activeChat?.application_id || isUuid(activeChat?.application_id);
+  const walletBalance = Number(user?.wallet_balance) || 0;
+  const numericHireAmount = Number(hireAmount) || 0;
+  const hireWalletDeduction = useWalletForHire ? Math.min(walletBalance, numericHireAmount) : 0;
+  const hireFinalPayable = Math.max(0, numericHireAmount - hireWalletDeduction);
 
   // --- 🛠️ TEXT INPUT HANDLERS ---
   const adjustTextareaHeight = () => {
@@ -248,13 +260,37 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", show
     await supabase.from('messages').insert([dbPayload]);
   };
 
+  const closeHireModal = () => {
+    setHireModalOpen(false);
+    setHireAmount("");
+    setUseWalletForHire(false);
+  };
+
+  const completeDirectHire = async (app, amount, walletDeduction = 0) => {
+    await sendSystemMessage(`[SYSTEM_ACTION:HIRED] Let's start! ₹${amount} Escrow Secured.`);
+    setActiveChat({ ...activeChat, application_id: app.id, status: 'Accepted' });
+    closeHireModal();
+    setIsSending(false);
+
+    if (showToast) {
+      showToast(walletDeduction > 0 ? "Wallet payment confirmed! Escrow secured." : "Payment successful! Escrow secured.", "success");
+    }
+  };
+
   const handleDirectHire = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const title = formData.get('title');
-    const amount = formData.get('amount');
+    const amount = Number(formData.get('amount'));
+    const walletDeduction = useWalletForHire ? Math.min(walletBalance, amount) : 0;
+    const finalPayable = Math.max(0, amount - walletDeduction);
 
-    if (!user?.phone) {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      if (showToast) showToast("Please enter a valid project amount.", "error");
+      return;
+    }
+
+    if (finalPayable > 0 && !user?.phone) {
       if (showToast) showToast("Please add a phone number to your profile to proceed.", "error");
       return;
     }
@@ -274,14 +310,44 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", show
             freelancer_email: freelancer?.email || ''
         }).select().single();
 
+        if (walletDeduction > 0 && finalPayable === 0) {
+          const { data, error } = await fundEscrowWithWallet({
+            appId: app.id,
+            walletDeduction,
+            gatewayAmount: 0
+          });
+
+          if (error || !data?.success) {
+            throw new Error(error?.message || data?.error || "Wallet payment failed.");
+          }
+
+          await completeDirectHire(app, amount, walletDeduction);
+          return;
+        }
+
         await processCashfreePayment({
-          amount: amount, customerPhone: user.phone, freelancerId: activeChat.id, appId: app.id, userId: myId
+          amount: finalPayable,
+          customerPhone: user.phone,
+          freelancerId: activeChat.id,
+          appId: app.id,
+          userId: myId,
+          verifyWithPaymentGateway: walletDeduction === 0
         }, 
-        async () => {
-          await sendSystemMessage(`[SYSTEM_ACTION:HIRED] Let's start! ₹${amount} Escrow Secured.`);
-          setActiveChat({ ...activeChat, application_id: app.id, status: 'Accepted' });
-          setHireModalOpen(false);
-          setIsSending(false);
+        async (verifyData) => {
+          if (walletDeduction > 0) {
+            const { data, error } = await fundEscrowWithWallet({
+              appId: app.id,
+              walletDeduction,
+              gatewayAmount: finalPayable,
+              orderId: verifyData.order_id || verifyData.orderId
+            });
+
+            if (error || !data?.success) {
+              throw new Error(error?.message || data?.error || "Wallet payment failed after gateway payment.");
+            }
+          }
+
+          await completeDirectHire(app, amount, walletDeduction);
         },
         (errorMsg) => {
           if (showToast) showToast(errorMsg, "error");
@@ -582,7 +648,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", show
 
       {/* DIRECT HIRE MODAL */}
       {hireModalOpen && (
-          <Modal title="Fund Escrow & Start" onClose={() => setHireModalOpen(false)}>
+          <Modal title="Fund Escrow & Start" onClose={closeHireModal}>
               <form onSubmit={handleDirectHire} className="space-y-4">
                   <div className="bg-indigo-50 dark:bg-indigo-500/10 text-indigo-800 dark:text-indigo-300 p-4 rounded-xl text-sm border border-indigo-200 dark:border-indigo-500/20 flex items-start gap-3">
                       <ShieldAlert className="shrink-0 mt-0.5" size={18} />
@@ -594,13 +660,57 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", show
                   </div>
                   <div>
                       <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest ml-1 mb-1 block">Agreed Amount (₹)</label>
-                      <Input name="amount" type="number" placeholder="500" min="50" required className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800"/>
+                      <Input
+                        name="amount"
+                        type="number"
+                        placeholder="500"
+                        min="50"
+                        required
+                        value={hireAmount}
+                        onChange={(event) => setHireAmount(event.target.value)}
+                        className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800"
+                      />
+                  </div>
+
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3.5 dark:border-indigo-500/20 dark:bg-indigo-500/10">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <Wallet size={18} className="text-indigo-600 dark:text-indigo-300" />
+                        <div>
+                          <p className="text-xs font-black text-indigo-950 dark:text-indigo-200">Use wallet balance</p>
+                          <p className="text-[10px] font-bold text-indigo-500 dark:text-indigo-300">Available: ₹{walletBalance.toFixed(2)}</p>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          className="sr-only peer"
+                          checked={useWalletForHire}
+                          onChange={() => setUseWalletForHire(prev => !prev)}
+                          disabled={walletBalance <= 0 || numericHireAmount <= 0}
+                        />
+                        <div className="w-9 h-5 rounded-full bg-slate-200 shadow-inner peer-checked:bg-indigo-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full dark:bg-slate-800" />
+                      </label>
+                    </div>
+
+                    {useWalletForHire && hireWalletDeduction > 0 && (
+                      <div className="mt-3 space-y-1.5 border-t border-indigo-100 pt-3 text-xs font-bold dark:border-indigo-500/20">
+                        <div className="flex justify-between text-emerald-600 dark:text-emerald-300">
+                          <span>Wallet applied</span>
+                          <span>- ₹{hireWalletDeduction.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-900 dark:text-white">
+                          <span>Amount to pay</span>
+                          <span>₹{hireFinalPayable.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                      <Button variant="outline" type="button" onClick={() => setHireModalOpen(false)} className="w-full">Cancel</Button>
+                      <Button variant="outline" type="button" onClick={closeHireModal} className="w-full">Cancel</Button>
                       <Button type="submit" disabled={isSending} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg">
-                          {isSending ? <Loader2 size={16} className="animate-spin mx-auto"/> : "Fund Escrow & Pay"}
+                          {isSending ? <Loader2 size={16} className="animate-spin mx-auto"/> : hireFinalPayable === 0 && hireWalletDeduction > 0 ? "Pay with Wallet" : `Pay ₹${hireFinalPayable || numericHireAmount}`}
                       </Button>
                   </div>
               </form>

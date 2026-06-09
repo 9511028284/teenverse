@@ -294,6 +294,33 @@ export const verifyAndStartEscrow = async (orderId, appId) => {
   }
 };
 
+export const fundEscrowWithWallet = async ({ appId, walletDeduction = 0, gatewayAmount = 0, orderId = null }) => {
+  try {
+    const { data, error } = await supabase.functions.invoke('fund-escrow-with-wallet', {
+      body: {
+        appId,
+        walletDeduction,
+        gatewayAmount,
+        orderId
+      }
+    });
+
+    if (error) {
+      const errorBody = await error.context?.json?.().catch(() => null);
+      throw new Error(errorBody?.error || errorBody?.message || error.message || "Wallet payment failed");
+    }
+
+    if (!data?.success) {
+      throw new Error(data?.error || data?.message || "Wallet payment failed");
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    console.error("Wallet Escrow Error:", err);
+    return { data: null, error: err };
+  }
+};
+
 export const checkPaymentStatus = async (orderId) => {
   try {
     const { data, error } = await supabase.functions.invoke('payment-gateway', {

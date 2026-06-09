@@ -24,7 +24,7 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
   // --- PREMIUM CHECKOUT STATES ---
   const [checkoutApp, setCheckoutApp] = useState(null); 
   const [useWallet, setUseWallet] = useState(false);
-  const walletBalance = user?.wallet_balance || 150.00;
+  const walletBalance = Number(user?.wallet_balance) || 0;
 
   // --- HANDLERS ---
   const handleReviewSubmit = async (rating, tags) => {
@@ -389,10 +389,10 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
 
        {/* 2. Premium Checkout Modal */}
        {checkoutApp && (() => {
-         const totalAmount = Number(checkoutApp.bid_amount);
+         const totalAmount = Number(checkoutApp.bid_amount) || 0;
          const applicableWallet = Math.min(walletBalance, totalAmount);
          const walletDeduction = useWallet ? applicableWallet : 0;
-         const finalPayable = totalAmount - walletDeduction;
+         const finalPayable = Math.max(0, totalAmount - walletDeduction);
 
          const handleConfirmCheckout = () => {
            onAction('accept', checkoutApp, { finalPayable, walletDeduction });
