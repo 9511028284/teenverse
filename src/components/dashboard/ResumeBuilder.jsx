@@ -38,6 +38,13 @@ const STEPS = [
   { id:'finish',     label:'05', title:'AI Polish',      desc:'Final pass transforms everything into impact prose.', icon: Wand2     },
 ];
 
+const unwrapFunctionData = (payload) => payload?.success ? payload.data : payload;
+
+const getFunctionErrorMessage = async (error, fallback) => {
+  const contextBody = await error?.context?.json?.().catch(() => null);
+  return contextBody?.error || error?.message || fallback;
+};
+
 const getGithubHandle = (socialLinks) => {
   const github = socialLinks?.github;
   if (!github) return null;
@@ -280,16 +287,17 @@ const ResumeBuilder = ({ user, showToast }) => {
     if (input.length < 120) { showToast('Add more detail before the AI pass.', 'warning'); return; }
     setIsOptimizing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-resume', { body: { roughText: input } });
-      if (error) throw error;
+      const { data, error } = await supabase.functions.invoke('generate-resume', { body: { userId: user.id, roughText: input } });
+      if (error) throw new Error(await getFunctionErrorMessage(error, 'Optimization failed.'));
+      const resumePayload = unwrapFunctionData(data);
       const norm = {
-        ...data, source:'ai', is_verified:false,
-        suspicion_flags: [...(data?.suspicion_flags||[]),...(/\b(ai|machine learning|blockchain|global|international|scaled|enterprise)\b/i.test(input)?['unverified_high_claim']:[])],
-        experiences: (data?.experiences||[]).map((j) => ({ ...j, source:'ai', is_verified:false })),
-        skills: (data?.skills||[]).map((s) => typeof s==='string' ? { skill_name:s, source:'ai', is_verified:false } : { ...s, source:'ai', is_verified:false }),
+        ...resumePayload, source:'ai', is_verified:false,
+        suspicion_flags: [...(resumePayload?.suspicion_flags||[]),...(/\b(ai|machine learning|blockchain|global|international|scaled|enterprise)\b/i.test(input)?['unverified_high_claim']:[])],
+        experiences: (resumePayload?.experiences||[]).map((j) => ({ ...j, source:'ai', is_verified:false })),
+        skills: (resumePayload?.skills||[]).map((s) => typeof s==='string' ? { skill_name:s, source:'ai', is_verified:false } : { ...s, source:'ai', is_verified:false }),
       };
       setOptimizedResume(norm);
-      if (data?.journey_statement) setJourneyText(data.journey_statement);
+      if (resumePayload?.journey_statement) setJourneyText(resumePayload.journey_statement);
       showToast('AI optimized. Still marked unverified until proof exists.', 'success');
     } catch (err) { showToast(err.message||'Optimization failed.', 'error'); }
     finally { setIsOptimizing(false); }

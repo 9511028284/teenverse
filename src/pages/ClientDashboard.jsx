@@ -29,6 +29,7 @@ import {
   TrendingUp,
   Users,
   Wallet,
+  XCircle,
 } from 'lucide-react';
 import { useDashboardLogic } from '../hooks/useDashboardLogic';
 import DashboardModals from '../components/dashboard/DashboardModals';
@@ -44,7 +45,7 @@ import SupportHub from '../components/dashboard/SupportHub';
 import Records from '../components/dashboard/Records';
 import SettingsComp from '../components/dashboard/SettingsComp';
 
-const cx = (...classes) => classes.filter(Boolean).join(' ');
+const cn = (...classes) => classes.filter(Boolean).join(' ');
 
 const clientNav = [
   { id: 'overview', label: 'Home', icon: LayoutDashboard },
@@ -61,13 +62,10 @@ const clientNav = [
 ];
 
 const pageVariants = {
-  initial: { opacity: 0, x: -8 },
-  in: { opacity: 1, x: 0 },
-  out: { opacity: 0, x: 8 },
+  initial: { opacity: 0, y: 12, scale: 0.99 },
+  in: { opacity: 1, y: 0, scale: 1 },
+  out: { opacity: 0, y: -12, scale: 0.99 },
 };
-
-const serif = { fontFamily: 'var(--font-kibitz, "Cormorant Garamond", "EB Garamond", Georgia, serif)', fontWeight: 300 };
-const mono  = { fontFamily: 'var(--font-mono, "Space Mono", ui-monospace, monospace)', fontWeight: 400 };
 
 const getFirstName = (user) => user?.name?.split(' ')?.[0] || 'Client';
 
@@ -102,17 +100,17 @@ const mapServicesToTalent = (services = []) => (
 const StatusPill = ({ status }) => {
   const normalized = status || 'Open';
   const styles = {
-    Pending: 'border-amber-200/60 bg-amber-50/50 text-amber-700 dark:border-amber-500/10 dark:bg-amber-500/5 dark:text-amber-400',
-    Accepted: 'border-blue-200/60 bg-blue-50/50 text-blue-700 dark:border-blue-500/10 dark:bg-blue-500/5 dark:text-blue-400',
-    Submitted: 'border-violet-200/60 bg-violet-50/50 text-violet-700 dark:border-violet-500/10 dark:bg-violet-500/5 dark:text-violet-400',
-    Completed: 'border-emerald-200/60 bg-emerald-50/50 text-emerald-700 dark:border-emerald-500/10 dark:bg-emerald-500/5 dark:text-emerald-400',
-    Paid: 'border-emerald-200/60 bg-emerald-50/50 text-emerald-700 dark:border-emerald-500/10 dark:bg-emerald-500/5 dark:text-emerald-400',
-    Rejected: 'border-rose-200/60 bg-rose-50/50 text-rose-700 dark:border-rose-500/10 dark:bg-rose-500/5 dark:text-rose-400',
-    Open: 'border-neutral-200 bg-neutral-50 text-neutral-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400',
+    Pending: 'border-amber-200 bg-amber-50/50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400',
+    Accepted: 'border-blue-200 bg-blue-50/50 text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-400',
+    Submitted: 'border-violet-200 bg-violet-50/50 text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-400',
+    Completed: 'border-emerald-200 bg-emerald-50/50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400',
+    Paid: 'border-emerald-200 bg-emerald-50/50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400',
+    Rejected: 'border-red-200 bg-red-50/50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-400',
+    Open: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-white/[0.04] dark:bg-slate-800 dark:text-slate-400',
   };
 
   return (
-    <span className={cx('inline-flex items-center rounded-lg border px-2 py-0.5 text-[11px] font-semibold tracking-tight shrink-0 box-border', styles[normalized] || styles.Open)}>
+    <span className={cn('inline-flex items-center rounded-xl border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider shrink-0 shadow-[inset_0_1px_2px_rgba(255,255,255,0.4)] dark:shadow-none', styles[normalized] || styles.Open)}>
       {normalized}
     </span>
   );
@@ -192,23 +190,22 @@ const buildCategorySpend = (jobs = [], applications = []) => {
 };
 
 const GlassPanel = ({ title, subtitle, icon: Icon, action, className = '', children }) => (
-  <section className={cx(
-    'relative overflow-hidden rounded-2xl border border-white/70 bg-white/[0.62] p-5 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/10 dark:bg-zinc-950/[0.42] dark:shadow-[0_24px_70px_rgba(0,0,0,0.34)] box-border',
+  <section className={cn(
+    'relative overflow-hidden rounded-[28px] border border-slate-200/60 bg-white/95 p-6 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_4px_20px_rgba(99,102,241,0.02)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-slate-900/40 dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.06),_0_16px_36px_rgba(0,0,0,0.25)] text-left',
     className
   )}>
-    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.62),rgba(255,255,255,0.12)_48%,rgba(99,102,241,0.08))] dark:bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015)_48%,rgba(34,211,238,0.04))]" />
     <div className="relative z-10">
       {(title || action) && (
-        <div className="mb-5 flex items-start justify-between gap-4 box-border">
-          <div className="flex min-w-0 items-start gap-3 box-border">
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
             {Icon && (
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/[0.68] text-neutral-800 shadow-sm dark:border-white/10 dark:bg-white/[0.08] dark:text-zinc-100">
-                <Icon size={16} />
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200/40 dark:border-white/[0.03] text-slate-800 dark:text-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)] dark:shadow-none">
+                <Icon size={18} strokeWidth={2.5} />
               </span>
             )}
             <div className="min-w-0">
-              {title && <h2 className="text-base font-bold text-neutral-950 dark:text-white">{title}</h2>}
-              {subtitle && <p className="mt-1 text-xs leading-5 text-neutral-500 dark:text-zinc-400">{subtitle}</p>}
+              {title && <h2 className="text-base font-black text-slate-900 dark:text-white tracking-tight">{title}</h2>}
+              {subtitle && <p className="mt-1 text-xs font-medium text-slate-400 dark:text-slate-500 leading-normal">{subtitle}</p>}
             </div>
           </div>
           {action}
@@ -221,41 +218,41 @@ const GlassPanel = ({ title, subtitle, icon: Icon, action, className = '', child
 
 const ClientStat = ({ icon: Icon, label, value, helper, tone = 'indigo' }) => {
   const tones = {
-    indigo: 'from-indigo-500 to-sky-500 text-indigo-600 dark:text-indigo-300',
-    emerald: 'from-emerald-500 to-teal-500 text-emerald-600 dark:text-emerald-300',
-    amber: 'from-amber-400 to-orange-500 text-amber-600 dark:text-amber-300',
-    rose: 'from-rose-500 to-pink-500 text-rose-600 dark:text-rose-300',
+    indigo: 'from-indigo-500 to-sky-500 text-indigo-600 dark:text-indigo-400',
+    emerald: 'from-emerald-500 to-teal-500 text-emerald-600 dark:text-emerald-400',
+    amber: 'from-amber-400 to-orange-500 text-amber-600 dark:text-amber-400',
+    rose: 'from-rose-500 to-pink-500 text-rose-600 dark:text-rose-400',
   };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/70 bg-white/[0.66] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)] backdrop-blur-2xl dark:border-white/10 dark:bg-white/[0.06] box-border">
-      <div className={cx('absolute inset-x-0 top-0 h-1 bg-gradient-to-r', tones[tone]?.split(' text-')[0] || tones.indigo.split(' text-')[0])} />
-      <div className="flex items-start justify-between gap-3 box-border">
+    <div className="relative overflow-hidden rounded-[24px] border border-slate-200/60 bg-white/95 p-5 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_4px_16px_rgba(0,0,0,0.01)] dark:border-white/[0.05] dark:bg-slate-900/40 dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.06),_0_16px_36px_rgba(0,0,0,0.25)] text-left">
+      <div className={cn('absolute inset-x-0 top-0 h-1 bg-gradient-to-r', tones[tone]?.split(' text-')[0] || tones.indigo.split(' text-')[0])} />
+      <div className="flex items-start justify-between gap-3 pt-1">
         <div className="min-w-0 space-y-1">
-          <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-neutral-400 dark:text-zinc-500" style={mono}>{label}</p>
-          <p className="text-2xl font-bold text-neutral-950 dark:text-zinc-50">{value}</p>
+          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</p>
+          <p className="text-2xl font-black text-slate-900 dark:text-white tracking-tight leading-none">{value}</p>
         </div>
-        <span className={cx('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/70 shadow-sm dark:border-white/10 dark:bg-white/[0.08]', tones[tone]?.replace(/from-\S+ to-\S+ /, '') || 'text-indigo-600')}>
-          <Icon size={17} />
+        <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 border border-slate-200/40 dark:bg-slate-950 dark:border-white/[0.03] shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)] dark:shadow-none', tones[tone]?.split(' text-')[1] || 'text-indigo-600')}>
+          <Icon size={18} strokeWidth={2.5} />
         </span>
       </div>
-      <p className="mt-4 text-xs font-medium leading-5 text-neutral-500 dark:text-zinc-400">{helper}</p>
+      <p className="mt-4 text-xs font-bold text-slate-400 dark:text-slate-500 leading-normal">{helper}</p>
     </div>
   );
 };
 
 const EmptyLine = ({ title, body, actionLabel, onAction }) => (
-  <div className="rounded-2xl border border-dashed border-white/70 bg-white/40 p-8 text-center backdrop-blur-xl dark:border-white/10 dark:bg-white/5 box-border">
-    <p className="text-sm font-bold text-neutral-900 dark:text-zinc-200">{title}</p>
-    <p className="mx-auto mt-2 max-w-sm text-xs leading-relaxed text-neutral-500 dark:text-zinc-400 font-medium">{body}</p>
+  <div className="rounded-[24px] border border-dashed border-slate-200 bg-white/40 dark:border-white/10 dark:bg-slate-950/20 p-8 text-center shadow-[inset_0_2px_4px_rgba(255,255,255,0.4)]">
+    <p className="text-sm font-black text-slate-900 dark:text-zinc-200 tracking-tight">{title}</p>
+    <p className="mx-auto mt-1.5 max-w-sm text-xs font-medium leading-relaxed text-slate-400 dark:text-slate-500">{body}</p>
     {actionLabel && (
       <button
         type="button"
         onClick={onAction}
-        className="mt-4 inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-4 text-xs font-semibold text-white transition hover:bg-black dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white shadow-sm box-border"
+        className="mt-4 inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 text-xs font-black uppercase tracking-wider text-white transition hover:scale-105 active:scale-95 dark:bg-white dark:text-slate-950 shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.2)]"
       >
         <span>{actionLabel}</span>
-        <ChevronRight size={14} />
+        <ChevronRight size={14} strokeWidth={2.5} />
       </button>
     )}
   </div>
@@ -275,7 +272,7 @@ const LineChart = ({ data = [] }) => {
   const areaPath = points.length ? `${linePath} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z` : '';
 
   return (
-    <div className="box-border">
+    <div>
       <svg viewBox={`0 0 ${width} ${height}`} className="h-48 w-full overflow-visible" role="img" aria-label="Client spending trend">
         <defs>
           <linearGradient id="clientSpendLine" x1="0" x2="1" y1="0" y2="0">
@@ -284,7 +281,7 @@ const LineChart = ({ data = [] }) => {
             <stop offset="100%" stopColor="#0ea5e9" />
           </linearGradient>
           <linearGradient id="clientSpendArea" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.24" />
+            <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.2" />
             <stop offset="100%" stopColor="#4f46e5" stopOpacity="0" />
           </linearGradient>
         </defs>
@@ -296,17 +293,17 @@ const LineChart = ({ data = [] }) => {
             y1={padding + line * ((height - padding * 2) / 2)}
             y2={padding + line * ((height - padding * 2) / 2)}
             stroke="currentColor"
-            className="text-neutral-200/80 dark:text-white/10"
+            className="text-slate-100 dark:text-white/[0.04]"
             strokeWidth="1"
           />
         ))}
         {areaPath && <path d={areaPath} fill="url(#clientSpendArea)" />}
         {linePath && <path d={linePath} fill="none" stroke="url(#clientSpendLine)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />}
         {points.map((point, index) => (
-          <circle key={data[index]?.label || index} cx={point.x} cy={point.y} r="4.5" fill="#ffffff" stroke="#4f46e5" strokeWidth="3" />
+          <circle key={data[index]?.label || index} cx={point.x} cy={point.y} r="4" fill="#ffffff" stroke="#4f46e5" strokeWidth="3" />
         ))}
       </svg>
-      <div className="grid grid-cols-6 gap-1 text-center text-[10px] font-bold text-neutral-400 dark:text-zinc-500">
+      <div className="grid grid-cols-6 gap-1 text-center text-[10px] font-black uppercase font-mono text-slate-400 dark:text-slate-500 pt-1">
         {data.map((item) => <span key={item.key}>{item.label}</span>)}
       </div>
     </div>
@@ -320,10 +317,10 @@ const DonutChart = ({ data = [] }) => {
   let offset = 0;
 
   return (
-    <div className="grid gap-5 sm:grid-cols-[170px_minmax(0,1fr)] sm:items-center box-border">
+    <div className="grid gap-5 sm:grid-cols-[170px_minmax(0,1fr)] sm:items-center">
       <div className="relative mx-auto h-40 w-40">
         <svg viewBox="0 0 110 110" className="-rotate-90">
-          <circle cx="55" cy="55" r={radius} fill="none" stroke="currentColor" strokeWidth="12" className="text-neutral-200/80 dark:text-white/10" />
+          <circle cx="55" cy="55" r={radius} fill="none" stroke="currentColor" strokeWidth="12" className="text-slate-100 dark:text-white/[0.04]" />
           {total > 0 && data.map((item) => {
             const length = (item.value / total) * circumference;
             const dashOffset = -offset;
@@ -345,18 +342,18 @@ const DonutChart = ({ data = [] }) => {
           })}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="text-2xl font-bold text-neutral-950 dark:text-white">{total}</span>
-          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-neutral-400 dark:text-zinc-500" style={mono}>orders</span>
+          <span className="text-2xl font-black text-slate-900 dark:text-white font-mono leading-none">{total}</span>
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mt-1">orders</span>
         </div>
       </div>
-      <div className="space-y-2.5 box-border">
+      <div className="space-y-2.5 text-left">
         {data.map((item) => (
-          <div key={item.label} className="flex items-center justify-between gap-3 text-xs font-semibold text-neutral-600 dark:text-zinc-300">
+          <div key={item.label} className="flex items-center justify-between gap-3 text-xs font-bold text-slate-600 dark:text-slate-400">
             <span className="flex min-w-0 items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+              <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
               <span className="truncate">{item.label}</span>
             </span>
-            <span className="font-mono font-bold text-neutral-950 dark:text-white" style={mono}>{item.value}</span>
+            <span className="font-mono font-black text-slate-900 dark:text-white">{item.value}</span>
           </div>
         ))}
       </div>
@@ -371,22 +368,22 @@ const BarList = ({ data = [] }) => {
     return (
       <EmptyLine
         title="No budget categories yet"
-        body="Project budgets will create category allocation analytics."
+        body="Project briefs initialization generates categorical asset statistics."
       />
     );
   }
 
   return (
-    <div className="space-y-4 box-border">
+    <div className="space-y-4">
       {data.map((item) => (
-        <div key={item.label} className="space-y-2 box-border">
-          <div className="flex items-center justify-between gap-3 text-xs font-semibold">
-            <span className="truncate text-neutral-700 dark:text-zinc-300">{item.label}</span>
-            <span className="font-mono font-bold text-neutral-950 dark:text-white" style={mono}>{formatCompactMoney(item.value)}</span>
+        <div key={item.label} className="space-y-2 text-left">
+          <div className="flex items-center justify-between gap-3 text-xs font-bold">
+            <span className="truncate text-slate-700 dark:text-slate-400">{item.label}</span>
+            <span className="font-mono font-black text-slate-900 dark:text-white">{formatCompactMoney(item.value)}</span>
           </div>
-          <div className="h-2.5 overflow-hidden rounded-full bg-neutral-200/70 dark:bg-white/10">
+          <div className="h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.04] shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-teal-500 via-indigo-500 to-sky-500"
+              className="h-full rounded-full bg-gradient-to-r from-teal-500 via-indigo-500 to-sky-500 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]"
               style={{ width: `${Math.max(8, (item.value / maxValue) * 100)}%` }}
             />
           </div>
@@ -397,20 +394,20 @@ const BarList = ({ data = [] }) => {
 };
 
 const PipelineRows = ({ data = [], total }) => (
-  <div className="space-y-4 box-border">
+  <div className="space-y-4">
     {data.map((item) => {
       const percent = total > 0 ? Math.round((item.value / total) * 100) : 0;
       return (
-        <div key={item.label} className="space-y-2 box-border">
+        <div key={item.label} className="space-y-2 text-left">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <StatusPill status={item.status} />
-              <span className="truncate text-xs font-semibold text-neutral-600 dark:text-zinc-300">{item.label}</span>
+              <span className="truncate text-xs font-black text-slate-500 dark:text-slate-400">{item.label}</span>
             </div>
-            <span className="text-xs font-mono font-bold text-neutral-950 dark:text-white" style={mono}>{item.value}</span>
+            <span className="text-xs font-mono font-black text-slate-900 dark:text-white">{item.value}</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-neutral-200/70 dark:bg-white/10">
-            <div className={cx('h-full rounded-full', item.bar)} style={{ width: `${Math.max(item.value ? 8 : 0, percent)}%` }} />
+          <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.04]">
+            <div className={cn('h-full rounded-full transition-all duration-500 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]', item.bar)} style={{ width: `${Math.max(item.value ? 8 : 0, percent)}%` }} />
           </div>
         </div>
       );
@@ -452,77 +449,80 @@ const ClientHome = ({ user, jobs, applications, totalEarnings, setTab, setModal 
   ];
 
   return (
-    <div className="relative space-y-5 pb-12 box-border">
-      <section className="relative overflow-hidden rounded-2xl border border-white/70 bg-white/[0.64] p-6 shadow-[0_28px_80px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/10 dark:bg-zinc-950/[0.48] dark:shadow-[0_28px_80px_rgba(0,0,0,0.38)] box-border">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(20,184,166,0.18),transparent_34%),radial-gradient(circle_at_88%_16%,rgba(79,70,229,0.16),transparent_32%)]" />
-        <div className="relative z-10 grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)] lg:items-end box-border">
+    <div className="relative space-y-5 pb-12 text-left">
+
+      {/* Welcome Banner Card */}
+      <section className="relative overflow-hidden rounded-[32px] border border-white bg-white/70 p-6 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_12px_36px_rgba(0,0,0,0.03)] backdrop-blur-xl dark:border-white/[0.04] dark:bg-slate-900/40 dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.06),_0_20px_40px_rgba(0,0,0,0.3)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(20,184,166,0.12),transparent_34%),radial-gradient(circle_at_88%_16%,rgba(79,70,229,0.12),transparent_32%)]" />
+        <div className="relative z-10 grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)] lg:items-end">
           <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-xl border border-white/70 bg-white/[0.64] px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-neutral-500 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.08] dark:text-zinc-400" style={mono}>
-              <Activity size={13} />
-              Client command center
+            <div className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400 shadow-[inset_0_1px_2px_rgba(255,255,255,0.6)] dark:shadow-none">
+              <Activity size={13} strokeWidth={2.5} />
+              Client Control Center
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-neutral-950 dark:text-white sm:text-4xl" style={serif}>
+              <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight sm:text-4xl">
                 Good to see you, {getFirstName(user)}
               </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-600 dark:text-zinc-300">
-                A clear operating view for hiring velocity, escrow exposure, proposal quality, and delivery movement.
+              <p className="mt-2.5 max-w-2xl text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                Operating portal metrics for monitoring active hiring tracks, escrow balances, incoming Proposals, and contract revisions velocity cycles.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2 box-border">
-              <span className="rounded-xl border border-emerald-200/70 bg-emerald-50/70 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:border-emerald-400/15 dark:bg-emerald-400/10 dark:text-emerald-300">
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <span className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-1 text-[11px] font-bold text-emerald-700 dark:border-emerald-500/10 dark:bg-emerald-500/5 dark:text-emerald-400">
                 {completionRate}% completion rate
               </span>
-              <span className="rounded-xl border border-indigo-200/70 bg-indigo-50/70 px-3 py-1.5 text-xs font-bold text-indigo-700 dark:border-indigo-400/15 dark:bg-indigo-400/10 dark:text-indigo-300">
+              <span className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-1 text-[11px] font-bold text-indigo-700 dark:border-indigo-500/10 dark:bg-indigo-500/5 dark:text-indigo-400">
                 {proposalRate} proposals per project
               </span>
-              <span className="rounded-xl border border-sky-200/70 bg-sky-50/70 px-3 py-1.5 text-xs font-bold text-sky-700 dark:border-sky-400/15 dark:bg-sky-400/10 dark:text-sky-300">
+              <span className="rounded-xl border border-sky-100 bg-sky-50/60 px-3 py-1 text-[11px] font-bold text-sky-700 dark:border-sky-500/10 dark:bg-sky-500/5 dark:text-sky-400">
                 Avg bid {formatCompactMoney(averageBid)}
               </span>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/[0.12] bg-neutral-950/[0.92] p-5 text-white shadow-[0_22px_55px_rgba(15,23,42,0.28)] backdrop-blur-xl dark:bg-white/[0.08] box-border">
-            <div className="flex items-center justify-between gap-3 box-border">
+          {/* Escrow Balance Plate - Claymorphic accent */}
+          <div className="rounded-2xl border border-white bg-slate-100 p-5 text-slate-900 dark:border-white/[0.05] dark:bg-slate-950 dark:text-white shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_12px_28px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.3)]">
+            <div className="flex items-center justify-between gap-3">
               <div className="space-y-1">
-                <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-neutral-400" style={mono}>Escrow balance</p>
-                <p className="text-3xl font-bold" style={serif}>{getMoney(user?.wallet_balance)}</p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Escrow balance</p>
+                <p className="text-2xl font-black font-mono leading-none">{getMoney(user?.wallet_balance)}</p>
               </div>
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-emerald-300 shadow-inner">
-                <Wallet size={19} />
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white border border-slate-200/60 text-emerald-600 dark:bg-slate-900 dark:border-white/[0.04] dark:text-emerald-400 shadow-[inset_0_1.5px_2.5px_rgba(255,255,255,0.6)] dark:shadow-none shrink-0">
+                <Wallet size={18} strokeWidth={2.5} />
               </div>
             </div>
             <button
               type="button"
               onClick={() => setTab('records')}
-              className="mt-5 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-semibold text-neutral-200 transition hover:bg-white/[0.12] box-border"
+              className="mt-5 flex w-full items-center justify-between rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 px-3.5 py-2 text-xs font-black uppercase tracking-wider transition hover:scale-[1.01] shadow-[inset_0_1px_2px_rgba(255,255,255,0.2)]"
             >
-              <span>Review finance records</span>
-              <ChevronRight size={14} />
+              <span>Review financial statements</span>
+              <ChevronRight size={14} strokeWidth={2.5} />
             </button>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 box-border">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <ClientStat icon={Briefcase} label="Projects posted" value={jobs.length} helper="Active and historical project briefs." tone="indigo" />
         <ClientStat icon={Users} label="Proposal volume" value={applications.length} helper={`${pendingApplications.length} proposals waiting for review.`} tone="amber" />
         <ClientStat icon={Clock3} label="Escrow exposure" value={formatCompactMoney(activeEscrowValue)} helper={`${activeOrders.length} orders moving through delivery.`} tone="emerald" />
-        <ClientStat icon={Wallet} label="Total investment" value={formatCompactMoney(totalEarnings)} helper="Completed paid work from Supabase records." tone="rose" />
+        <ClientStat icon={Wallet} label="Total investment" value={formatCompactMoney(totalEarnings)} helper="Completed paid work from database records." tone="rose" />
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] box-border">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <GlassPanel
           title="Investment trajectory"
-          subtitle="Monthly committed and completed order value from client applications."
+          subtitle="Monthly committed and completed order values calculated across user listings."
           icon={TrendingUp}
         >
           <LineChart data={monthSeries} />
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {monthSeries.slice(-3).map((item) => (
-              <div key={item.key} className="rounded-xl border border-white/70 bg-white/[0.45] px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
-                <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-neutral-400 dark:text-zinc-500" style={mono}>{item.label}</p>
-                <p className="mt-1 text-sm font-bold text-neutral-950 dark:text-white">{formatCompactMoney(item.spend)}</p>
+              <div key={item.key} className="rounded-xl border border-slate-200/60 bg-slate-50/40 px-3 py-2.5 dark:border-white/[0.04] dark:bg-slate-950/20 shadow-[inset_0_1px_2px_rgba(255,255,255,0.4)] dark:shadow-none">
+                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">{item.label}</p>
+                <p className="mt-1 text-sm font-black text-slate-900 dark:text-white font-mono">{formatCompactMoney(item.spend)}</p>
               </div>
             ))}
           </div>
@@ -530,50 +530,50 @@ const ClientHome = ({ user, jobs, applications, totalEarnings, setTab, setModal 
 
         <GlassPanel
           title="Order distribution"
-          subtitle="Status mix across proposals, live orders, reviews, and completed work."
+          subtitle="Status composition mix aggregated tracking real-time contract entries."
           icon={BarChart3}
         >
           <DonutChart data={statusSegments} />
         </GlassPanel>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2 box-border">
-        <GlassPanel title="Pipeline health" subtitle="Volume by operational stage." icon={Target}>
+      <section className="grid gap-4 lg:grid-cols-2">
+        <GlassPanel title="Pipeline health" subtitle="Total operational tracking breakdown indexed by system stage tags." icon={Target}>
           <PipelineRows data={pipeline} total={applications.length} />
         </GlassPanel>
 
-        <GlassPanel title="Budget allocation" subtitle="Top categories by listed or committed value." icon={BarChart3}>
+        <GlassPanel title="Budget allocation" subtitle="Primary service categories indexed by budget valuation listings." icon={BarChart3}>
           <BarList data={categorySpend} />
         </GlassPanel>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)] box-border">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
         <GlassPanel
           title="Recent proposals and orders"
-          subtitle="Newest Supabase application records requiring attention."
+          subtitle="Newest operational application vectors requiring platform review action."
           icon={FileText}
           action={(
             <button
               type="button"
               onClick={() => setTab('applications')}
-              className="hidden h-8 items-center rounded-lg border border-white/70 bg-white/60 px-3 text-xs font-semibold text-neutral-700 transition hover:bg-white dark:border-white/10 dark:bg-white/[0.08] dark:text-zinc-300 sm:inline-flex shadow-sm"
+              className="hidden h-8 items-center rounded-lg border border-slate-200/80 bg-slate-50 px-3 text-xs font-black uppercase tracking-wider text-slate-600 hover:bg-slate-100 transition shadow-sm dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 sm:inline-flex"
             >
               View all
             </button>
           )}
         >
           {recentApplications.length > 0 ? (
-            <div className="divide-y divide-neutral-200/60 dark:divide-white/10 box-border">
+            <div className="divide-y divide-slate-100 dark:divide-white/[0.03]">
               {recentApplications.map((app) => (
                 <button
                   key={app.id}
                   type="button"
                   onClick={() => setTab('applications')}
-                  className="flex w-full flex-col gap-3 py-3.5 text-left transition hover:bg-white/40 dark:hover:bg-white/5 sm:flex-row sm:items-center sm:justify-between outline-none box-border"
+                  className="flex w-full flex-col gap-3 py-3.5 text-left transition hover:bg-slate-50/50 dark:hover:bg-white/5 sm:flex-row sm:items-center sm:justify-between outline-none"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-neutral-950 dark:text-zinc-100">{getAppTitle(app)}</p>
-                    <p className="mt-0.5 text-xs text-neutral-500 dark:text-zinc-400 font-medium">
+                    <p className="truncate text-sm font-black text-slate-900 dark:text-white tracking-tight">{getAppTitle(app)}</p>
+                    <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500 font-bold">
                       {getMoney(app.bid_amount)} {app.freelancer_name ? `by ${app.freelancer_name}` : ''}
                     </p>
                   </div>
@@ -584,7 +584,7 @@ const ClientHome = ({ user, jobs, applications, totalEarnings, setTab, setModal 
           ) : (
             <EmptyLine
               title="No proposals yet"
-              body="Post a project or use HireGenie to start a conversation with a verified creator."
+              body="Post an active project parameters brief to receive inbound proposals from verified creators."
               actionLabel="Post Project"
               onAction={() => setModal('post-job')}
             />
@@ -593,35 +593,35 @@ const ClientHome = ({ user, jobs, applications, totalEarnings, setTab, setModal 
 
         <GlassPanel
           title="Active project logs"
-          subtitle="Recent client listings and planned budget."
+          subtitle="Recent client listings and registered protect budgets metrics."
           icon={ListChecks}
           action={(
-            <button type="button" onClick={() => setTab('posted-jobs')} className="text-xs font-bold text-indigo-600 dark:text-indigo-300 hover:underline">
+            <button type="button" onClick={() => setTab('posted-jobs')} className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:underline underline-offset-2">
               Manage
             </button>
           )}
         >
           {recentProjects.length > 0 ? (
-            <div className="space-y-2 box-border">
+            <div className="space-y-2">
               {recentProjects.map((job) => (
                 <button
                   key={job.id}
                   type="button"
                   onClick={() => setTab('posted-jobs')}
-                  className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/70 bg-white/[0.52] px-3.5 py-3 text-left transition hover:bg-white dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/10 outline-none box-border"
+                  className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-3.5 py-3 text-left transition hover:-translate-y-0.5 shadow-[inset_0_1.5px_2.5px_rgba(255,255,255,0.6),_0_4px_12px_rgba(0,0,0,0.01)] hover:shadow-md dark:border-white/[0.04] dark:bg-slate-900/60 dark:hover:bg-slate-800 outline-none"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-neutral-950 dark:text-zinc-100">{job.title || 'Untitled project'}</p>
-                    <p className="mt-0.5 text-[11px] text-neutral-500 dark:text-zinc-400 font-medium">{getMoney(job.budget || job.price)}</p>
+                    <p className="truncate text-xs font-black text-slate-900 dark:text-white tracking-tight">{job.title || 'Untitled Project Operational Brief'}</p>
+                    <p className="mt-0.5 text-[11px] font-bold font-mono text-slate-400 dark:text-slate-500">{getMoney(job.budget || job.price)}</p>
                   </div>
-                  <ChevronRight size={14} className="text-neutral-400 shrink-0" />
+                  <ChevronRight size={14} className="text-slate-400 shrink-0" strokeWidth={2.5} />
                 </button>
               ))}
             </div>
           ) : (
             <EmptyLine
               title="No projects posted"
-              body="Create your first listing and start receiving proposals."
+              body="Initialize your first project specification brief to start accumulating proposal bids."
               actionLabel="Create Listing"
               onAction={() => setModal('post-job')}
             />
@@ -648,96 +648,105 @@ const ClientHeader = ({
   const ActiveIcon = activeNav.icon;
 
   return (
-    <header className="sticky top-0 z-30 border-b border-white/60 bg-white/[0.72] px-4 py-3.5 shadow-[0_12px_36px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/10 dark:bg-zinc-950/[0.72] dark:shadow-[0_12px_36px_rgba(0,0,0,0.25)] md:px-6 box-border">
-      <div className="flex items-center justify-between gap-3 box-border">
-        
-        <div className="flex min-w-0 items-center gap-3 box-border">
+    <header className="sticky top-0 z-30 px-4 md:px-6 pt-4 md:pt-6 pb-2">
+      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl border border-white dark:border-white/[0.04] rounded-[24px] shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_8px_32px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.06),_0_12px_36px_rgba(0,0,0,0.2)] px-5 py-3.5 flex justify-between items-center">
+
+        {/* Left Elements Section */}
+        <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
             onClick={() => setMenuOpen(true)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/70 text-neutral-600 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.08] dark:text-zinc-300 md:hidden box-border"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 bg-slate-50 dark:border-white/10 dark:bg-slate-800/40 dark:text-slate-400 transition hover:bg-slate-100 md:hidden"
           >
-            <Menu size={16} />
+            <Menu size={16} strokeWidth={2.5} />
           </button>
-          
-          <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/70 text-neutral-800 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.08] dark:text-zinc-200 sm:flex">
-            <ActiveIcon size={16} />
+
+          <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 border border-slate-200/40 dark:bg-slate-800/60 dark:border-white/[0.04] text-slate-800 dark:text-white shadow-[inset_0_1px_2px_rgba(255,255,255,0.5)] dark:shadow-none sm:flex">
+            <ActiveIcon size={18} strokeWidth={2.5} />
           </div>
-          
-          <div className="min-w-0 space-y-0.5">
-            <h1 className="truncate text-base font-bold text-neutral-900 dark:text-white" style={serif}>{activeNav.label}</h1>
-            <p className="hidden truncate text-[10px] font-mono font-bold uppercase tracking-wider text-neutral-400 dark:text-zinc-500 sm:block" style={mono}>Client parameter workspace</p>
+
+          <div className="min-w-0 text-left">
+            <h1 className="truncate text-base font-black text-slate-900 dark:text-white tracking-tight leading-none">{activeNav.label}</h1>
+            <p className="hidden truncate text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mt-1.5 sm:block">
+              Client workspace module
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 box-border">
+        {/* Right Controls Actions Grid Row */}
+        <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
             onClick={() => setModal('post-job')}
-            className="hidden h-9 items-center gap-1.5 rounded-xl bg-neutral-950 px-3.5 text-xs font-semibold text-white shadow-sm transition hover:bg-black dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white sm:inline-flex box-border"
+            className="hidden h-9 items-center gap-1.5 rounded-xl bg-indigo-600 text-white font-black text-xs uppercase tracking-wider px-4 shadow-[inset_0_2px_4px_rgba(255,255,255,0.35),_0_6px_14px_rgba(79,70,229,0.2)] transition hover:bg-indigo-700 dark:bg-white dark:text-slate-950 sm:inline-flex"
           >
-            <Plus size={14} />
-            <span>Post</span>
+            <Plus size={14} strokeWidth={3} />
+            <span>Post Project</span>
           </button>
 
-          <div className="flex rounded-xl border border-white/70 bg-white/60 p-1 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.06] box-border">
+          {/* Theme slider indent block element switch */}
+          <div className="flex rounded-full border border-slate-200/50 bg-slate-100 p-0.5 shadow-[inset_0_1px_2.5px_rgba(0,0,0,0.05)] dark:border-white/[0.03] dark:bg-slate-950/60 dark:shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.4)]">
             <button
               type="button"
               onClick={() => darkMode && toggleTheme()}
-              className={cx('flex h-7 w-7 items-center justify-center rounded-lg transition outline-none', !darkMode ? 'bg-white border border-white/80 text-amber-500 shadow-sm dark:bg-white/[0.10]' : 'text-neutral-400')}
+              className={cn('flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200 outline-none', !darkMode ? 'bg-white text-amber-500 shadow-[0_3px_8px_rgba(0,0,0,0.06),_inset_0_1px_1px_rgba(255,255,255,0.9)]' : 'text-slate-400 hover:text-slate-200')}
               aria-label="Use light theme"
             >
-              <Sun size={14} />
+              <Sun size={14} strokeWidth={2.5} />
             </button>
             <button
               type="button"
               onClick={() => !darkMode && toggleTheme()}
-              className={cx('flex h-7 w-7 items-center justify-center rounded-lg transition outline-none', darkMode ? 'bg-zinc-950 text-indigo-400 shadow-sm border border-white/10' : 'text-neutral-400')}
+              className={cn('flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200 outline-none', darkMode ? 'bg-slate-800 text-indigo-400 shadow-[0_3px_8px_rgba(0,0,0,0.4),_inset_0_1px_1px_rgba(255,255,255,0.08)]' : 'text-slate-500 hover:text-slate-800')}
               aria-label="Use dark theme"
             >
-              <Moon size={14} />
+              <Moon size={14} strokeWidth={2.5} />
             </button>
           </div>
 
-          <div className="relative box-border">
+          {/* Notifications Bell */}
+          <div className="relative">
             <button
               type="button"
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-white/70 bg-white/70 text-neutral-600 shadow-sm backdrop-blur-xl transition hover:bg-white dark:border-white/10 dark:bg-white/[0.08] dark:text-zinc-300 dark:hover:bg-white/[0.12] box-border"
-              aria-label="Open notifications"
+              className="relative flex h-9 h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 dark:border-white/10 dark:bg-slate-800/40 dark:text-slate-400 hover:bg-slate-50 shadow-sm"
+              aria-label="Open notifications overlay panel"
             >
-              <Bell size={15} />
-              {notifications.length > 0 && <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-950" />}
+              <Bell size={16} />
+              {notifications.length > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900" />}
             </button>
 
             {showNotifications && (
-              <div className="absolute right-0 top-11 z-50 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-white/70 bg-white/[0.84] shadow-xl backdrop-blur-2xl dark:border-white/10 dark:bg-zinc-950/[0.86] box-border">
-                <div className="flex items-center justify-between border-b border-neutral-100/80 px-4 py-3 dark:border-white/10 box-border">
-                  <span className="text-xs font-bold text-neutral-900 dark:text-zinc-100">Notifications</span>
-                  <button type="button" onClick={actions.handleClearNotifications} className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
-                    Clear
+              <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-2xl dark:border-white/[0.06] dark:bg-slate-900 animate-fade-in">
+                <div className="flex items-center justify-between border-b border-slate-100 p-4 dark:border-white/5 bg-slate-50/50 dark:bg-slate-950/20">
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-white">Notifications</span>
+                  <button type="button" onClick={actions.handleClearNotifications} className="text-xs font-black text-indigo-500 hover:text-indigo-600">
+                    Clear All
                   </button>
                 </div>
-                <div className="border-b border-neutral-100/80 p-2.5 dark:border-white/10 box-border">
+
+                <div className="p-3 border-b border-slate-100 bg-white dark:border-white/5 dark:bg-slate-900">
                   {notificationPermission === 'granted' ? (
-                    <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 px-1.5">Push alerts enabled.</p>
+                    <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 justify-center">Push alerts enabled on this device.</p>
                   ) : (
                     <button
                       type="button"
                       onClick={actions.handleEnablePushNotifications}
-                      className="w-full h-8 rounded-lg bg-neutral-950 text-white text-xs font-semibold dark:bg-zinc-100 dark:text-zinc-950 outline-none box-border"
+                      className="w-full h-8 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-wider hover:bg-indigo-700 shadow-md transition-colors dark:bg-indigo-500"
                     >
-                      Enable push alerts
+                      Enable Push Alerts
                     </button>
                   )}
                 </div>
-                <div className="max-h-64 overflow-y-auto custom-scrollbar box-border">
+
+                <div className="max-h-64 overflow-y-auto custom-scrollbar">
                   {notifications.length === 0 ? (
-                    <div className="p-6 text-center text-xs text-neutral-400 dark:text-zinc-500 font-medium">No new notifications</div>
+                    <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500 font-bold">No new warnings indexed</div>
                   ) : (
-                    notifications.map((notification) => (
-                      <div key={notification.id} className="border-b border-neutral-100/60 px-4 py-2.5 text-xs text-neutral-500 last:border-0 dark:border-white/10 dark:text-zinc-400">
-                        {notification.message}
+                    notifications.map((n) => (
+                      <div key={n.id} className="border-b border-slate-50 dark:border-white/5 p-3 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 last:border-none flex gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
+                        <span className="text-left">{n.message}</span>
                       </div>
                     ))
                   )}
@@ -764,7 +773,7 @@ const ClientContent = ({ user, setUser, showToast, logic }) => {
         applications={state.applications}
         totalEarnings={state.totalEarnings}
         setTab={setters.setTab}
-        setModal={setters.setModal}
+        setModal={setModal => setters.setModal(setModal)}
       />
     );
   }
@@ -876,20 +885,26 @@ export const ClientDashboard = ({ user, setUser, onLogout, showToast, darkMode, 
 
   if (state.isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-white text-neutral-900 dark:bg-zinc-950 dark:text-white select-none">
+      <div className="flex h-screen items-center justify-center bg-[#F4F6FA] text-slate-900 dark:bg-[#070A14] dark:text-white select-none">
         <div className="text-center space-y-4">
-          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-900 text-white dark:bg-zinc-100 dark:text-zinc-950 shadow-md">
-            <Briefcase className="animate-pulse" size={18} />
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-white border border-slate-200/60 dark:bg-slate-900 dark:border-white/[0.04] text-slate-800 dark:text-white shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.6)] dark:shadow-none">
+            <Briefcase className="animate-pulse text-indigo-600 dark:text-indigo-400" size={20} strokeWidth={2.5} />
           </div>
-          <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-neutral-400 dark:text-zinc-500" style={mono}>Loading client hub metadata...</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 dark:text-slate-500">Loading Client Ledger Elements...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-[linear-gradient(135deg,#eef6f3_0%,#f7f8ff_45%,#eef3ff_100%)] text-neutral-900 antialiased dark:bg-[linear-gradient(135deg,#071013_0%,#090b18_48%,#05070d_100%)] dark:text-zinc-50 box-border">
-      <div className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(circle_at_16%_8%,rgba(20,184,166,0.18),transparent_32%),radial-gradient(circle_at_90%_10%,rgba(79,70,229,0.16),transparent_30%),radial-gradient(circle_at_70%_88%,rgba(14,165,233,0.12),transparent_32%)] dark:bg-[radial-gradient(circle_at_16%_8%,rgba(20,184,166,0.14),transparent_34%),radial-gradient(circle_at_90%_10%,rgba(99,102,241,0.16),transparent_31%),radial-gradient(circle_at_70%_88%,rgba(14,165,233,0.10),transparent_34%)]" />
+    <div className="relative flex h-screen overflow-hidden bg-[#F4F6FA] text-slate-900 antialiased dark:bg-[#070A14] dark:text-white box-border">
+
+      {/* BACKGROUND ACCENT RADIUS BLURS */}
+      <div className="pointer-events-none fixed inset-0 z-0 opacity-30 dark:opacity-40" aria-hidden="true">
+        <div className="absolute top-[-10%] right-0 w-[50%] h-[50%] bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-indigo-300/40 via-transparent to-transparent dark:from-indigo-900/30 blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-[50%] h-[50%] bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-purple-300/30 via-transparent to-transparent dark:from-purple-900/20 blur-3xl" />
+      </div>
+
       <DashboardSidebar
         user={user}
         isClient
@@ -922,8 +937,9 @@ export const ClientDashboard = ({ user, setUser, onLogout, showToast, darkMode, 
           setModal={setters.setModal}
         />
 
-        <div className="custom-scrollbar flex-1 overflow-y-auto px-4 py-6 md:px-6 box-border">
-          <div className="mx-auto max-w-7xl box-border">
+        {/* Viewport Core Render Container Area */}
+        <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="mx-auto max-w-7xl pt-4">
             <AnimatePresence mode="wait">
               <motion.div
                 key={state.tab}
@@ -931,8 +947,8 @@ export const ClientDashboard = ({ user, setUser, onLogout, showToast, darkMode, 
                 initial="initial"
                 animate="in"
                 exit="out"
-                transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
-                className="box-border w-full"
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="w-full"
               >
                 <ClientContent user={user} setUser={setUser} showToast={showToast} logic={logic} />
               </motion.div>

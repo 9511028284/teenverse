@@ -58,6 +58,13 @@ export const getCommissionRate = (planName) => {
     }
 };
 
+const unwrapFunctionData = (payload) => payload?.success ? payload.data : payload;
+
+const getFunctionErrorMessage = async (error, fallback) => {
+  const contextBody = await error?.context?.json?.().catch(() => null);
+  return contextBody?.error || error?.message || fallback;
+};
+
 // Helper: Clean Cloudflare R2 Uploads
 const uploadFilesToR2 = async (files, userId, folderPrefix, maxSizeBytes, showToast) => {
     let uploadedUrls = [];
@@ -977,17 +984,77 @@ const handlePostJob = async (e) => {
     if (!selectedApp) { showToast("Error: No active application selected.", "error"); return; }
     
     const formData = new FormData(e.target);
-    const workLink = formData.get('work_link');
-    const message = formData.get('message');
+    const workLink = String(formData.get('work_link') || '').trim();
+    const message = String(formData.get('message') || '').trim();
     
-    if (!workLink || workLink.trim() === "") {
+    if (!workLink) {
         return showToast("Please provide a link to your project.", "error");
     }
 
     setModal(null);
-    showToast("Submitting your work...", "info");
+    showToast("Checking your work quality...", "info");
     
     const timestamp = new Date().toISOString();
+
+    const clientBrief = [
+      selectedApp.jobs?.title || selectedApp.job_title || selectedApp.title || 'Client project',
+      selectedApp.jobs?.description || selectedApp.job_description || selectedApp.description || selectedApp.cover_letter || '',
+    ].filter(Boolean).join('\n\n');
+    const submittedWork = [
+      `Delivery link: ${workLink}`,
+      message ? `Freelancer note: ${message}` : '',
+    ].filter(Boolean).join('\n\n');
+
+    const { data: checkPayload, error: checkError } = await supabase.functions.invoke('check-freelancer-work', {
+      body: {
+        submissionId: selectedApp.id,
+        clientBrief,
+        submittedWork,
+        workLink,
+        message,
+      }
+    });
+
+    if (checkError) {
+      const message = await getFunctionErrorMessage(checkError, "AI quality check failed.");
+      showToast(message, "error");
+      return;
+    }
+
+    const decision = unwrapFunctionData(checkPayload);
+    if (!decision?.status) {
+      showToast("AI quality check returned an invalid decision.", "error");
+      return;
+    }
+
+    const aiPatch = {
+      ai_check_score: decision.score,
+      ai_check_status: decision.status,
+      ai_check_issues: decision.issues || [],
+      ai_check_suggestions: decision.improvementSuggestions || [],
+      ai_check_reason: decision.reason,
+      ai_checked_at: timestamp,
+      ai_second_check_required: decision.status === 'second_check',
+      work_link: workLink,
+      work_message: message,
+    };
+
+    if (decision.status === 'reject') {
+      const suggestion = decision.improvementSuggestions?.[0] || decision.reason || "Please improve the delivery and submit again.";
+      showToast(`AI check rejected the delivery: ${suggestion}`, "error");
+      setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, ...aiPatch } : a));
+      setSelectedApp(null);
+      return;
+    }
+
+    if (decision.status === 'second_check') {
+      showToast("Delivery needs a second quality review before the client sees it.", "warning");
+      setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, ...aiPatch } : a));
+      setSelectedApp(null);
+      return;
+    }
+
+    showToast("AI quality check passed. Sending to client...", "success");
     
     const { error } = await supabase.functions.invoke('order-manager', {
       body: { 
@@ -1008,7 +1075,7 @@ const handlePostJob = async (e) => {
         body: 'A freelancer submitted work for your project.',
         url: '/dashboard'
       });
-      setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, status: APP_STATUS.SUBMITTED, submitted_at: timestamp } : a));
+      setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, ...aiPatch, status: APP_STATUS.SUBMITTED, submitted_at: timestamp } : a));
       setSelectedApp(null);
     }
   };
@@ -1365,13 +1432,14 @@ const handlePostJob = async (e) => {
 
     try {
       const { data, error } = await supabase.functions.invoke('generate-academy-quiz', {
-        body: { category: categoryId, subCategory: specificTopic }
+        body: { userId: user.id, category: categoryId, topic: specificTopic, subCategory: specificTopic, level: 'beginner', count: 10 }
       });
-      if (error) throw error;
-      setModal({ type: 'quiz', category: categoryId, data: data });
+      if (error) throw new Error(await getFunctionErrorMessage(error, "Quiz generation failed."));
+      const quizData = unwrapFunctionData(data);
+      setModal({ type: 'quiz', category: categoryId, data: quizData });
     } catch (err) {
       console.error(err);
-      showToast("Quiz generation failed. Try again.", "error");
+      showToast(err.message || "Quiz generation failed. Try again.", "error");
     } finally {
       setIsQuizLoading(false);
     }
@@ -1410,13 +1478,27 @@ const handlePostJob = async (e) => {
     }
   };
 
-  const handleAiGenerate = () => {
+  const handleAiGenerate = async () => {
     if (!rawPortfolioText) return;
     setIsAiLoading(true);
-    setTimeout(() => {
-      setPortfolioItems([{ id: Date.now(), title: "Professional Case Study", content: rawPortfolioText }, ...portfolioItems]);
-      setRawPortfolioText(""); setIsAiLoading(false); showToast("AI Magic Applied!");
-    }, 1500);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-portfolio', {
+        body: { userId: user.id, rawText: rawPortfolioText }
+      });
+      if (error) throw new Error(await getFunctionErrorMessage(error, "Portfolio generation failed."));
+      const generated = unwrapFunctionData(data);
+      const items = Array.isArray(generated?.items) && generated.items.length > 0
+        ? generated.items
+        : [{ id: Date.now(), title: "Professional Case Study", content: rawPortfolioText }];
+
+      setPortfolioItems([...items, ...portfolioItems]);
+      setRawPortfolioText("");
+      showToast("AI Magic Applied!");
+    } catch (err) {
+      showToast(err.message || "AI Magic failed.", "error");
+    } finally {
+      setIsAiLoading(false);
+    }
   };
 
   const handleDownloadCard = async () => {

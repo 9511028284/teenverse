@@ -38,10 +38,12 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
       features: [
         { text: '5 bids / month', included: true },
         { text: '1 resume / month', included: true },
+        { text: '8 AI quizzes / month', included: true },
+        { text: '5 AI assistant chats / day', included: true },
+        { text: '10 AI work checks / month', included: true },
         { text: 'Standard support', included: true },
         { text: 'Early feature access', included: false },
         { text: 'Exclusive profile badge', included: false },
-        { text: 'Higher profile visibility', included: false },
       ],
       cta: 'Current Plan',
       style: 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-[#0F172A]/50 backdrop-blur-xl',
@@ -62,10 +64,12 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
       features: [
         { text: '12 bids / month', included: true },
         { text: '2 resumes / month', included: true },
+        { text: '16 AI quizzes / month', included: true },
+        { text: '10 AI assistant chats / day', included: true },
+        { text: '25 AI work checks / month', included: true },
         { text: 'Founder chat support', included: true },
         { text: 'Early feature access', included: true },
         { text: 'Starter badge on profile', included: true },
-        { text: 'Higher profile visibility', included: false },
       ],
       cta: 'Grab Starter',
       style: 'border-cyan-200 dark:border-cyan-900/50 bg-gradient-to-br from-white to-cyan-50/80 dark:from-[#0F172A] dark:to-cyan-900/20 shadow-xl shadow-cyan-500/10 hover:shadow-cyan-500/20',
@@ -87,10 +91,12 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
       features: [
         { text: '18 bids / month', included: true },
         { text: '6 resumes / month', included: true },
+        { text: '32 AI quizzes / month', included: true },
+        { text: '25 AI assistant chats / day', included: true },
+        { text: '75 AI work checks / month', included: true },
         { text: 'Direct team support', included: true },
         { text: 'Early feature access', included: true },
         { text: 'Pro badge & Visibility', included: true },
-        { text: 'Founder community access', included: true },
       ],
       cta: 'Go Pro',
       style: 'border-fuchsia-500 ring-4 ring-fuchsia-500/20 bg-gradient-to-b from-fuchsia-50 to-white dark:from-fuchsia-900/30 dark:to-[#0F172A] shadow-2xl shadow-fuchsia-500/30 scale-105 z-10 relative overflow-hidden',
@@ -112,10 +118,12 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
       features: [
         { text: 'Unlimited bids', included: true },
         { text: 'Unlimited resumes', included: true },
+        { text: 'Unlimited AI quizzes', included: true },
+        { text: 'Unlimited AI assistant chats', included: true },
+        { text: 'Unlimited AI work checks', included: true },
         { text: 'Priority VIP Support', included: true },
         { text: 'Elite Badge & Top Visibility', included: true },
         { text: 'Profile appears on TOP', included: true },
-        { text: 'Access to Elite Jobs', included: true },
       ],
       cta: 'Claim VIP Status',
       style: 'border-amber-500/50 ring-1 ring-amber-500/30 bg-gradient-to-br from-slate-900 via-black to-slate-900 shadow-2xl shadow-amber-900/50 hover:shadow-amber-600/40 transition-all',
@@ -175,7 +183,7 @@ const Pricing = ({ isClient, user, onSubscribe }) => {
             <div className="relative z-10">
               <h3 className="text-2xl font-bold mb-2 text-indigo-50">Platform Fee</h3>
               <div className="flex items-baseline gap-2 mb-4">
-                 <span className="text-6xl font-black tracking-tighter">5%</span>
+                 <span className="text-6xl font-black tracking-tighter">10%</span>
                  <span className="text-indigo-200 font-medium">per transaction</span>
               </div>
               <p className="text-indigo-100 mb-8 leading-relaxed">We only make money when you successfully hire. This fee covers secure escrow, dispute resolution, and 24/7 priority support.</p>
