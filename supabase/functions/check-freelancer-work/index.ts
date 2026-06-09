@@ -3,20 +3,22 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { callDeepSeek } from "../_shared/ai/deepseek.ts";
 import { corsHeaders, fail, getErrorMessage, ok, readJson } from "../_shared/ai/http.ts";
 import { parseAIJson } from "../_shared/ai/json.ts";
+import { INPUT_TOO_LONG_ERROR, isFeatureEnabled, isInputTooLong } from "../_shared/ai/plan-limits.ts";
 import { createSupabaseAdminClient, HttpError, requireAuthenticatedUser } from "../_shared/ai/supabase.ts";
 import { checkPlanAIUsageLimit, incrementAIUsage } from "../_shared/ai/usage.ts";
 
-type WorkCheckStatus = "pass" | "second_check" | "reject";
+type WorkCheckStatus = "pass" | "second_check" | "reject" | "upgrade_required_for_second_check";
 
-function forceStatus(score: number): WorkCheckStatus {
+function forceStatus(score: number, canUseSecondCheck: boolean): WorkCheckStatus {
   if (score >= 90) return "pass";
-  if (score >= 85) return "second_check";
+  if (score >= 85) return canUseSecondCheck ? "second_check" : "upgrade_required_for_second_check";
   return "reject";
 }
 
-function normalizeDecision(parsed: any) {
+function normalizeDecision(parsed: any, canUseSecondCheck: boolean) {
   const score = Math.max(0, Math.min(100, Number(parsed?.score || 0)));
-  const status = forceStatus(score);
+  const status = forceStatus(score, canUseSecondCheck);
+  const upgradeMessage = "This submission needs advanced second-check. Upgrade to Pro or request manual review.";
 
   return {
     score,
@@ -25,9 +27,13 @@ function normalizeDecision(parsed: any) {
     improvementSuggestions: Array.isArray(parsed?.improvementSuggestions)
       ? parsed.improvementSuggestions.map(String).slice(0, 12)
       : [],
-    reason: String(parsed?.reason || "").trim(),
+    reason: status === "upgrade_required_for_second_check"
+      ? upgradeMessage
+      : String(parsed?.reason || "").trim(),
+    message: status === "upgrade_required_for_second_check" ? upgradeMessage : undefined,
     canSendToClient: status === "pass",
     requiresSecondCheck: status === "second_check",
+    requiresUpgradeForSecondCheck: status === "upgrade_required_for_second_check",
   };
 }
 
@@ -85,7 +91,12 @@ Deno.serve(async (request: Request) => {
 
     const usage = await checkPlanAIUsageLimit(supabaseAdmin, authUser.id, "freelancer_work_check", "monthly");
     if (!usage.allowed) {
-      return fail(`Monthly freelancer work check limit reached for your ${usage.plan} plan.`, 403);
+      return fail("Monthly freelancer work check limit reached. Upgrade your plan for more checks.", 403);
+    }
+
+    const combinedInput = [clientBrief, submittedWork].join("\n\n");
+    if (isInputTooLong(usage.plan, "freelancer_work_check", combinedInput)) {
+      return fail(INPUT_TOO_LONG_ERROR, 400);
     }
 
     const system = "You are a strict freelancer work quality checker for TeenVerseHub. You compare client requirements with freelancer submitted work. Return valid JSON only.";
@@ -115,12 +126,13 @@ Deno.serve(async (request: Request) => {
       user,
       model: "deepseek-v4-flash",
       temperature: 0.2,
-      max_tokens: 1800,
+      max_tokens: usage.maxTokens,
       response_format: { type: "json_object" },
     });
 
-    const decision = normalizeDecision(parseAIJson(responseText));
-    const secondCheck = decision.status === "second_check" ? await secondCheckReview(decision) : null;
+    const canUseSecondCheck = isFeatureEnabled(usage.plan, "gemini_second_check");
+    const decision = normalizeDecision(parseAIJson(responseText), canUseSecondCheck);
+    const secondCheck = decision.status === "second_check" && canUseSecondCheck ? await secondCheckReview(decision) : null;
     const persistence = await saveDecision(supabaseAdmin, body, decision);
 
     await incrementAIUsage(supabaseAdmin, authUser.id, "freelancer_work_check", "monthly");
@@ -129,6 +141,9 @@ Deno.serve(async (request: Request) => {
       ...decision,
       secondCheck,
       persistence,
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      plan: usage.plan,
     });
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500;

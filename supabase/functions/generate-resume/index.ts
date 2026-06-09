@@ -3,6 +3,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { callDeepSeek } from "../_shared/ai/deepseek.ts";
 import { corsHeaders, fail, getErrorMessage, ok, readJson } from "../_shared/ai/http.ts";
 import { parseAIJson } from "../_shared/ai/json.ts";
+import { INPUT_TOO_LONG_ERROR, isInputTooLong } from "../_shared/ai/plan-limits.ts";
 import { createSupabaseAdminClient, HttpError, requireAuthenticatedUser, resolveUserId } from "../_shared/ai/supabase.ts";
 import { checkPlanAIUsageLimit, incrementAIUsage } from "../_shared/ai/usage.ts";
 
@@ -77,6 +78,19 @@ function buildResumePrompt(body: Record<string, unknown>) {
   ].join("\n");
 }
 
+function getResumeInputText(body: Record<string, unknown>) {
+  if (body.roughText) return String(body.roughText);
+
+  return [
+    body.name,
+    body.targetRole,
+    body.skills,
+    body.education,
+    body.projects,
+    body.experience,
+  ].map((value) => String(value || "")).join("\n");
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -92,22 +106,33 @@ Deno.serve(async (request: Request) => {
 
     const usage = await checkPlanAIUsageLimit(supabaseAdmin, userId, "resume_generation", "monthly");
     if (!usage.allowed) {
-      return fail(`Monthly resume generation limit reached for your ${usage.plan} plan.`, 403);
+      return fail("Monthly resume generation limit reached. Upgrade your plan for more resumes.", 403);
     }
 
     const system = "You are a professional ATS-friendly resume generator for TeenVerseHub. Return valid JSON only.";
+    const prompt = buildResumePrompt(body);
+
+    if (isInputTooLong(usage.plan, "resume_generation", getResumeInputText(body))) {
+      return fail(INPUT_TOO_LONG_ERROR, 400);
+    }
+
     const responseText = await callDeepSeek({
       system,
-      user: buildResumePrompt(body),
+      user: prompt,
       model: "deepseek-v4-flash",
       temperature: 0.25,
-      max_tokens: 2200,
+      max_tokens: usage.maxTokens,
       response_format: { type: "json_object" },
     });
 
     const resume = normalizeResume(parseAIJson(responseText));
     await incrementAIUsage(supabaseAdmin, userId, "resume_generation", "monthly");
-    return ok(resume);
+    return ok({
+      ...resume,
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      plan: usage.plan,
+    });
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500;
     return fail(getErrorMessage(error, "Resume generation failed."), status);

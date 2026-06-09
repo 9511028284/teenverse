@@ -1,6 +1,8 @@
 import { callDeepSeek } from "./deepseek.ts";
-import { fail, getErrorMessage, ok, readJson } from "./http.ts";
+import { fail, json, ok, readJson } from "./http.ts";
 import { parseAIJson } from "./json.ts";
+import { INPUT_TOO_LONG_ERROR, isInputTooLong } from "./plan-limits.ts";
+import { DEEPSEEK_DEFAULT_MODEL } from "./providers.ts";
 import { createSupabaseAdminClient, HttpError, requireAuthenticatedUser, resolveUserId } from "./supabase.ts";
 import { checkPlanAIUsageLimit, incrementAIUsage } from "./usage.ts";
 
@@ -45,12 +47,16 @@ export async function handleQuizGeneration(request: Request) {
 
     const usage = await checkPlanAIUsageLimit(supabaseAdmin, userId, "quiz_generation", "monthly");
     if (!usage.allowed) {
-      return fail(`Monthly quiz generation limit reached for your ${usage.plan} plan.`, 403);
+      return fail("Monthly quiz generation limit reached. Upgrade your plan for more quizzes.", 403);
     }
 
     const topic = String(body.topic || body.subCategory || body.category || "TeenVerse skills").trim();
     const level = String(body.level || "beginner").trim().toLowerCase();
     const count = clampQuestionCount(body.count);
+
+    if (isInputTooLong(usage.plan, "quiz_generation", [topic, level].join("\n"))) {
+      return fail(INPUT_TOO_LONG_ERROR, 400);
+    }
 
     const system = "You are an expert quiz generator for TeenVerseHub. Return valid JSON only.";
     const user = [
@@ -63,24 +69,47 @@ export async function handleQuizGeneration(request: Request) {
       '{ "title": "", "questions": [{ "question": "", "options": ["", "", "", ""], "answer": "", "explanation": "" }] }',
     ].join("\n");
 
-    const responseText = await callDeepSeek({
-      system,
-      user,
-      model: "deepseek-v4-flash",
-      temperature: 0.35,
-      max_tokens: 2200,
-      response_format: { type: "json_object" },
-    });
+    let quiz;
 
-    const quiz = normalizeQuiz(parseAIJson(responseText), `${topic} Assessment`);
-    if (quiz.questions.length === 0) {
-      throw new Error("AI did not return usable quiz questions.");
+    try {
+      console.log("Quiz/assessment generation using DeepSeek");
+
+      const responseText = await callDeepSeek({
+        system,
+        user,
+        model: DEEPSEEK_DEFAULT_MODEL,
+        temperature: 0.35,
+        max_tokens: usage.maxTokens,
+        response_format: { type: "json_object" },
+      });
+
+      quiz = normalizeQuiz(parseAIJson(responseText), `${topic} Assessment`);
+      if (quiz.questions.length === 0) {
+        throw new Error("AI did not return usable quiz questions.");
+      }
+    } catch (error) {
+      console.error("DeepSeek quiz/assessment generation failed:", error);
+      return json(
+        {
+          success: false,
+          error: "Failed to generate assessment. Please try again.",
+          details: "DeepSeek generation failed.",
+        },
+        500,
+      );
     }
 
     await incrementAIUsage(supabaseAdmin, userId, "quiz_generation", "monthly");
-    return ok(quiz);
+    return ok({
+      ...quiz,
+      provider: "deepseek",
+      model: DEEPSEEK_DEFAULT_MODEL,
+      plan: usage.plan,
+    });
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500;
-    return fail(getErrorMessage(error, "Quiz generation failed."), status);
+    if (error instanceof HttpError) return fail(error.message, status);
+
+    return fail("Failed to generate assessment. Please try again.", status);
   }
 }

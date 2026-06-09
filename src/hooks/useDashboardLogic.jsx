@@ -212,9 +212,8 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [parentMode, setParentMode] = useState(false);
   const [unlockedSkills, setUnlockedSkills] = useState(user?.unlockedSkills || []);
   const [badges, setBadges] = useState([]);
-  const [portfolioItems, setPortfolioItems] = useState([]);
+  const [portfolioItems] = useState([]);
   const [rawPortfolioText, setRawPortfolioText] = useState("");
-  const [isAiLoading, setIsAiLoading] = useState(false);
     
   const SAFE_QUIZZES = QUIZZES || {};
   const profileCardRef = useRef(null);
@@ -1054,6 +1053,13 @@ const handlePostJob = async (e) => {
       return;
     }
 
+    if (decision.status === 'upgrade_required_for_second_check') {
+      showToast(decision.message || "This submission needs advanced second-check. Upgrade to Pro or request manual review.", "warning");
+      setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, ...aiPatch } : a));
+      setSelectedApp(null);
+      return;
+    }
+
     showToast("AI quality check passed. Sending to client...", "success");
     
     const { error } = await supabase.functions.invoke('order-manager', {
@@ -1478,29 +1484,6 @@ const handlePostJob = async (e) => {
     }
   };
 
-  const handleAiGenerate = async () => {
-    if (!rawPortfolioText) return;
-    setIsAiLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-portfolio', {
-        body: { userId: user.id, rawText: rawPortfolioText }
-      });
-      if (error) throw new Error(await getFunctionErrorMessage(error, "Portfolio generation failed."));
-      const generated = unwrapFunctionData(data);
-      const items = Array.isArray(generated?.items) && generated.items.length > 0
-        ? generated.items
-        : [{ id: Date.now(), title: "Professional Case Study", content: rawPortfolioText }];
-
-      setPortfolioItems([...items, ...portfolioItems]);
-      setRawPortfolioText("");
-      showToast("AI Magic Applied!");
-    } catch (err) {
-      showToast(err.message || "AI Magic failed.", "error");
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
   const handleDownloadCard = async () => {
     if (profileCardRef.current === null) { showToast("Card not found.", "error"); return; }
     try {
@@ -1699,7 +1682,7 @@ const handlePostJob = async (e) => {
         notificationPermission, energy, showRewardModal, isClaiming, viewProfileId, publicProfileData, editProfileModal,
         kycFile, currentQuestionIndex, score, timelineApp, viewWorkApp, searchTerm, profileForm,
         paymentModal, parentMode, unlockedSkills, badges, portfolioItems, rawPortfolioText,
-        isAiLoading, SAFE_QUIZZES, profileCardRef, currentXP, nextLevelXP, progressPercent,
+        SAFE_QUIZZES, profileCardRef, currentXP, nextLevelXP, progressPercent,
         userLevel, filteredJobs,
         isQuizLoading, 
         reportModal, activeChat,
@@ -1719,7 +1702,7 @@ const handlePostJob = async (e) => {
         handleDeleteJob, handleCreateService, handleDeleteService,
         handleApplyJob, handleAcceptApplication, handlePaymentVerification, handleSubmitWork,
         handleApproveWork, handleInvoiceDownload, processPayment, handleAppAction, handleViewProfile,
-        handleUpdateProfile, handleSavePublicProfile, handleQuizSelection, handleAiGenerate,
+        handleUpdateProfile, handleSavePublicProfile, handleQuizSelection,
         handleDownloadCard, handleShareToInstagram, handleClearNotifications, claimReward,
         handleIdentitySubmit, 
         handleBankSubmit,

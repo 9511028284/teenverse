@@ -424,7 +424,7 @@ const Jobs = ({
       }
     } catch (err) {
       console.error("AI Node Execution Fault:", err);
-      if (showToast) showToast("AI directory matching engine structural error.", "error");
+      if (showToast) showToast(err.message || "Talent matching failed.", "error");
     } finally {
       setIsAiSearching(false);
     }

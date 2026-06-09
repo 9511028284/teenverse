@@ -40,7 +40,7 @@ alter table if exists public.applications
   add column if not exists work_message text,
   add column if not exists work_files jsonb not null default '[]'::jsonb,
   add column if not exists ai_check_score numeric,
-  add column if not exists ai_check_status text check (ai_check_status in ('pass', 'second_check', 'reject')),
+  add column if not exists ai_check_status text check (ai_check_status in ('pass', 'second_check', 'reject', 'upgrade_required_for_second_check')),
   add column if not exists ai_check_issues jsonb not null default '[]'::jsonb,
   add column if not exists ai_check_suggestions jsonb not null default '[]'::jsonb,
   add column if not exists ai_check_reason text,

@@ -14,6 +14,7 @@ import Dashboard from './pages/Dashboard';
 import ClientDashboard from './pages/ClientDashboard';
 import TermsAgreement from './pages/TermsAgreement'; 
 import AdminDashboard from './pages/AdminPage';
+import PlatformAIAssistant from './components/features/PlatformAIAssistant';
 
 const buildPendingSignupPayload = (profile = {}) => ({
   role: profile.role || 'freelancer',
@@ -374,6 +375,7 @@ export default function App() {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      <PlatformAIAssistant user={user} showToast={showToast} />
    </>
   );
 }

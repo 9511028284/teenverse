@@ -3,6 +3,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { callDeepSeek } from "../_shared/ai/deepseek.ts";
 import { corsHeaders, fail, getErrorMessage, ok, readJson } from "../_shared/ai/http.ts";
 import { parseAIJson } from "../_shared/ai/json.ts";
+import { INPUT_TOO_LONG_ERROR, isInputTooLong } from "../_shared/ai/plan-limits.ts";
 import { createSupabaseAdminClient, HttpError, requireAuthenticatedUser } from "../_shared/ai/supabase.ts";
 import { checkPlanAIUsageLimit, incrementAIUsage } from "../_shared/ai/usage.ts";
 
@@ -55,11 +56,12 @@ Deno.serve(async (request: Request) => {
 
     if (!query) return fail("Search query is required.", 400);
 
-    const dailyUsage = await checkPlanAIUsageLimit(supabaseAdmin, authUser.id, "talent_matching", "daily");
-    if (!dailyUsage.allowed) return fail(`Daily AI talent matching limit reached for your ${dailyUsage.plan} plan.`, 403);
+    const usage = await checkPlanAIUsageLimit(supabaseAdmin, authUser.id, "talent_matching", "monthly");
+    if (!usage.allowed) return fail("Monthly HireGenie matching limit reached. Upgrade your plan for more matches.", 403);
 
-    const weeklyUsage = await checkPlanAIUsageLimit(supabaseAdmin, authUser.id, "talent_matching", "weekly");
-    if (!weeklyUsage.allowed) return fail(`Weekly AI talent matching limit reached for your ${weeklyUsage.plan} plan.`, 403);
+    if (isInputTooLong(usage.plan, "talent_matching", query)) {
+      return fail(INPUT_TOO_LONG_ERROR, 400);
+    }
 
     const parsedText = await callDeepSeek({
       system: "You parse client hiring requests for TeenVerseHub. Return valid JSON only.",
@@ -70,7 +72,7 @@ Deno.serve(async (request: Request) => {
       ].join("\n"),
       model: "deepseek-v4-flash",
       temperature: 0.15,
-      max_tokens: 500,
+      max_tokens: usage.maxTokens,
       response_format: { type: "json_object" },
     });
 
@@ -96,10 +98,15 @@ Deno.serve(async (request: Request) => {
       .sort((a: any, b: any) => b.ai_match_score - a.ai_match_score)
       .slice(0, 12);
 
-    await incrementAIUsage(supabaseAdmin, authUser.id, "talent_matching", "daily");
-    await incrementAIUsage(supabaseAdmin, authUser.id, "talent_matching", "weekly");
+    await incrementAIUsage(supabaseAdmin, authUser.id, "talent_matching", "monthly");
 
-    return ok({ parsed, results });
+    return ok({
+      parsed,
+      results,
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      plan: usage.plan,
+    });
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500;
     return fail(getErrorMessage(error, "Freelancer matching failed."), status);
