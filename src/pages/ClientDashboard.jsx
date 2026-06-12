@@ -856,10 +856,7 @@ const ClientContent = ({ user, setUser, showToast, logic }) => {
         isClient
         handleUpdateProfile={actions.handleUpdateProfile}
         parentMode={state.parentMode}
-        setParentMode={(val) => {
-          setters.setParentMode(val);
-          actions.logAction?.('PARENT_MODE_TOGGLE', { enabled: val });
-        }}
+        setParentMode={actions.handleParentModeChange}
         onOpenKyc={() => setters.setModal('kyc_verification')}
       />
     );

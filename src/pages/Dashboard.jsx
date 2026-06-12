@@ -309,7 +309,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
                       <SettingsComp 
                         profileForm={profileForm} setProfileForm={setters.setProfileForm} isClient={isClient} 
                         handleUpdateProfile={actions.handleUpdateProfile} parentMode={parentMode} 
-                        setParentMode={(val) => { setters.setParentMode(val); actions.logAction && actions.logAction('PARENT_MODE_TOGGLE', { enabled: val }); }}
+                        setParentMode={actions.handleParentModeChange}
                         onOpenKyc={() => setters.setModal('kyc_verification')} 
                       />
                     )}

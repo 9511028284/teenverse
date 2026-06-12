@@ -113,7 +113,7 @@ serve(async (req) => {
       if (age_group === "minor" && guardian_consent !== true) throw new Error("Guardian consent is required for minors.");
 
       const dbPayload: Record<string, unknown> = {
-        kyc_status: "verified",
+        kyc_status: "payout_kyc_pending",
         is_kyc_verified: true,
         kyc_type: age_group,
         kyc_timestamp: new Date().toISOString(),

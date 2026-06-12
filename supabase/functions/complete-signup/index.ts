@@ -36,11 +36,14 @@ Deno.serve(async (req: Request) => {
     const phone = normalizeIndianPhone(body.phone);
     const nationality = cleanText(body.nationality || "India", 64);
     const source = cleanText(body.source, 80);
+    const termsAccepted = body.termsAccepted === true;
+    const termsVersion = cleanText(body.termsVersion || "v1.0-TeenVerseHub-Terms", 80);
 
     if (!ALLOWED_ROLES.has(role)) throw new Error("Choose a valid account type.");
     if (!name) throw new Error("Enter your name.");
     if (!isValidEmail(email)) throw new Error("Enter a valid email address.");
     if (!source) throw new Error("Select how you discovered TeenVerseHub.");
+    if (!termsAccepted) throw new Error("Terms acceptance is required.");
 
     const supabaseAdmin = getSupabaseAdmin();
     const nowIso = new Date().toISOString();
@@ -67,7 +70,14 @@ Deno.serve(async (req: Request) => {
 
     const { error: userError } = await supabaseAdmin
       .from("users")
-      .upsert({ id: user.id, email, full_name: name }, { onConflict: "id" });
+      .upsert({
+        id: user.id,
+        email,
+        full_name: name,
+        terms_accepted_at: nowIso,
+        terms_version: termsVersion,
+        terms_user_agent: cleanText(req.headers.get("user-agent") || "unknown", 512),
+      }, { onConflict: "id" });
     if (userError) throw userError;
 
     const baseProfile = {
@@ -83,7 +93,7 @@ Deno.serve(async (req: Request) => {
 
     if (role === "freelancer") {
       const age = calculateAge(body.dob);
-      if (age < 14 || age > 21) throw new Error("Platform registration is limited to ages 14 to 21.");
+      if (age < 14 || age > 25) throw new Error("Platform registration is limited to ages 14 to 25.");
 
       const { data, error } = await supabaseAdmin
         .from("freelancers")

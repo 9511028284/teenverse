@@ -4,6 +4,21 @@ import Button from '../components/ui/Button';
 
 const TermsAgreement = ({ onAgree }) => {
   const [isChecked, setIsChecked] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleAgree = async () => {
+    if (!isChecked || isSaving) return;
+    setError('');
+    setIsSaving(true);
+
+    try {
+      await onAgree?.();
+    } catch (err) {
+      setError(err?.message || 'Could not save your acceptance. Please try again.');
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-6 font-sans">
@@ -30,7 +45,7 @@ const TermsAgreement = ({ onAgree }) => {
           <section>
             <h3 className="font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2"><FileText size={16}/> 2. Eligibility & Safety</h3>
             <ul className="list-disc pl-5 space-y-1">
-              <li>Users must be 14–19 years old.</li>
+              <li>Users must be 14–25 years old.</li>
               <li>Users under 18 require parent/guardian consent.</li>
               <li>Zero tolerance for harassment, scams, or unsafe behavior.</li>
             </ul>
@@ -64,12 +79,18 @@ const TermsAgreement = ({ onAgree }) => {
             </span>
           </label>
 
+          {error && (
+            <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+              {error}
+            </p>
+          )}
+
           <Button 
             className="w-full py-4 text-lg shadow-xl" 
-            disabled={!isChecked} 
-            onClick={onAgree}
+            disabled={!isChecked || isSaving}
+            onClick={handleAgree}
           >
-            Accept & Continue
+            {isSaving ? 'Saving...' : 'Accept & Continue'}
           </Button>
         </div>
 

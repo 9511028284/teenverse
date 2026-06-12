@@ -74,6 +74,12 @@ const calculateAge = (dob: string) => {
   return age;
 };
 
+const assertAllowedAge = (age: number) => {
+  if (age < 14 || age > 25) {
+    throw new Error("Platform verification is limited to ages 14 to 25.");
+  }
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -131,6 +137,7 @@ serve(async (req) => {
 
       const safeDob = normalizeDob(aadhaarData.dob);
       const calculatedAge = calculateAge(safeDob);
+      assertAllowedAge(calculatedAge);
 
       const { error: dbError } = await supabaseAdmin
         .from("freelancers")

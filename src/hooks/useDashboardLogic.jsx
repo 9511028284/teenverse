@@ -231,7 +231,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [paymentModal, setPaymentModal] = useState(null);
 
   // --- FEATURE STATES ---
-  const [parentMode, setParentMode] = useState(false);
+  const [parentMode, setParentMode] = useState(Boolean(user?.parent_mode));
   const [unlockedSkills, setUnlockedSkills] = useState(user?.unlockedSkills || []);
   const [badges, setBadges] = useState([]);
   const [portfolioItems] = useState([]);
@@ -241,6 +241,10 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const profileCardRef = useRef(null);
   const cashfree = useRef(null);
   const dashboardLoadRef = useRef({ key: null, promise: null });
+
+  useEffect(() => {
+    setParentMode(Boolean(user?.parent_mode));
+  }, [user?.id, user?.parent_mode]);
 
   // --- DERIVED VALUES ---
   const currentXP = unlockedSkills.length * 500 + (badges.length * 200);
@@ -263,6 +267,36 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         details: { ...details, timestamp: new Date().toISOString(), ip_hint: "client_side_trigger" }
       });
     } catch (err) { console.error("Audit Logging Failed:", err); }
+  };
+
+  const handleParentModeChange = async (enabled) => {
+    const nextValue = Boolean(enabled);
+    const previousValue = parentMode;
+
+    setParentMode(nextValue);
+
+    if (isClient) {
+      await logAction('PARENT_MODE_TOGGLE', { enabled: nextValue, local_only: true });
+      return true;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('freelancers')
+        .update({ parent_mode: nextValue })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setUser((prev) => prev ? { ...prev, parent_mode: nextValue } : prev);
+      await logAction('PARENT_MODE_TOGGLE', { enabled: nextValue });
+      showToast(nextValue ? "Parent Shield activated." : "Parent Shield deactivated.", "success");
+      return true;
+    } catch (err) {
+      setParentMode(previousValue);
+      showToast(err.message || "Could not update Parent Shield.", "error");
+      return false;
+    }
   };
 
   // ------------------------------------------
@@ -609,7 +643,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     
     if (applyRes.success) {
         setUser(prev => ({ ...prev, referred_by: referralCode }));
-        const isKycDone = user?.is_kyc_verified || user?.kyc_status === 'verified';
+        const isKycDone = user?.is_kyc_verified || ['verified', 'payout_ready', 'fully_verified'].includes(user?.kyc_status);
         
         if (isKycDone) {
             const claimRes = await api.claimReferralReward(user.id);
@@ -631,22 +665,28 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // ------------------------------------------
   const checkKycLock = (actionType) => {
     if (isClient) return true; 
-    const hasCompletedKyc = Boolean(
-        user?.is_kyc_verified || ['approved', 'verified'].includes(user?.kyc_status)
+    const hasAgeVerified = Boolean(
+        user?.digilocker_verified ||
+        user?.is_kyc_verified ||
+        ['approved', 'verified', 'age_verified', 'payout_kyc_pending', 'payout_ready', 'fully_verified'].includes(user?.kyc_status)
+    );
+    const hasPayoutKyc = Boolean(
+        user?.is_kyc_verified ||
+        ['approved', 'verified', 'payout_kyc_pending', 'payout_ready', 'fully_verified'].includes(user?.kyc_status)
     );
 
     if (actionType === 'apply_paid') {
-        if (!hasCompletedKyc) {
-            showToast("🔒 Identity verification required to apply for jobs.", "info");
+        if (!hasAgeVerified) {
+            showToast("🔒 Verify your age before applying for paid opportunities.", "info");
             setModal('kyc_verification');
             return false;
         }
     }
 
     if (actionType === 'withdraw_funds' || actionType === 'release_escrow') {
-        if (!hasCompletedKyc) {
-            showToast("🔒 Identity verification required to receive funds.", "error");
-            setModal('kyc_verification');
+        if (!hasPayoutKyc) {
+            showToast("🔒 Set up payout KYC before receiving funds.", "error");
+            setModal('bank_linkage');
             return false;
         }
         if (!user.is_bank_linked) { 
@@ -700,7 +740,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // ------------------------------------------
   // ⚡ ACTION: IDENTITY VERIFICATION (V2)
   // ------------------------------------------
-  const handleIdentitySubmit = async ({ ageGroup, panNumber, digilocker_verified, dob, guardianConsent, guardianName, consentIp, consentUserAgent, consentVersion }) => {
+  const handleIdentitySubmit = async ({ ageGroup, panNumber, digilocker_verified, dob, guardianConsent, guardianName, consentIp, consentUserAgent, consentVersion, closeModal = true }) => {
     showToast("Finalizing Identity Verification...", "info");
 
     try {
@@ -717,10 +757,10 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         if (!data.success) throw new Error(data.error || "Identity Verification Failed");
 
         await logAction('IDENTITY_VERIFIED', { mode: KYC_MODE, age_group: ageGroup });
-        showToast("✅ Identity Fully Verified! You can now apply for gigs.", "success");
+        showToast("Payout KYC verified. Add your bank details to receive payouts.", "success");
         
         setUser(prev => ({ 
-            ...prev, kyc_status: 'verified', is_kyc_verified: true,
+            ...prev, kyc_status: 'payout_kyc_pending', is_kyc_verified: true,
             kyc_type: ageGroup, dob: dob, digilocker_verified: true
         }));
         
@@ -730,7 +770,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
             setTimeout(() => showToast("🏆 BADGE UNLOCKED: Verified Identity!", "success"), 1000);
         }
 
-        setModal(null);
+        if (closeModal) setModal(null);
         
         const reward = await api.claimReferralReward(user.id);
         if (reward?.success) {
@@ -752,33 +792,66 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   // ------------------------------------------
   // 🏦 ACTION: BANK ACCOUNT
   // ------------------------------------------
-  const handleBankSubmit = async () => {
-    // 1. (Your existing code to save the bank details to the user_banking table goes here)
-    // await supabase.from('user_banking').insert({...})
-    
-    // 2. Trigger the Supabase function to flip the column in the freelancers table!
-    const { error } = await supabase.rpc('mark_bank_linked', { 
-        target_user_id: user.id 
-    });
+  const handleBankSubmit = async (bankPayload = {}, ageGroup = 'adult') => {
+    const safePayload = {
+        account_holder_name: String(bankPayload.account_holder_name || '').trim(),
+        account_number: String(bankPayload.account_number || '').trim(),
+        ifsc_code: String(bankPayload.ifsc_code || '').trim().toUpperCase(),
+        bank_name: String(bankPayload.bank_name || '').trim(),
+        guardian_name: String(bankPayload.guardian_name || '').trim(),
+        guardian_relationship: String(bankPayload.guardian_relationship || '').trim(),
+        consent: Boolean(bankPayload.consent),
+        is_guardian_account: Boolean(bankPayload.is_guardian_account)
+    };
 
-    if (error) {
-        showToast("Error updating profile status.", "error");
-        return;
+    if (!safePayload.account_holder_name || !safePayload.account_number || !safePayload.ifsc_code) {
+        showToast("Bank details are incomplete.", "error");
+        return false;
     }
 
-    // 3. THE MAGIC TRICK: Update React's local state so the button hides IMMEDIATELY
-    // Assuming your main user state is managed by a 'setUser' or 'setProfile' function passed down from App.js/Dashboard.js
-    if (setUser) {
-        setUser(prevUser => ({
-            ...prevUser,
-            is_bank_linked: true
-        }));
+    const isMinor = ageGroup === 'minor';
+    if (isMinor && (!safePayload.guardian_name || !safePayload.consent)) {
+        showToast("Parent/guardian approval is required for payout setup.", "error");
+        return false;
     }
 
-    showToast("Bank linked successfully! You can now receive payouts.");
-    
-    // Close the modal
-    setModal(null); 
+    try {
+        showToast("Saving payout details...", "info");
+
+        const { data, error: bankError } = await supabase.functions.invoke('kyc-handler', {
+            body: {
+                action: 'LINK_BANK',
+                user_id: user.id,
+                age_group: isMinor ? 'minor' : 'adult',
+                bank_details: safePayload
+            }
+        });
+
+        if (bankError || !data?.success) {
+            throw new Error(data?.error || bankError?.message || "Bank details could not be saved.");
+        }
+
+        const { error: linkError } = await supabase.rpc('mark_bank_linked', { 
+            target_user_id: user.id 
+        });
+
+        if (linkError) throw linkError;
+
+        if (setUser) {
+            setUser(prevUser => ({
+                ...prevUser,
+                is_bank_linked: true,
+                kyc_status: 'payout_ready'
+            }));
+        }
+
+        showToast("Payout setup saved. You can now receive payouts.", "success");
+        setModal(null);
+        return true;
+    } catch (err) {
+        showToast(err.message || "Error saving payout details.", "error");
+        return false;
+    }
 };
 
   // --- JOB & SERVICE ACTIONS ---
@@ -1861,6 +1934,7 @@ const handlePostJob = async (e) => {
         handleRedeemReferral,
         handleSubscribe,
         handleUseResume,
+        handleParentModeChange,
         handleEnablePushNotifications
     }
   };

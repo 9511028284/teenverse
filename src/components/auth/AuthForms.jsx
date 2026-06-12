@@ -176,7 +176,7 @@ const PasswordSecurityPanel = memo(({ password }) => {
 
 // ─── MINIMAL CALENDAR COMPONENT ──────────────────────────────────────────────
 const CustomCalendar = ({ selectedDateStr, onDateSelect, showToast }) => {
-  const minAge = 14; const maxAge = 21; const today = new Date();
+  const minAge = 14; const maxAge = 25; const today = new Date();
   const minYear = today.getFullYear() - maxAge; const maxYear = today.getFullYear() - minAge;
   const selectedDate = selectedDateStr ? new Date(selectedDateStr) : null;
 
@@ -495,7 +495,7 @@ export const SignupView = memo(({ state, actions, turnstileRef }) => {
                                   {agreedToTerms && <Check size={10} strokeWidth={3} />}
                               </button>
                               <p className="text-xs leading-normal text-neutral-400 dark:text-zinc-500 font-medium select-none box-border">
-                                  I verify that I am between 14–21 years of age and explicitly consent to the operational <a href="/legal" className="underline font-bold text-neutral-600 dark:text-zinc-300">Terms of Service</a> and tracking policies.
+                                  I verify that I am between 14–25 years of age and explicitly consent to the operational <a href="/legal" className="underline font-bold text-neutral-600 dark:text-zinc-300">Terms of Service</a> and tracking policies.
                               </p>
                           </div>
                       </div>

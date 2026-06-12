@@ -27,6 +27,8 @@ const buildPendingSignupPayload = (profile = {}) => ({
   gender: profile.gender || 'Other',
   org: profile.org || '',
   referralCode: profile.referralCode || '',
+  termsAccepted: profile.termsAccepted !== false,
+  termsVersion: profile.termsVersion || 'v1.0-TeenVerseHub-Terms',
 });
 
 // --- 1. Helper Wrappers ---
@@ -118,6 +120,31 @@ export default function App() {
           default: navigate('/'); 
       }
   };
+
+  const handleTermsAccepted = useCallback(async () => {
+    if (user?.id) {
+      const acceptedAt = new Date().toISOString();
+      const termsVersion = 'v1.0-TeenVerseHub-Terms';
+      const { error } = await supabase
+        .from('users')
+        .update({
+          terms_accepted_at: acceptedAt,
+          terms_version: termsVersion,
+          terms_user_agent: navigator.userAgent || 'unknown',
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setUser((prev) => prev ? ({
+        ...prev,
+        terms_accepted_at: acceptedAt,
+        terms_version: termsVersion,
+      }) : prev);
+    }
+
+    navigate(user?.type === 'client' ? '/client-dashboard' : '/dashboard');
+  }, [navigate, user?.id, user?.type]);
 
   // Redirect handling for approval tokens
   useEffect(() => {
@@ -331,7 +358,7 @@ export default function App() {
 
         {/* Legal & Onboarding */}
         <Route path="/legal" element={<LegalWrapper />} />
-        <Route path="/termsagreement" element={<TermsAgreement onAgree={() => navigate(user?.type === 'client' ? '/client-dashboard' : '/dashboard')} />} />
+        <Route path="/termsagreement" element={<TermsAgreement onAgree={handleTermsAccepted} />} />
         <Route path="/parent-approval" element={<ParentApprovalWrapper />} />
 
         {/* Secure Dashboards */}

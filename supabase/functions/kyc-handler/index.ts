@@ -12,6 +12,9 @@ const jsonResponse = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+const cleanText = (value: unknown, maxLength = 160) =>
+  String(value || "").trim().slice(0, maxLength);
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -22,6 +25,15 @@ serve(async (req) => {
     );
 
     const { action, user_id, age_group, bank_details } = await req.json();
+    const authHeader = req.headers.get("Authorization");
+    const token = authHeader?.replace("Bearer ", "");
+    const { data: authData, error: authError } = token
+      ? await supabaseClient.auth.getUser(token)
+      : { data: { user: null }, error: new Error("Missing authorization header") };
+
+    if (authError || !authData.user || authData.user.id !== user_id) {
+      return jsonResponse({ success: false, error: "Unauthorized banking request." }, 401);
+    }
 
     if (action === "VERIFY_IDENTITY") {
       return jsonResponse({
@@ -31,24 +43,44 @@ serve(async (req) => {
     }
 
     if (action === "LINK_BANK") {
+      if (!bank_details || typeof bank_details !== "object") {
+        return jsonResponse({ success: false, error: "Bank details are required." }, 400);
+      }
+
       const beneficiaryId = `BEN-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
       const isMinor = age_group === "minor";
-      const rawGuardianName = bank_details.guardian_name?.trim();
+      const accountHolderName = cleanText(bank_details.account_holder_name);
+      const accountNumber = cleanText(bank_details.account_number, 40);
+      const ifscCode = cleanText(bank_details.ifsc_code, 24).toUpperCase();
+      const bankName = cleanText(bank_details.bank_name || "Not provided", 120) || "Not provided";
+      const rawGuardianName = cleanText(bank_details.guardian_name);
+      const consent = bank_details.consent === true;
+
+      if (!accountHolderName || !accountNumber || !ifscCode) {
+        return jsonResponse({ success: false, error: "Account holder, account number, and IFSC are required." }, 400);
+      }
+
+      if (isMinor && (!rawGuardianName || !consent)) {
+        return jsonResponse({ success: false, error: "Parent/guardian payout approval is required." }, 400);
+      }
 
       const dbPayload = {
         user_id,
-        account_holder_name: bank_details.account_holder_name,
-        account_number: bank_details.account_number,
-        ifsc_code: bank_details.ifsc_code,
-        bank_name: bank_details.bank_name,
+        account_holder_name: accountHolderName,
+        account_number: accountNumber,
+        ifsc_code: ifscCode,
+        bank_name: bankName,
         is_guardian_account: isMinor,
         guardian_name: isMinor ? rawGuardianName || "Unknown Parent" : "Self",
-        guardian_relationship: isMinor ? bank_details.guardian_relationship || "Guardian" : "Self",
-        parent_consent_verified: bank_details.consent || false,
+        guardian_relationship: isMinor ? cleanText(bank_details.guardian_relationship || "Guardian", 80) : "Self",
+        parent_consent_verified: isMinor ? consent : false,
         beneficiary_id: beneficiaryId,
+        updated_at: new Date().toISOString(),
       };
 
-      const { error: insertError } = await supabaseClient.from("user_banking").insert(dbPayload);
+      const { error: insertError } = await supabaseClient
+        .from("user_banking")
+        .upsert(dbPayload, { onConflict: "user_id" });
       if (insertError) {
         console.error("DB Insert Error:", insertError);
         return jsonResponse({ success: false, error: `Database Error: ${insertError.message}` }, 400);

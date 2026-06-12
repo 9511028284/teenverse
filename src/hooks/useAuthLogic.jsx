@@ -9,6 +9,7 @@ const CLOUDFLARE_SITE_KEY = typeof window !== 'undefined' ? (import.meta.env.VIT
 const AUTH_GENERIC_ERROR = "We couldn't complete this request. Please check your details and try again.";
 const LOGIN_ERROR = 'Invalid email or password.';
 const RESET_SENT_MESSAGE = 'If this email exists, a recovery code has been sent.';
+const TERMS_VERSION = 'v1.0-TeenVerseHub-Terms';
 
 const buildSignupPayload = (source = {}) => {
   const e164Phone = normalizeIndianPhone(source.phone);
@@ -23,6 +24,8 @@ const buildSignupPayload = (source = {}) => {
     gender: source.gender || 'Other',
     org: source.org || '',
     referralCode: source.referralCode || '',
+    termsAccepted: source.termsAccepted !== false,
+    termsVersion: source.termsVersion || TERMS_VERSION,
   };
 };
 
@@ -90,7 +93,11 @@ export const useAuthLogic = (onLogin) => {
     };
   };
 
-  const getSignupPayload = () => buildSignupPayload(formData);
+  const getSignupPayload = () => ({
+    ...buildSignupPayload(formData),
+    termsAccepted: agreedToTerms,
+    termsVersion: TERMS_VERSION,
+  });
 
   const validateSignupPayload = () => {
     if (!formData.name.trim() || formData.name.trim().length < 2) {
@@ -174,8 +181,8 @@ export const useAuthLogic = (onLogin) => {
         }
 
         // Fixed data mismatch vulnerability
-        if (calculatedAge < 14 || calculatedAge > 21) {
-          showToast("Platform registration is limited to ages 14 to 21.");
+        if (calculatedAge < 14 || calculatedAge > 25) {
+          showToast("Platform registration is limited to ages 14 to 25.");
           setAge(null); 
           return { ...nextData, dob: '' }; 
         }

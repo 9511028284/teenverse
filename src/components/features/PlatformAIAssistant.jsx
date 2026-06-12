@@ -25,6 +25,41 @@ const STATIC_QUICK_PROMPTS = [
 ];
 
 const cx = (...classes) => classes.filter(Boolean).join(' ');
+const ASSISTANT_POSITION_KEY = 'teenverse_ai_assistant_position_v1';
+
+const getDefaultPosition = () => ({
+  right: typeof window === 'undefined' || window.innerWidth < 640 ? 16 : 24,
+  bottom: typeof window === 'undefined' || window.innerWidth < 640 ? 16 : 24,
+});
+
+const getStoredPosition = () => {
+  if (typeof window === 'undefined') return getDefaultPosition();
+
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(ASSISTANT_POSITION_KEY) || 'null');
+    if (Number.isFinite(stored?.right) && Number.isFinite(stored?.bottom)) {
+      return stored;
+    }
+  } catch {
+    return getDefaultPosition();
+  }
+
+  return getDefaultPosition();
+};
+
+const clampPosition = (position, open = false) => {
+  if (typeof window === 'undefined') return position;
+
+  const margin = 8;
+  const assistantWidth = open ? Math.min(400, window.innerWidth - 32) : (window.innerWidth >= 640 ? 220 : 64);
+  const maxRight = Math.max(margin, window.innerWidth - assistantWidth - margin);
+  const maxBottom = open ? 40 : Math.max(margin, window.innerHeight - 72);
+
+  return {
+    right: Math.min(Math.max(position.right, margin), maxRight),
+    bottom: Math.min(Math.max(position.bottom, margin), maxBottom),
+  };
+};
 
 const getAssistantErrorMessage = (data, error) => {
   const raw = data?.error || error?.message || 'Assistant is unavailable right now.';
@@ -104,6 +139,8 @@ const PlatformAIAssistant = ({ user, showToast }) => {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isHiddenByArea, setIsHiddenByArea] = useState(false);
+  const [position, setPosition] = useState(() => getStoredPosition());
   
   // Seed with an initial highly engaging welcome message hook
   const [messages, setMessages] = useState(() => [
@@ -120,6 +157,8 @@ const PlatformAIAssistant = ({ user, showToast }) => {
   
   const endRef = useRef(null);
   const inputRef = useRef(null);
+  const dragRef = useRef(null);
+  const dragMovedRef = useRef(false);
   const plan = useMemo(() => getEffectivePlanName(user), [user]);
 
   // Dynamically compute the active question feed based on the latest AI message state
@@ -138,7 +177,85 @@ const PlatformAIAssistant = ({ user, showToast }) => {
     }
   }, [open, messages, loading]);
 
-  if (!user?.id) return null;
+  useEffect(() => {
+    const handleVisibility = (event) => {
+      const shouldHide = Boolean(event.detail?.hidden);
+      setIsHiddenByArea(shouldHide);
+      if (shouldHide) setOpen(false);
+    };
+
+    window.addEventListener('teenverse:copilot-visibility', handleVisibility);
+    return () => window.removeEventListener('teenverse:copilot-visibility', handleVisibility);
+  }, []);
+
+  useEffect(() => {
+    const nextPosition = clampPosition(position, open);
+    if (nextPosition.right !== position.right || nextPosition.bottom !== position.bottom) {
+      setPosition(nextPosition);
+    }
+  }, [open, position]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setPosition((prev) => clampPosition(prev, open));
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [open]);
+
+  useEffect(() => {
+    window.localStorage.setItem(ASSISTANT_POSITION_KEY, JSON.stringify(position));
+  }, [position]);
+
+  if (!user?.id || isHiddenByArea) return null;
+
+  const startDrag = (event) => {
+    if (event.button !== 0) return;
+
+    dragMovedRef.current = false;
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startRight: position.right,
+      startBottom: position.bottom,
+    };
+
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const moveDrag = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 4) dragMovedRef.current = true;
+
+    setPosition(clampPosition({
+      right: drag.startRight - dx,
+      bottom: drag.startBottom - dy,
+    }, open));
+  };
+
+  const stopDrag = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    dragRef.current = null;
+  };
+
+  const toggleAssistant = (event) => {
+    if (dragMovedRef.current) {
+      event.preventDefault();
+      dragMovedRef.current = false;
+      return;
+    }
+
+    setOpen((prev) => !prev);
+  };
 
   const sendMessage = async (messageText = input) => {
     const text = String(messageText || '').trim();
@@ -215,12 +332,21 @@ const PlatformAIAssistant = ({ user, showToast }) => {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-[90] sm:bottom-6 sm:right-6 font-sans antialiased">
+    <div
+      className="fixed z-[90] font-sans antialiased"
+      style={{ right: `${position.right}px`, bottom: `${position.bottom}px` }}
+    >
       {open && (
         <div className="mb-4 flex h-[min(680px,calc(100dvh-112px))] w-[calc(100vw-2rem)] max-w-[400px] flex-col overflow-hidden rounded-[32px] border border-white bg-white/95 text-slate-900 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_24px_60px_rgba(0,0,0,0.15)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-[#090D1A]/95 dark:text-white dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.08),_0_24px_60px_rgba(0,0,0,0.4)] transition-all duration-300 ease-out animate-fade-in">
           
           {/* --- TOP HEADER MODAL BANNER --- */}
-          <div className="relative overflow-hidden border-b border-slate-100 bg-slate-950 px-5 py-4.5 text-white dark:border-white/[0.04]">
+          <div
+            className="relative cursor-grab touch-none select-none overflow-hidden border-b border-slate-100 bg-slate-950 px-5 py-4.5 text-white active:cursor-grabbing dark:border-white/[0.04]"
+            onPointerDown={startDrag}
+            onPointerMove={moveDrag}
+            onPointerUp={stopDrag}
+            onPointerCancel={stopDrag}
+          >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.3),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(20,184,166,0.15),transparent_35%)]" />
             <div className="relative flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
@@ -240,6 +366,7 @@ const PlatformAIAssistant = ({ user, showToast }) => {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
+                onPointerDown={(event) => event.stopPropagation()}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white"
                 aria-label="Close AI assistant"
               >
@@ -350,8 +477,12 @@ const PlatformAIAssistant = ({ user, showToast }) => {
       {/* --- FLOATING TRIGGER EMBEDDED BUTTON PILL --- */}
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="group flex min-h-[56px] items-center gap-3 rounded-[22px] border border-slate-900 bg-slate-950 px-4 py-2.5 text-white shadow-[0_16px_36px_rgba(7,10,20,0.3)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_48px_rgba(79,70,229,0.4)] dark:border-white/10 dark:bg-slate-900"
+        onClick={toggleAssistant}
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={stopDrag}
+        onPointerCancel={stopDrag}
+        className="group flex min-h-[56px] cursor-grab touch-none select-none items-center gap-3 rounded-[22px] border border-slate-900 bg-slate-950 px-4 py-2.5 text-white shadow-[0_16px_36px_rgba(7,10,20,0.3)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_48px_rgba(79,70,229,0.4)] active:cursor-grabbing dark:border-white/10 dark:bg-slate-900"
         aria-expanded={open}
         aria-label={open ? 'Minimize AI assistant' : 'Open AI assistant'}
       >
