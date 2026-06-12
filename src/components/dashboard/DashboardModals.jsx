@@ -2,7 +2,8 @@ import React from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { 
   Package, Eye, FileText, Lock, Unlock,
-  ShieldCheck, CloudUpload, Github, Linkedin, Instagram, Globe, Sparkles, XCircle
+  ShieldCheck, CloudUpload, Github, Linkedin, Instagram, Globe, Sparkles, XCircle,
+  Image as ImageIcon, CheckCircle2
 } from 'lucide-react';
 
 // UI
@@ -23,25 +24,59 @@ import UserProfile from '../dashboard/UserProfile';
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
+const getDeliveryFileKey = (file, index = 0) => `${index}-${file.name}-${file.size}-${file.lastModified || 0}`;
+
+const formatFileSize = (size) => {
+  if (!Number.isFinite(size) || size <= 0) return '0 KB';
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+};
+
 const DashboardModals = ({ user, logic, showToast }) => {
   const { state, setters, actions } = logic;
   const { 
     modal, showRewardModal, isClaiming, kycFile, timelineApp, 
     viewWorkApp, currentQuestionIndex, score, viewProfileId, 
     publicProfileData, editProfileModal, applications, 
-    paymentModal, selectedJob, energy 
+    paymentModal, selectedJob, energy, deliveryFiles = [],
+    deliveryUploadProgress = {}, isSubmittingWork = false
   } = state;
 
   const { 
     setModal, setShowRewardModal, setKycFile, setTimelineApp, 
     setViewWorkApp, setScore, setCurrentQuestionIndex, 
     setViewProfileId, setPublicProfileData, setEditProfileModal, 
-    setPaymentModal, setTab, setSelectedJob 
+    setPaymentModal, setTab, setSelectedJob, setDeliveryFiles,
+    setDeliveryUploadProgress
   } = setters;
 
   // 💅 Premium Re-engineered Tactile Shared Styles
   const inputStyles = "w-full bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-white/[0.05] text-slate-900 dark:text-white px-4 py-3 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.4)] transition-all duration-200 ease-out";
   const labelStyles = "block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.18em] mb-1.5 ml-1";
+  const deliveryFilePreviews = React.useMemo(() => Object.fromEntries(
+    deliveryFiles.map((file, index) => [
+      getDeliveryFileKey(file, index),
+      file.type?.startsWith('image/') ? URL.createObjectURL(file) : null
+    ])
+  ), [deliveryFiles]);
+  React.useEffect(() => () => {
+    Object.values(deliveryFilePreviews).forEach((url) => {
+      if (url) URL.revokeObjectURL(url);
+    });
+  }, [deliveryFilePreviews]);
+  const handleDeliveryFileChange = (event) => {
+    const files = Array.from(event.target.files || []);
+    setDeliveryFiles(files);
+    setDeliveryUploadProgress(Object.fromEntries(
+      files.map((file, index) => [getDeliveryFileKey(file, index), { progress: 0, status: "Ready" }])
+    ));
+  };
+  const closeSubmitWorkModal = () => {
+    if (isSubmittingWork) return;
+    setDeliveryFiles([]);
+    setDeliveryUploadProgress({});
+    setModal(null);
+  };
 
   return (
     <AnimatePresence mode="wait">
@@ -116,7 +151,7 @@ const DashboardModals = ({ user, logic, showToast }) => {
 
         {/* SUBMIT WORK - Tactile Form Deliverable */}
         {modal === 'submit_work' && (
-          <Modal title="Deliver Project" onClose={() => setModal(null)}>
+          <Modal title="Deliver Project" onClose={closeSubmitWorkModal}>
              <form onSubmit={actions.handleSubmitWork} className="space-y-5">
                <div className="bg-indigo-50 border border-indigo-100 text-indigo-900 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20 p-4 rounded-2xl flex gap-3 items-start shadow-[inset_0_1.5px_2.5px_rgba(255,255,255,0.6)] dark:shadow-none">
                   <ShieldCheck className="text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" size={18} strokeWidth={2.5} />
@@ -137,12 +172,76 @@ const DashboardModals = ({ user, logic, showToast }) => {
 
                {/* Dropzone frame component wrapper */}
                <div className="group relative border-2 border-dashed border-slate-200 dark:border-white/10 rounded-[20px] p-6 text-center bg-slate-50/50 dark:bg-slate-950/20 transition-all duration-300 hover:border-indigo-500/40 cursor-pointer">
-                 <input type="file" name="files" multiple className="absolute inset-0 opacity-0 cursor-pointer z-20"/>
+                 <input type="file" name="files" multiple onChange={handleDeliveryFileChange} disabled={isSubmittingWork} className="absolute inset-0 opacity-0 cursor-pointer z-20 disabled:cursor-not-allowed"/>
                  <CloudUpload className="mx-auto text-slate-400 mb-2 group-hover:text-indigo-500 group-hover:scale-105 transition-all duration-300" size={28} strokeWidth={2.5} />
                  <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">Drag components here or browse folders <span className="block text-[10px] text-slate-400 font-medium mt-0.5">(Max 5MB per upload item)</span></p>
                </div>
 
-               <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider py-4 rounded-xl shadow-[inset_0_2px_4px_rgba(255,255,255,0.35),_0_10px_24px_rgba(79,70,229,0.2)] dark:bg-indigo-500 dark:hover:bg-indigo-400">Submit Delivery</Button>
+               {deliveryFiles.length > 0 && (
+                 <div className="space-y-2.5">
+                   <div className="flex items-center justify-between px-1">
+                     <span className={cn(labelStyles, "mb-0 ml-0")}>Selected Files</span>
+                     <span className="text-[10px] font-black text-indigo-500 uppercase tracking-wider">{deliveryFiles.length} item{deliveryFiles.length === 1 ? '' : 's'}</span>
+                   </div>
+
+                   <div className="space-y-2">
+                     {deliveryFiles.map((file, index) => {
+                       const fileKey = getDeliveryFileKey(file, index);
+                       const uploadState = deliveryUploadProgress[fileKey] || { progress: 0, status: "Ready" };
+                       const progress = Math.max(0, Math.min(100, Number(uploadState.progress || 0)));
+                       const isUploaded = uploadState.status === "Uploaded";
+                       const isFailed = uploadState.status === "Failed";
+                       const previewUrl = deliveryFilePreviews[fileKey];
+
+                       return (
+                         <div key={fileKey} className="rounded-2xl border border-slate-200/80 bg-white p-3 shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.8),_0_4px_14px_rgba(15,23,42,0.04)] dark:border-white/[0.06] dark:bg-slate-950/40 dark:shadow-none">
+                           <div className="flex items-center gap-3">
+                             <div className={cn(
+                               "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border",
+                               isUploaded
+                                 ? "border-emerald-100 bg-emerald-50 text-emerald-600 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400"
+                                 : isFailed
+                                   ? "border-rose-100 bg-rose-50 text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400"
+                                   : "border-indigo-100 bg-indigo-50 text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400"
+                             )}>
+                               {previewUrl ? (
+                                 <img src={previewUrl} alt="" className="h-full w-full object-cover" />
+                               ) : isUploaded ? (
+                                 <CheckCircle2 size={18} strokeWidth={2.5} />
+                               ) : isFailed ? (
+                                 <XCircle size={18} strokeWidth={2.5} />
+                               ) : (
+                                 <ImageIcon size={18} strokeWidth={2.5} />
+                               )}
+                             </div>
+                             <div className="min-w-0 flex-1 text-left">
+                               <p className="truncate text-xs font-black text-slate-900 dark:text-white">{file.name}</p>
+                               <p className="mt-0.5 text-[10px] font-bold text-slate-400 dark:text-slate-500">{formatFileSize(file.size)}</p>
+                             </div>
+                             <span className={cn(
+                               "shrink-0 text-[10px] font-black uppercase tracking-wider",
+                               isUploaded ? "text-emerald-500" : isFailed ? "text-rose-500" : "text-indigo-500"
+                             )}>
+                               {uploadState.status}{progress > 0 && progress < 100 ? ` ${progress}%` : ''}
+                             </span>
+                           </div>
+                           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.06]">
+                             <div
+                               className={cn(
+                                 "h-full rounded-full transition-all duration-300",
+                                 isUploaded ? "bg-emerald-500" : isFailed ? "bg-rose-500" : "bg-indigo-500"
+                               )}
+                               style={{ width: `${progress}%` }}
+                             />
+                           </div>
+                         </div>
+                       );
+                     })}
+                   </div>
+                 </div>
+               )}
+
+               <Button disabled={isSubmittingWork} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider py-4 rounded-xl shadow-[inset_0_2px_4px_rgba(255,255,255,0.35),_0_10px_24px_rgba(79,70,229,0.2)] dark:bg-indigo-500 dark:hover:bg-indigo-400 disabled:opacity-70 disabled:cursor-not-allowed">{isSubmittingWork ? 'Uploading Delivery...' : 'Submit Delivery'}</Button>
              </form>
           </Modal>
         )}

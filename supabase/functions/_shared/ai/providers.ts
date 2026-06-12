@@ -14,7 +14,7 @@ export const AI_MODELS = {
     assistant: "llama-3.1-8b-instant",
   },
   gemini: {
-    secondCheck: "gemini-flash-lite",
+    secondCheck: "gemini-2.5-flash-lite",
   },
 } as const;
 

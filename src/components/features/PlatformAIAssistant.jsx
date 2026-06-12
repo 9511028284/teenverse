@@ -19,7 +19,7 @@ const STATIC_QUICK_PROMPTS = [
   'Why can I not apply to this job?',
   'My payment succeeded but plan is Basic.',
   'How does escrow protect clients?',
-  'Why was my submitted work rejected?',
+  'Why does my submitted work need revision?',
   'How do I improve my profile portfolio?',
   'What should I do if KYC is pending?',
 ];

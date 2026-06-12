@@ -403,6 +403,16 @@ entrypoint = "./functions/kyc-handler/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/kyc-handler/*.html" ]
 
+[functions.digilocker]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/digilocker/index.ts"
+
+[functions.pan]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/pan/index.ts"
+
 [functions.generate-academy-quiz]
 enabled = true
 verify_jwt = true
@@ -546,3 +556,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/reverse/deno.json"
 entrypoint = "./functions/reverse/index.ts"
+
+[functions.fund-escrow-with-wallet]
+enabled = true
+verify_jwt = false
+import_map = "./functions/fund-escrow-with-wallet/deno.json"
+entrypoint = "./functions/fund-escrow-with-wallet/index.ts"

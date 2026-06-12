@@ -63,6 +63,24 @@ export const getPlanLimits = (planName = 'Basic') => {
   return PLAN_LIMITS[normalizePlanName(planName)] || PLAN_LIMITS.Basic;
 };
 
+export const getCommissionRate = (planName = 'Basic') => {
+  switch (normalizePlanName(planName)) {
+    case 'Elite':
+      return 0.04;
+    case 'Pro':
+      return 0.06;
+    case 'Starter':
+      return 0.07;
+    default:
+      return 0.10;
+  }
+};
+
+export const formatCommissionRate = (rate) => {
+  const percentage = Number(rate) * 100;
+  return `${Number.isInteger(percentage) ? percentage : percentage.toFixed(1)}%`;
+};
+
 export const filterSubscriptionBadgesForPlan = (badges = [], userLike = {}) => {
   const effectivePlan = getEffectivePlanName(userLike);
 

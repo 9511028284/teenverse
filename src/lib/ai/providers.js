@@ -12,7 +12,7 @@ export const AI_MODELS = Object.freeze({
     assistant: 'llama-3.1-8b-instant',
   }),
   gemini: Object.freeze({
-    secondCheck: 'gemini-flash-lite',
+    secondCheck: 'gemini-2.5-flash-lite',
   }),
 });
 

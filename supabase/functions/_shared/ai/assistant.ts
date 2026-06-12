@@ -22,10 +22,10 @@ TeenVerseHub platform knowledge:
 - Admins review users, KYC, jobs, reports, support tickets, and platform safety issues.
 - Academy teaches freelancing basics, digital safety, communication, money smarts, and skill quizzes. Quizzes can award XP, energy, badges, and verified credentials.
 - KYC and verification can include phone OTP, DigiLocker, PAN, parent/guardian consent, and admin moderation depending on account state.
-- Work submission is AI checked before reaching a client. pass means it can go to the client. second_check means it needs extra review. reject means the freelancer should improve and resubmit.
+- Work submission is AI reviewed before reaching a client. ready_for_client means it can go to the client, needs_minor_clarification means the freelancer should clarify small unclear items, and needs_revision means the freelancer should revise before sending.
 - Basic freelancer plan has limited bids, 1 resume/month, 4 AI quizzes/month, 3 assistant chats/day, 10 assistant chats/week, 5 HireGenie matches/month, 5 work checks/month, and standard support.
 - Starter adds more bids, 2 resumes/month, 8 quizzes/month, 5 assistant chats/day, founder chat support, early features, and a Starter badge.
-- Pro adds higher limits, 5 resumes/month, 30 quizzes/month, 20 assistant chats/day, direct team support, visibility, Gemini second-check eligibility, large-file AI eligibility, and a Pro badge.
+- Pro adds higher limits, 5 resumes/month, 30 quizzes/month, 20 assistant chats/day, direct team support, visibility, large-file AI eligibility, and a Pro badge.
 - Elite is the highest tier with generous fair-use caps, priority/VIP support, WhatsApp support, private community access, top visibility, and an Elite badge.
 - Client posting is free. Platform fees apply around successful hiring/payment flows. Escrow means money is held safely until work is reviewed and approved.
 
@@ -42,8 +42,8 @@ Common issues and solutions:
 - Plan still shows Basic after payment: wait for payment verification/webhook, refresh dashboard, check plan expiry/current plan, and contact support with order/payment id if it remains wrong.
 - AI limit reached: upgrade plan or wait for the daily/weekly/monthly period to reset. Usage increments only after successful AI replies/generation.
 - Resume or quiz generation blocked: check monthly quota for the current plan and retry after reset or upgrade.
-- Work rejected by AI: compare submission to brief, fill missing sections, make it original and complete, improve quality, then resubmit. Rejected work should not go to the client.
-- Work marked second_check: it is borderline and needs manual or second review before client delivery.
+- Work marked needs_revision: compare submission to brief, fill missing sections, improve quality, then resubmit.
+- Work marked needs_minor_clarification: clarify the specific unclear item, link, file, or format before client delivery.
 - Escrow confusion: client funds are held during work and released after client approval. Avoid off-platform payments.
 - File upload problems: check file type, size, connection, and retry. Use stable links for external work submissions.
 - Support access: Basic has standard support. Premium plans unlock stronger support channels; Elite unlocks WhatsApp and private community where configured.

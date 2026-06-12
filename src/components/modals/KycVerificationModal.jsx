@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, CheckCircle, Lock, AlertTriangle, Fingerprint, CreditCard, Info } from 'lucide-react';
+import { Shield, CheckCircle, Lock, AlertTriangle, Fingerprint, CreditCard, Info, Loader2 } from 'lucide-react';
 import Modal from '../ui/Modal'; 
 import Button from '../ui/Button'; 
 import { supabase } from '../../supabase'; 
@@ -9,6 +9,8 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notice, setNotice] = useState(null);
+  const sdkSessionRequestedRef = useRef(false);
+  const panSubmittingRef = useRef(false);
 
   const notify = (message, type = 'error') => {
     setNotice({ message, type });
@@ -17,7 +19,10 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
   // ==========================================
   // ⚡ DYNAMIC STATE & FLOW CONTROL
   // ==========================================
-  const isAlreadyVerified = user.kyc_status === 'age_verified' || user.digilocker_verified === true;
+  const hasCompletedIdentity = Boolean(
+    user?.is_kyc_verified || ['approved', 'verified'].includes(user?.kyc_status)
+  );
+  const isAlreadyVerified = hasCompletedIdentity || user.kyc_status === 'age_verified' || user.digilocker_verified === true;
   const userDob = user.temp_dob || user.dob;
   
   const calculatedAge = userDob ? (new Date().getFullYear() - new Date(userDob).getFullYear()) : null;
@@ -49,12 +54,14 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
   // ==========================================
   // Pre-load the SDK into a hidden div as soon as the modal opens
   useEffect(() => {
-    if (mode !== 'identity' || isAlreadyVerified || dlFlowState !== 'idle') return;
+    if (mode !== 'identity' || isAlreadyVerified || dlFlowState !== 'idle' || sdkSessionRequestedRef.current) return;
 
     let isMounted = true;
+    sdkSessionRequestedRef.current = true;
 
     const prepareSdk = async () => {
         try {
+            setNotice(null);
             const { data, error } = await supabase.functions.invoke('digilocker', {
               body: { action: 'CREATE_SESSION', user_id: user.id }
             });
@@ -66,7 +73,7 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
                 if (typeof window.DigiboostSdk !== 'function' || !sdkMountRef.current) return;
 
                 window.DigiboostSdk({
-                    gateway: "sandbox", // 🚨 CHANGE TO "production" WHEN LIVE
+                    gateway: "production",
                     token: data.token,
                     selector: "#hidden-sdk-mount", 
                     // No styling needed, it's invisible
@@ -90,18 +97,24 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
 
         } catch (err) {
             console.error("SDK Prep Error:", err);
+            sdkSessionRequestedRef.current = false;
+            if (isMounted) notify("Could not prepare DigiLocker. Please close and try again.");
         }
     };
 
     prepareSdk();
 
     return () => { isMounted = false; };
-  }, [mode, isAlreadyVerified, user.id, dlFlowState]);
+  }, [mode, isAlreadyVerified, user.id, dlFlowState, handleDigilockerSuccess]);
 
   // ==========================================
   // ACTION 2: TRIGGER HIDDEN SDK
   // ==========================================
   const triggerDigiLocker = () => {
+      if (dlFlowState !== 'sdk_ready') {
+        notify("Secure connection is still preparing. Please wait a moment.", "error");
+        return;
+      }
       setIsSubmitting(true);
       
       // Leave a breadcrumb for drop-off recovery
@@ -123,11 +136,14 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
   // ==========================================
   const onIdentitySubmit = async (e) => {
     e.preventDefault();
+    if (panSubmittingRef.current || isSubmitting) return;
     if (dlFlowState !== 'verified') return notify("Please complete DigiLocker verification first.");
-    if (!panNumber || panNumber.length !== 10) return notify("Please enter a valid 10-character PAN number.");
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(panNumber)) return notify("Please enter a valid PAN format, e.g. ABCDE1234F.");
     if (isMinor && !identityConsent) return notify("Guardian consent is strictly required.");
 
     setIsSubmitting(true);
+    panSubmittingRef.current = true;
+    setNotice(null);
 
     try {
       const { data: panData, error: panError } = await supabase.functions.invoke('pan', {
@@ -164,6 +180,7 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
     } catch (err) {
 	      notify("Verification failed: " + err.message);
     } finally {
+      panSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -191,7 +208,7 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
       if (dlFlowState === 'verified' || dlFlowState === 'success_anim') progress = 66;
 
       return (
-          <div className="w-full bg-gray-200 rounded-full h-1.5 mb-4 dark:bg-gray-700">
+          <div className="w-full bg-slate-200 rounded-full h-1.5 mb-4 dark:bg-slate-800">
              <div className="bg-indigo-600 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progress}%` }}></div>
           </div>
       );
@@ -205,23 +222,23 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
 	      <Modal title="Identity Verification" onClose={onClose}>
 	        {renderProgressBar()}
 	        {notice && (
-	          <div className={`mb-4 rounded-xl border p-3 text-sm ${notice.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>
+	          <div className={`mb-4 rounded-xl border p-3 text-sm ${notice.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300' : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300'}`}>
 	            {notice.message}
 	          </div>
 	        )}
 	        <div className="space-y-5">
-           <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex gap-3">
-              <Shield className="text-indigo-600 shrink-0" />
-              <p className="text-xs text-indigo-800">
-                 We use DigiLocker and NSDL to securely verify your age and identity. Takes less than a minute.
+           <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex gap-3 dark:bg-indigo-500/10 dark:border-indigo-500/20">
+              <Shield className="text-indigo-600 shrink-0 dark:text-indigo-300" />
+              <p className="text-xs text-indigo-800 dark:text-indigo-200">
+                 We verify age through DigiLocker and PAN through a secure verification provider. Verification is required before applying or receiving payouts.
               </p>
            </div>
            
            <div className="space-y-4">
                {/* STEP 1: DIGILOCKER */}
-               <div className={`p-4 rounded-xl border transition-colors duration-500 ${dlFlowState === 'verified' || dlFlowState === 'success_anim' ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+               <div className={`p-4 rounded-xl border transition-colors duration-500 ${dlFlowState === 'verified' || dlFlowState === 'success_anim' ? 'bg-green-50 border-green-200 dark:bg-emerald-500/10 dark:border-emerald-500/20' : 'bg-gray-50 border-gray-200 dark:bg-white/[0.03] dark:border-white/10'}`}>
                   <div className="flex justify-between items-center mb-3">
-                    <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
+                    <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2 dark:text-gray-400">
                       <Fingerprint size={14}/> Step 1: Age Verification
                     </label>
                     {(dlFlowState === 'verified' || dlFlowState === 'success_anim') && <CheckCircle size={16} className="text-green-500 animate-pulse" />}
@@ -233,8 +250,8 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
                   {/* STATE 1: PREPARING (Waiting for Edge Function) */}
                   {dlFlowState === 'idle' && (
                      <div className="space-y-3 animate-fade-in">
-                        <Button disabled variant="outline" className="w-full">
-                           Preparing Secure Connection...
+                        <Button disabled variant="outline" className="w-full flex items-center justify-center gap-2">
+                           <Loader2 size={16} className="animate-spin" /> Preparing secure connection...
                         </Button>
                      </div>
                   )}
@@ -242,11 +259,11 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
                   {/* STATE 2: SDK READY (Your Custom Button!) */}
                   {dlFlowState === 'sdk_ready' && (
                     <div className="space-y-3 animate-fade-in">
-                       <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-start gap-3">
+                       <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-start gap-3 dark:bg-blue-500/10 dark:border-blue-500/20">
                            <Info className="text-blue-500 shrink-0 mt-0.5" size={16} />
-                           <div className="text-xs text-blue-900 space-y-1">
+                           <div className="text-xs text-blue-900 space-y-1 dark:text-blue-200">
                                <p className="font-bold">Secure Government Portal</p>
-                               <p>You will be redirected to the official DigiLocker. We only extract your Date of Birth to verify your age securely.</p>
+                               <p>You will continue through DigiLocker. We only use the verified date of birth needed for platform eligibility.</p>
                            </div>
                        </div>
                        
@@ -265,18 +282,15 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
                   {/* STATE 3: GAMIFICATION SUCCESS ANIMATION */}
                   {dlFlowState === 'success_anim' && (
                     <div className="flex flex-col items-center justify-center py-4 space-y-2 animate-fade-in">
-                       <div className="text-4xl animate-bounce">🎉</div>
-                       <h3 className="font-extrabold text-green-800 text-lg">Age Verified!</h3>
-                       <div className="bg-green-100 px-3 py-1 rounded-full border border-green-300">
-                           <p className="text-green-700 text-xs font-bold">⚡ +50 XP Awarded</p>
-                       </div>
-                       <p className="text-green-600 text-xs font-bold pt-1">🏆 Badge Unlocked: Identity Verified</p>
+                       <CheckCircle className="text-green-500" size={40} />
+                       <h3 className="font-extrabold text-green-800 text-lg dark:text-green-300">Age verified</h3>
+                       <p className="text-green-700 text-xs font-semibold dark:text-green-300">Complete PAN verification to finish KYC.</p>
                     </div>
                   )}
 
                   {/* STATE 4: VERIFIED SETTLED */}
                   {dlFlowState === 'verified' && (
-                    <Button type="button" disabled variant="outline" className="w-full bg-green-50/50 text-green-700 border-green-200">
+                    <Button type="button" disabled variant="outline" className="w-full bg-green-50/50 text-green-700 border-green-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20">
                       ✓ Verified (DOB: {userDob})
                     </Button>
                   )}
@@ -284,9 +298,9 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
                
                {/* STEP 2: PAN */}
                {(dlFlowState === 'verified' || dlFlowState === 'success_anim') && (
-                 <div className="p-4 rounded-xl border bg-white border-gray-200 shadow-sm animate-fade-in">
+                 <div className="p-4 rounded-xl border bg-white border-gray-200 shadow-sm animate-fade-in dark:bg-white/[0.03] dark:border-white/10">
                     <div className="flex justify-between items-center mb-3">
-                      <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
+                      <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2 dark:text-gray-400">
                         <CreditCard size={14}/> Step 2: Financial Identity
                       </label>
                     </div>
@@ -298,7 +312,7 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
                       <input 
                         value={panNumber} 
                         onChange={e => setPanNumber(e.target.value.toUpperCase())} 
-                        className="w-full p-3 rounded-xl border font-mono uppercase bg-gray-50 focus:border-indigo-500 outline-none transition-colors" 
+                        className="w-full p-3 rounded-xl border font-mono uppercase bg-gray-50 focus:border-indigo-500 outline-none transition-colors dark:bg-slate-950 dark:border-white/10 dark:text-white" 
                         placeholder="ABCDE1234F" 
                         maxLength={10} 
                       />
@@ -308,7 +322,7 @@ const KycVerificationModal = ({ mode, user, actions, onClose }) => {
 
                {/* STEP 3: GUARDIAN CONSENT */}
                {(dlFlowState === 'verified' || dlFlowState === 'success_anim') && isMinor && (
-                 <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-3 animate-fade-in">
+                 <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-3 animate-fade-in dark:bg-amber-500/10 dark:border-amber-500/20 dark:text-amber-200">
                     <h4 className="font-bold flex items-center gap-2"><AlertTriangle size={14}/> Parent Declaration</h4>
                     <div className="pt-2 flex items-start gap-3">
                       <input type="checkbox" id="id_consent" className="mt-0.5" checked={identityConsent} onChange={(e) => setIdentityConsent(e.target.checked)} />

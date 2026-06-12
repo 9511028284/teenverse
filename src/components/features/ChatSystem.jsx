@@ -710,7 +710,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", show
                   <div className="flex flex-col sm:flex-row gap-3 pt-4">
                       <Button variant="outline" type="button" onClick={closeHireModal} className="w-full">Cancel</Button>
                       <Button type="submit" disabled={isSending} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg">
-                          {isSending ? <Loader2 size={16} className="animate-spin mx-auto"/> : hireFinalPayable === 0 && hireWalletDeduction > 0 ? "Pay with Wallet" : `Pay ₹${hireFinalPayable || numericHireAmount}`}
+                          {isSending ? <Loader2 size={16} className="animate-spin mx-auto"/> : hireFinalPayable === 0 && hireWalletDeduction > 0 ? "Pay with Wallet" : numericHireAmount > 0 ? `Pay ₹${hireFinalPayable || numericHireAmount}` : "Fund Escrow & Pay"}
                       </Button>
                   </div>
               </form>

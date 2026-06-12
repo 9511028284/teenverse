@@ -2,6 +2,21 @@ import React, { useState } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { CreditCard, Lock } from 'lucide-react';
+import { formatCommissionRate, getCommissionRate, getEffectivePlanName } from '../../utils/subscription';
+
+const getFreelancerPlanContext = (paymentData = {}) => ({
+  current_plan:
+    paymentData.freelancer_current_plan ||
+    paymentData.freelancerPlan ||
+    paymentData.freelancer_plan ||
+    paymentData.current_plan ||
+    'Basic',
+  plan_expires_at:
+    paymentData.freelancer_plan_expires_at ||
+    paymentData.freelancerPlanExpiresAt ||
+    paymentData.plan_expires_at ||
+    null,
+});
 
 const PaymentModal = ({ onClose, onConfirm, paymentData }) => {
   // Escrow Agreement State
@@ -9,8 +24,12 @@ const PaymentModal = ({ onClose, onConfirm, paymentData }) => {
 
   if (!paymentData) return null;
   const { amount } = paymentData;
-  // 5% Fee Calculation
-  const freelancerReceive = (parseFloat(amount) * 0.95).toFixed(2);
+  const numericAmount = Number(amount) || 0;
+  const freelancerPlan = getEffectivePlanName(getFreelancerPlanContext(paymentData));
+  const commissionRate = getCommissionRate(freelancerPlan);
+  const platformFee = numericAmount * commissionRate;
+  const freelancerReceive = Math.max(0, numericAmount - platformFee).toFixed(2);
+  const formattedFee = formatCommissionRate(commissionRate);
 
   return (
      <Modal title="Secure Escrow Payment" onClose={onClose}>
@@ -22,12 +41,20 @@ const PaymentModal = ({ onClose, onConfirm, paymentData }) => {
           
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Payable</p>
               <h2 className="text-5xl font-black text-gray-900 dark:text-white mt-2">₹{amount}</h2>
+              <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-indigo-500">
+                Freelancer Plan: {freelancerPlan}
+              </p>
            </div>
            
            <div className="bg-gray-50 dark:bg-[#020617] p-5 rounded-2xl text-sm space-y-3 border border-gray-100 dark:border-white/5">
               <div className="flex justify-between text-gray-500">
                   <span>Service Fee (Platform)</span>
-                  <span>5%</span>
+                  <span>{formattedFee}</span>
+              </div>
+
+              <div className="flex justify-between text-gray-500">
+                  <span>Platform Fee Amount</span>
+                  <span>- ₹{platformFee.toFixed(2)}</span>
               </div>
               
               {/* Taxes Display - Legal Text */}

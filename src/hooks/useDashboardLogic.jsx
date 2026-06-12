@@ -4,7 +4,7 @@ import * as api from '../services/dashboard.api';
 import { toPng, toBlob } from 'html-to-image';
 import { jsPDF } from "jspdf";
 import { QUIZZES, APP_STATUS } from '../utils/constants';
-import { filterSubscriptionBadgesForPlan, getEffectivePlanName, getPlanLimits, normalizeExpiredSubscription } from '../utils/subscription';
+import { filterSubscriptionBadgesForPlan, getCommissionRate, getEffectivePlanName, getPlanLimits, normalizeExpiredSubscription } from '../utils/subscription';
 import {
   getNotificationPermission,
   listenForForegroundMessages,
@@ -17,8 +17,6 @@ import {
 // ------------------------------------------
 const KYC_MODE = 'production'; 
 const TEENVERSE_HOME_URL = 'https://teenversehub.in';
-const TEMP_DISABLE_FREELANCER_KYC_FOR_APPLICATIONS =
-  import.meta.env.VITE_TEMP_DISABLE_FREELANCER_KYC_FOR_APPLICATIONS !== 'false';
 // ------------------------------------------
 
 const buildInstagramStoryJoinUrl = (profile) => {
@@ -48,16 +46,6 @@ const isSameDay = (dateString) => {
   );
 };
 
-// 🚀 NEW: Dynamic Commission Helper
-export const getCommissionRate = (planName) => {
-    switch(planName) {
-        case 'Elite': return 0.04;   // 3%
-        case 'Pro': return 0.06;    // 3.5%
-        case 'Starter': return 0.07; // 4%
-        default: return 0.10;        // 5% (Basic)
-    }
-};
-
 const unwrapFunctionData = (payload) => payload?.success ? payload.data : payload;
 
 const getFunctionErrorMessage = async (error, fallback) => {
@@ -65,14 +53,35 @@ const getFunctionErrorMessage = async (error, fallback) => {
   return contextBody?.error || error?.message || fallback;
 };
 
+const getUploadFileKey = (file, index = 0) => `${index}-${file.name}-${file.size}-${file.lastModified || 0}`;
+
+const uploadFileWithProgress = (signedUrl, file, onProgress) => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', signedUrl);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+    xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        onProgress?.(Math.round((event.loaded / event.total) * 100));
+    };
+
+    xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`R2 Upload failed with HTTP ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error("R2 Upload failed"));
+    xhr.send(file);
+});
+
 // Helper: Clean Cloudflare R2 Uploads
-const uploadFilesToR2 = async (files, userId, folderPrefix, maxSizeBytes, showToast) => {
+const uploadFilesToR2 = async (files, userId, folderPrefix, maxSizeBytes, showToast, onProgress) => {
     let uploadedUrls = [];
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (file.size === 0) continue;
 
         if (file.size > maxSizeBytes) {
+            onProgress?.({ file, index: i, progress: 0, status: "Failed" });
             showToast(`"${file.name}" exceeds the size limit. Please choose a smaller file.`, "error");
             throw new Error("File size limit exceeded");
         }
@@ -81,19 +90,27 @@ const uploadFilesToR2 = async (files, userId, folderPrefix, maxSizeBytes, showTo
         const filePath = folderPrefix ? `${folderPrefix}/${userId}/${Date.now()}_${safeName}` : `${userId}/${Date.now()}_${safeName}`; 
 
         try {
+            onProgress?.({ file, index: i, progress: 5, status: "Preparing" });
             const { data: presignData, error: presignError } = await supabase.functions.invoke('generate-r2-url', {
                 body: { fileName: filePath, fileType: file.type }
             });
 
             if (presignError || !presignData?.signedUrl) throw new Error("Could not get secure upload link.");
 
-            const uploadRes = await fetch(presignData.signedUrl, {
-                method: 'PUT',
-                body: file,
-                headers: { 'Content-Type': file.type }
-            });
+            onProgress?.({ file, index: i, progress: 12, status: "Uploading" });
+            if (onProgress) {
+                await uploadFileWithProgress(presignData.signedUrl, file, (progress) => {
+                    onProgress({ file, index: i, progress: Math.max(12, progress), status: "Uploading" });
+                });
+            } else {
+                const uploadRes = await fetch(presignData.signedUrl, {
+                    method: 'PUT',
+                    body: file,
+                    headers: { 'Content-Type': file.type || 'application/octet-stream' }
+                });
 
-            if (!uploadRes.ok) throw new Error("R2 Upload failed");
+                if (!uploadRes.ok) throw new Error("R2 Upload failed");
+            }
 
             if (folderPrefix === 'jobs') {
                  uploadedUrls.push(presignData.publicUrl);
@@ -102,8 +119,10 @@ const uploadFilesToR2 = async (files, userId, folderPrefix, maxSizeBytes, showTo
                  const cleanPath = filePath.replace(/^\//, "");
                  uploadedUrls.push(`${baseUrl}/${cleanPath}`);
             }
+            onProgress?.({ file, index: i, progress: 100, status: "Uploaded" });
         } catch (err) {
             console.error("Upload Error:", err);
+            onProgress?.({ file, index: i, progress: 0, status: "Failed" });
             showToast(`Failed to upload ${file.name}`, "error");
             throw err; 
         }
@@ -177,6 +196,9 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const [modal, setModal] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null); 
   const [selectedApp, setSelectedApp] = useState(null);
+  const [deliveryFiles, setDeliveryFiles] = useState([]);
+  const [deliveryUploadProgress, setDeliveryUploadProgress] = useState({});
+  const [isSubmittingWork, setIsSubmittingWork] = useState(false);
    
   // --- ENERGY & REWARD STATES ---
   const [energy, setEnergy] = useState(20);
@@ -218,6 +240,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const SAFE_QUIZZES = QUIZZES || {};
   const profileCardRef = useRef(null);
   const cashfree = useRef(null);
+  const dashboardLoadRef = useRef({ key: null, promise: null });
 
   // --- DERIVED VALUES ---
   const currentXP = unlockedSkills.length * 500 + (badges.length * 200);
@@ -331,24 +354,32 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
+    const loadKey = `${user.id}:${user.type || ''}:${isClient ? 'client' : 'freelancer'}`;
 
     const loadData = async () => {
         if (jobs.length === 0) setIsLoading(true);
         try {
-            const dashboardPromise = api.fetchDashboardData(user);
-            const badgesPromise = supabase.from('user_badges').select('badge_name, badges(icon)').eq('user_id', user.id);
+            if (dashboardLoadRef.current.key !== loadKey || !dashboardLoadRef.current.promise) {
+                dashboardLoadRef.current = {
+                    key: loadKey,
+                    promise: (async () => {
+                        const dashboardPromise = api.fetchDashboardData(user);
+                        const badgesPromise = supabase.from('user_badges').select('badge_name, badges(icon)').eq('user_id', user.id);
+                        const userProfilePromise = isClient
+                            ? Promise.resolve({ data: null })
+                            : supabase
+                                .from('freelancers')
+                                .select('energy_points, last_login_date, qualification, specialty, resume_url, hourly_rate, current_plan, plan_expires_at, bids_remaining, resumes_remaining, wallet_balance')
+                                .eq('id', user.id)
+                                .single();
 
-            let userProfileData = null;
-            if (!isClient) {
-                const { data } = await supabase
-                    .from('freelancers')
-                    .select('energy_points, last_login_date, qualification, specialty, resume_url, hourly_rate, current_plan, plan_expires_at, bids_remaining, resumes_remaining, wallet_balance')
-                    .eq('id', user.id)
-                    .single();
-                userProfileData = data;
+                        const [badgeRes, dashboardRes, profileRes] = await Promise.all([badgesPromise, dashboardPromise, userProfilePromise]);
+                        return { badgeRes, dashboardRes, userProfileData: profileRes.data };
+                    })(),
+                };
             }
 
-            const [badgeRes, dashboardRes] = await Promise.all([badgesPromise, dashboardPromise]);
+            const { badgeRes, dashboardRes, userProfileData } = await dashboardLoadRef.current.promise;
             if (!isMounted) return;
 
             if (!isClient && userProfileData) {
@@ -427,6 +458,9 @@ export const useDashboardLogic = (user, setUser, showToast) => {
         } catch (err) {
             showToast("Dashboard sync failed: " + err.message, "error");
         } finally {
+            if (dashboardLoadRef.current.key === loadKey) {
+                dashboardLoadRef.current = { key: null, promise: null };
+            }
             if (isMounted) setIsLoading(false);
         }
     };
@@ -602,8 +636,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
     );
 
     if (actionType === 'apply_paid') {
-        if (TEMP_DISABLE_FREELANCER_KYC_FOR_APPLICATIONS) return true;
-
         if (!hasCompletedKyc) {
             showToast("🔒 Identity verification required to apply for jobs.", "info");
             setModal('kyc_verification');
@@ -905,6 +937,7 @@ const handlePostJob = async (e) => {
 
     if (error) { 
         showToast(error.message, 'error'); 
+        return false;
     } else { 
         setEnergy(prev => prev - parsedCost);
         
@@ -917,12 +950,12 @@ const handlePostJob = async (e) => {
         }
 
         showToast('W application! 🎯 Proposal sent.', 'success'); 
-        await api.sendPushNotification({
+        api.sendPushNotification({
             targetUserIds: [selectedJob.client_id],
             title: 'New application',
             body: `New application: ${selectedJob.title}`,
             url: '/dashboard'
-        });
+        }).catch((pushError) => console.warn('Application push notification failed:', pushError));
         
         const newApp = {
             id: data.application_id, 
@@ -934,6 +967,7 @@ const handlePostJob = async (e) => {
         };
         setApplications(prev => [newApp, ...prev]);
         setModal(null); 
+        return true;
     }
   };
 
@@ -1067,22 +1101,55 @@ const handlePostJob = async (e) => {
     const formData = new FormData(e.target);
     const workLink = String(formData.get('work_link') || '').trim();
     const message = String(formData.get('message') || '').trim();
+    const files = formData.getAll('files').filter(file => file instanceof File && file.size > 0);
     
-    if (!workLink) {
-        return showToast("Please provide a link to your project.", "error");
+    if (!workLink && files.length === 0) {
+        return showToast("Please provide a project link or attach at least one file.", "error");
     }
 
-    setModal(null);
-    showToast("Checking your work quality...", "info");
-    
     const timestamp = new Date().toISOString();
+    let uploadedWorkFiles = [];
+
+    try {
+      setIsSubmittingWork(true);
+
+      if (files.length > 0) {
+        setDeliveryUploadProgress(Object.fromEntries(
+          files.map((file, index) => [getUploadFileKey(file, index), { progress: 0, status: "Queued" }])
+        ));
+        showToast("Uploading delivery files...", "info");
+        uploadedWorkFiles = await uploadFilesToR2(
+          files,
+          user.id,
+          'deliveries',
+          5 * 1024 * 1024,
+          showToast,
+          ({ file, index, progress, status }) => {
+            setDeliveryUploadProgress(prev => ({
+              ...prev,
+              [getUploadFileKey(file, index)]: { progress, status }
+            }));
+          }
+        );
+      }
+    } catch {
+      return;
+    } finally {
+      setIsSubmittingWork(false);
+    }
+
+    setDeliveryFiles([]);
+    setDeliveryUploadProgress({});
+    setModal(null);
+    showToast("AI is checking whether your submission matches the project details.", "info");
 
     const clientBrief = [
       selectedApp.jobs?.title || selectedApp.job_title || selectedApp.title || 'Client project',
       selectedApp.jobs?.description || selectedApp.job_description || selectedApp.description || selectedApp.cover_letter || '',
     ].filter(Boolean).join('\n\n');
     const submittedWork = [
-      `Delivery link: ${workLink}`,
+      workLink ? `Delivery link: ${workLink}` : '',
+      uploadedWorkFiles.length ? `Uploaded files: ${uploadedWorkFiles.join(', ')}` : '',
       message ? `Freelancer note: ${message}` : '',
     ].filter(Boolean).join('\n\n');
 
@@ -1093,69 +1160,66 @@ const handlePostJob = async (e) => {
         submittedWork,
         workLink,
         message,
+        workFiles: uploadedWorkFiles,
       }
     });
 
     if (checkError) {
-      const message = await getFunctionErrorMessage(checkError, "AI quality check failed.");
+      const message = await getFunctionErrorMessage(checkError, "AI review is temporarily unavailable. You can submit manually or try again.");
       showToast(message, "error");
       return;
     }
 
-    const decision = unwrapFunctionData(checkPayload);
-    if (!decision?.status) {
-      showToast("AI quality check returned an invalid decision.", "error");
+    const reviewPayload = unwrapFunctionData(checkPayload);
+    const review = reviewPayload?.review || reviewPayload;
+    if (!review?.decision) {
+      showToast("AI review is temporarily unavailable. You can submit manually or try again.", "error");
       return;
     }
 
     const aiPatch = {
-      ai_check_score: decision.score,
-      ai_check_status: decision.status,
-      ai_check_issues: decision.issues || [],
-      ai_check_suggestions: decision.improvementSuggestions || [],
-      ai_check_reason: decision.reason,
+      ai_check_score: review.matchScore,
+      ai_check_status: review.decision,
+      ai_check_issues: review.missingOrUnclearItems || [],
+      ai_check_suggestions: review.freelancerFeedback ? [review.freelancerFeedback] : [],
+      ai_check_reason: review.reason,
       ai_checked_at: timestamp,
-      ai_second_check_required: decision.status === 'second_check',
+      ai_second_check_required: false,
       work_link: workLink,
       work_message: message,
+      work_files: uploadedWorkFiles,
     };
 
-    if (decision.status === 'reject') {
-      const suggestion = decision.improvementSuggestions?.[0] || decision.reason || "Please improve the delivery and submit again.";
-      showToast(`AI check rejected the delivery: ${suggestion}`, "error");
+    if (review.decision === 'needs_revision') {
+      const suggestion = review.freelancerFeedback || review.missingOrUnclearItems?.[0] || "Please revise the submission and try again.";
+      showToast(`Your submission needs revision before sending to the client. ${suggestion}`, "warning");
       setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, ...aiPatch } : a));
       setSelectedApp(null);
       return;
     }
 
-    if (decision.status === 'second_check') {
-      showToast("Delivery needs a second quality review before the client sees it.", "warning");
+    if (review.decision === 'needs_minor_clarification') {
+      const clarification = review.freelancerFeedback || review.missingOrUnclearItems?.[0] || "Please clarify the missing or unclear details.";
+      showToast(`Your work mostly matches, but please clarify these points. ${clarification}`, "warning");
       setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, ...aiPatch } : a));
       setSelectedApp(null);
       return;
     }
 
-    if (decision.status === 'upgrade_required_for_second_check') {
-      showToast(decision.message || "This submission needs advanced second-check. Upgrade to Pro or request manual review.", "warning");
-      setApplications(prev => prev.map(a => a.id === selectedApp.id ? { ...a, ...aiPatch } : a));
-      setSelectedApp(null);
-      return;
-    }
-
-    showToast("AI quality check passed. Sending to client...", "success");
+    showToast("Your work looks ready to send to the client.", "success");
     
     const { error } = await supabase.functions.invoke('order-manager', {
       body: { 
         action: 'SUBMIT_WORK', 
         appId: selectedApp.id, 
         userId: user.id, 
-        payload: { work_link: workLink, message: message, files: [] } 
+        payload: { work_link: workLink, message: message, files: uploadedWorkFiles }
       }
     });
     
     if (error) { showToast("Submission failed: " + error.message, "error"); } 
     else {
-      await logAction('WORK_SUBMITTED', { app_id: selectedApp.id, has_link: true });
+      await logAction('WORK_SUBMITTED', { app_id: selectedApp.id, has_link: Boolean(workLink), has_files: uploadedWorkFiles.length > 0 });
       showToast("Work Submitted Successfully!", "success");
       await api.sendPushNotification({
         targetUserIds: [selectedApp.client_id],
@@ -1761,6 +1825,7 @@ const handlePostJob = async (e) => {
     state: {
         isClient, tab, menuOpen, zenMode, isLoading, jobs, services, applications, notifications,
         referralStats, totalEarnings, showNotifications, modal, selectedJob, selectedApp,
+        deliveryFiles, deliveryUploadProgress, isSubmittingWork,
         notificationPermission, energy, showRewardModal, isClaiming, viewProfileId, publicProfileData, editProfileModal,
         kycFile, currentQuestionIndex, score, timelineApp, viewWorkApp, searchTerm, profileForm,
         paymentModal, parentMode, unlockedSkills, badges, portfolioItems, rawPortfolioText,
@@ -1773,6 +1838,7 @@ const handlePostJob = async (e) => {
     },
     setters: {
         setTab, setMenuOpen, setZenMode, setModal, setSelectedJob, setShowRewardModal,
+        setDeliveryFiles, setDeliveryUploadProgress,
         setKycFile, setScore, setCurrentQuestionIndex, setTimelineApp, setViewWorkApp,
         setSearchTerm, setProfileForm, setPaymentModal, setParentMode, setRawPortfolioText,
         setEditProfileModal, setViewProfileId, setPublicProfileData, setShowNotifications, setApplications,

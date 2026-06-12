@@ -8,6 +8,12 @@ import {
   FileText, ExternalLink, RefreshCw, AlertTriangle, Star, ShieldCheck, 
   Receipt, Wallet, AlertOctagon, User, Banknote, Hourglass, Flag, MessageSquare
 } from 'lucide-react';
+import { formatCommissionRate, getCommissionRate, getEffectivePlanName } from '../../utils/subscription';
+
+const getFreelancerPlanContext = (app = {}) => ({
+  current_plan: app.freelancer_current_plan || app.freelancer_plan || app.current_plan || 'Basic',
+  plan_expires_at: app.freelancer_plan_expires_at || app.freelancerPlanExpiresAt || app.plan_expires_at || null,
+});
 
 const Applications = ({ user, applications, isClient, onAction, onViewTimeline, parentMode }) => {
   
@@ -25,6 +31,12 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
   const [checkoutApp, setCheckoutApp] = useState(null); 
   const [useWallet, setUseWallet] = useState(false);
   const walletBalance = Number(user?.wallet_balance) || 0;
+  const releaseAmount = Number(releaseModal?.bid_amount) || 0;
+  const releasePlanName = releaseModal ? getEffectivePlanName(getFreelancerPlanContext(releaseModal)) : 'Basic';
+  const releaseCommissionRate = getCommissionRate(releasePlanName);
+  const releaseCommissionLabel = formatCommissionRate(releaseCommissionRate);
+  const releasePlatformFee = releaseAmount * releaseCommissionRate;
+  const releasePayout = Math.max(0, releaseAmount - releasePlatformFee);
 
   // --- HANDLERS ---
   const handleReviewSubmit = async (rating, tags) => {
@@ -474,18 +486,23 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
              <div className="bg-slate-50 border border-slate-200 border-dashed p-4 rounded-2xl dark:bg-slate-950 dark:border-white/[0.06] space-y-3 font-bold shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.01)]">
                 <div className="flex justify-between items-center text-sm text-slate-600 dark:text-slate-400">
                     <span>Total Escrow Balance</span>
-                    <span className="font-black text-slate-900 dark:text-white">₹{releaseModal.bid_amount}</span>
+                    <span className="font-black text-slate-900 dark:text-white">₹{releaseAmount.toFixed(2)}</span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs text-indigo-600 dark:text-indigo-400">
+                    <span>Freelancer Plan</span>
+                    <span className="font-black">{releasePlanName}</span>
                 </div>
                 
                 <div className="flex justify-between items-center text-xs text-amber-600 dark:text-amber-400">
-                    <span className="flex items-center gap-1.5"><ShieldCheck size={12} strokeWidth={2.5}/> Platform Brokerage (5%)</span>
-                    <span className="font-black">- ₹{(releaseModal.bid_amount * 0.05).toFixed(2)}</span>
+                    <span className="flex items-center gap-1.5"><ShieldCheck size={12} strokeWidth={2.5}/> Platform Brokerage ({releaseCommissionLabel})</span>
+                    <span className="font-black">- ₹{releasePlatformFee.toFixed(2)}</span>
                 </div>
                 <div className="h-px bg-slate-200 dark:bg-white/[0.05] my-2" />
                 <div className="flex justify-between items-center text-sm">
                     <span className="text-slate-900 dark:text-white">Freelancer Payout Net</span>
                     <span className="font-black text-emerald-500 dark:text-emerald-400 text-base tracking-tight">
-                        ₹{(releaseModal.bid_amount * 0.95).toFixed(2)}
+                        ₹{releasePayout.toFixed(2)}
                     </span>
                 </div>
              </div>

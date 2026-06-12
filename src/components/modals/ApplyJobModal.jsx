@@ -3,7 +3,7 @@ import Modal from '../ui/Modal';
 import { Sparkles, Zap, Send, Wand2, CheckCircle2, DollarSign, Percent } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { getEffectivePlanName } from '../../utils/subscription';
+import { getCommissionRate, getEffectivePlanName } from '../../utils/subscription';
 
 // Utility for Tailwind classes
 function cn(...inputs) { return twMerge(clsx(inputs)); }
@@ -22,16 +22,6 @@ const ApplyJobModal = ({ onClose, onSubmit, job, user, currentEnergy }) => {
   }, [job?.id, job?.budget]);
 
   if (!job) return null;
-
-  // 🚀 DYNAMIC COMMISSION LOGIC
-  const getCommissionRate = (plan) => {
-    switch (plan) {
-      case 'Elite': return 0.04;   
-      case 'Pro': return 0.06;   
-      case 'Starter': return 0.07;
-      default: return 0.10;        
-    }
-  };
 
   const planName = getEffectivePlanName(user);
   const commissionRate = getCommissionRate(planName);
@@ -73,15 +63,16 @@ const ApplyJobModal = ({ onClose, onSubmit, job, user, currentEnergy }) => {
     setTimeout(() => { typeWriterEffect(selectedTemplate); }, 600);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!hasEnoughEnergy || !educationConsent) return;
+    if (loading || !hasEnoughEnergy || !educationConsent) return;
 
     setLoading(true);
-    setTimeout(() => {
-        onSubmit(e, ENERGY_COST, educationConsent); 
+    try {
+        await Promise.resolve(onSubmit(e, ENERGY_COST, educationConsent));
+    } finally {
         setLoading(false);
-    }, 1000);
+    }
   };
 
   return (

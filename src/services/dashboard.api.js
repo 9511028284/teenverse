@@ -114,10 +114,42 @@ export const fetchDashboardData = async (user) => {
     if (appsRes.error) throw appsRes.error;
     if (notifRes.error) throw notifRes.error;
 
+    let applications = appsRes.data || [];
+
+    if (isClient && applications.length > 0) {
+      const freelancerIds = [...new Set(applications.map((app) => app.freelancer_id).filter(Boolean))];
+
+      if (freelancerIds.length > 0) {
+        const { data: freelancerPlans, error: planError } = await supabase
+          .from('freelancers')
+          .select('id, current_plan, plan_expires_at')
+          .in('id', freelancerIds);
+
+        if (planError) {
+          console.warn('Freelancer plan lookup failed:', planError);
+        } else {
+          const planByFreelancerId = new Map(
+            (freelancerPlans || []).map((freelancer) => [freelancer.id, freelancer])
+          );
+
+          applications = applications.map((app) => {
+            const freelancerPlan = planByFreelancerId.get(app.freelancer_id);
+            if (!freelancerPlan) return app;
+
+            return {
+              ...app,
+              freelancer_current_plan: freelancerPlan.current_plan,
+              freelancer_plan_expires_at: freelancerPlan.plan_expires_at,
+            };
+          });
+        }
+      }
+    }
+
     return { 
       services: servicesRes.data || [], 
       jobs: jobsRes.data || [], 
-      applications: appsRes.data || [], 
+      applications,
       notifications: notifRes.data || [],
       referralCount: 0 
     };
