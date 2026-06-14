@@ -28,7 +28,6 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } }
 };
 
-// Directional slide presets for multi-step signup tracks
 const stepVariants = {
   enter: (dir) => ({
     opacity: 0,
@@ -64,7 +63,6 @@ const GithubIcon = memo(() => (
 
 const VisualLogoMark = memo(() => (
   <div className="inline-flex items-center justify-center gap-2 font-bold text-2xl tracking-tight select-none mb-10 box-border">
-    
     <span className="text-neutral-900 dark:text-zinc-50 tracking-tighter"></span>
   </div>
 ));
@@ -93,11 +91,13 @@ const RightPanelSplit = memo(() => {
   )
 });
 
-const ActionButton = ({ onClick, loading, disabled, icon: Icon, children, className }) => (
+const ActionButton = ({ onClick, loading, disabled, icon: Icon, children, className, type = "button", ...props }) => (
   <button 
+    type={type}
     onClick={onClick} 
     disabled={loading || disabled} 
-    className={`w-full h-11 px-5 font-semibold text-[14px] rounded-xl transition-all duration-200 flex justify-center items-center gap-2 overflow-hidden active:scale-[0.98] disabled:opacity-50 tracking-tight box-border ${className || 'bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white shadow-sm'}`}
+    className={`w-full h-11 px-5 font-semibold text-[14px] rounded-xl transition-all duration-200 flex justify-center items-center gap-2 overflow-hidden active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none tracking-tight box-border ${className || 'bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white shadow-sm'}`}
+    {...props}
   >
      <AnimatePresence mode="wait">
        {loading ? (
@@ -114,7 +114,11 @@ const ActionButton = ({ onClick, loading, disabled, icon: Icon, children, classN
 );
 
 const SocialBtn = ({ onClick, icon, label }) => (
-  <button onClick={onClick} className="flex-1 h-11 border border-neutral-200 bg-white hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/80 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-neutral-800 dark:text-zinc-200 transition-all shadow-sm active:scale-[0.99] box-border">
+  <button 
+    type="button" 
+    onClick={onClick} 
+    className="w-full h-10 border border-neutral-200 bg-white hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/80 rounded-md flex items-center justify-center gap-2 text-sm font-medium text-neutral-800 dark:text-zinc-200 transition-all shadow-sm active:scale-[0.99] box-border"
+  >
     {icon} <span>Sign in with {label}</span>
   </button>
 );
@@ -195,7 +199,7 @@ const GoogleIdentityButton = memo(({ loading, onCredentialResponse, showToast })
       <button
         type="button"
         onClick={() => showToast("Google sign-in is not configured.")}
-        className="flex-1 h-11 border border-neutral-200 bg-white hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/80 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-neutral-800 dark:text-zinc-200 transition-all shadow-sm active:scale-[0.99] box-border"
+        className="w-full h-10 border border-neutral-200 bg-white hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/80 rounded-md flex items-center justify-center gap-2 text-sm font-medium text-neutral-800 dark:text-zinc-200 transition-all shadow-sm active:scale-[0.99] box-border"
       >
         <GoogleIcon />
         <span>Sign in with Google</span>
@@ -204,10 +208,10 @@ const GoogleIdentityButton = memo(({ loading, onCredentialResponse, showToast })
   }
 
   return (
-    <div ref={containerRef} className="relative flex-1 min-w-0 h-11 overflow-hidden rounded-xl box-border">
-      <div ref={buttonRef} className={`h-11 transition-opacity ${loading ? 'pointer-events-none opacity-50' : ''}`} />
+    <div ref={containerRef} className="relative w-full min-w-0 h-10 overflow-hidden rounded-md box-border">
+      <div ref={buttonRef} className={`h-10 transition-opacity ${loading ? 'pointer-events-none opacity-50' : ''}`} />
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/70 text-neutral-700 backdrop-blur-[1px] dark:bg-zinc-900/70 dark:text-zinc-200">
+        <div className="absolute inset-0 flex items-center justify-center rounded-md bg-white/70 text-neutral-700 backdrop-blur-[1px] dark:bg-zinc-900/70 dark:text-zinc-200">
           <Loader2 className="animate-spin" size={16} />
         </div>
       )}
@@ -343,14 +347,22 @@ export const LoginView = memo(({ state, actions, turnstileRef }) => {
   return (
     <div className="w-full min-h-screen grid lg:grid-cols-2 bg-white dark:bg-zinc-950 box-border">
       <div className="flex flex-col justify-center px-6 py-12 sm:px-16 lg:px-24 xl:px-32 relative z-10 box-border">
-        <motion.div key="login-form" variants={viewVariants} initial="hidden" animate="visible" exit="exit" className="w-full max-w-sm mx-auto box-border">
+        <motion.form 
+          key="login-form" 
+          onSubmit={(e) => { e.preventDefault(); actions.handleFinalSubmit(); }}
+          variants={viewVariants} 
+          initial="hidden" 
+          animate="visible" 
+          exit="exit" 
+          className="w-full max-w-sm mx-auto box-border"
+        >
           <VisualLogoMark />
           
           <motion.div variants={itemVariants} className="space-y-1 mb-6 box-border">
              <h2 className="text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-zinc-50" style={serif}>Login</h2>
           </motion.div>
 
-          <motion.div variants={itemVariants} className="flex flex-col gap-2.5 mb-4 box-border">
+          <motion.div variants={itemVariants} className="flex flex-col gap-3 mb-4 box-border w-full">
              <GoogleIdentityButton loading={state.googleLoading} onCredentialResponse={actions.handleGoogleCredentialResponse} showToast={actions.showToast} />
              <SocialBtn icon={<GithubIcon />} onClick={actions.handleGithubLogin} label="GitHub" />
           </motion.div>
@@ -382,7 +394,7 @@ export const LoginView = memo(({ state, actions, turnstileRef }) => {
               />
               <span>Keep me logged in</span>
             </label>
-            <button onClick={() => actions.setViewMode('forgot')} className="font-bold text-indigo-600 dark:text-zinc-400 hover:text-indigo-700 dark:hover:text-zinc-200 transition-colors">Forgot password?</button>
+            <button type="button" onClick={() => actions.setViewMode('forgot')} className="font-bold text-indigo-600 dark:text-zinc-400 hover:text-indigo-700 dark:hover:text-zinc-200 transition-colors">Forgot password?</button>
           </motion.div>
 
           <motion.div variants={itemVariants} className="mt-5 box-border">
@@ -391,15 +403,15 @@ export const LoginView = memo(({ state, actions, turnstileRef }) => {
                       <Turnstile ref={turnstileRef} siteKey={state.CLOUDFLARE_SITE_KEY} onSuccess={actions.setCaptchaToken} onExpire={() => actions.setCaptchaToken(null)} onError={() => actions.setCaptchaToken(null)} theme="light" />
                   </div>
               )}
-              <ActionButton onClick={actions.handleFinalSubmit} loading={state.loading}>
+              <ActionButton type="submit" loading={state.loading}>
                  Login
               </ActionButton>
           </motion.div>
            
           <motion.div variants={itemVariants} className="text-center text-xs text-neutral-500 dark:text-zinc-400 mt-6 select-none box-border">
-             Don’t have an account? <button onClick={() => actions.setViewMode('signup')} className="font-bold text-indigo-600 dark:text-zinc-400 hover:text-indigo-700 dark:hover:text-zinc-200 transition-colors">Sign up</button>
+             Don’t have an account? <button type="button" onClick={() => actions.setViewMode('signup')} className="font-bold text-indigo-600 dark:text-zinc-400 hover:text-indigo-700 dark:hover:text-zinc-200 transition-colors">Sign up</button>
           </motion.div>
-        </motion.div>
+        </motion.form>
       </div>
       <RightPanelSplit />
     </div>
@@ -424,7 +436,7 @@ export const SignupView = memo(({ state, actions, turnstileRef }) => {
       <div className="flex flex-col justify-center px-6 py-12 sm:px-16 lg:px-24 xl:px-32 relative z-10 box-border overflow-hidden">
         <div className="w-full max-w-sm mx-auto box-border relative flex flex-col min-h-[480px]">
           
-          <button onClick={step > 1 ? actions.handleBack : () => actions.setViewMode('login')} className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-neutral-900 dark:hover:text-zinc-200 transition-colors mb-6 border-none bg-transparent p-0 outline-none box-border w-fit">
+          <button type="button" onClick={step > 1 ? actions.handleBack : () => actions.setViewMode('login')} className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-neutral-900 dark:hover:text-zinc-200 transition-colors mb-6 border-none bg-transparent p-0 outline-none box-border w-fit">
               <ArrowLeft size={13} /> Back
           </button>
 
@@ -443,7 +455,9 @@ export const SignupView = memo(({ state, actions, turnstileRef }) => {
                         <div className="flex flex-col gap-3 box-border w-full">
                             {['freelancer', 'client'].map((r) => (
                                 <button 
-                                    key={r} onClick={() => actions.updateField('role', r)} 
+                                    key={r} 
+                                    type="button"
+                                    onClick={() => actions.updateField('role', r)} 
                                     className={`p-4 border rounded-xl text-left transition-all duration-200 relative overflow-hidden flex items-start gap-3.5 box-border w-full outline-none
                                     ${formData.role === r ? 'border-neutral-900 bg-neutral-50/50 dark:border-zinc-100 dark:bg-zinc-900/40 shadow-sm' : 'border-neutral-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/10 hover:border-neutral-300'}`}
                                 >
@@ -623,7 +637,7 @@ export const ForgotPasswordView = memo(({ state, actions, turnstileRef }) => {
       <div className="flex flex-col justify-center px-6 py-12 sm:px-16 lg:px-24 xl:px-32 relative z-10 box-border">
         <motion.div key="forgot-form" variants={viewVariants} initial="hidden" animate="visible" exit="exit" className="w-full max-w-sm mx-auto box-border">
           
-          <button onClick={() => actions.setViewMode('login')} className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-neutral-900 dark:hover:text-zinc-200 transition-colors mb-6 border-none bg-transparent p-0 outline-none box-border">
+          <button type="button" onClick={() => actions.setViewMode('login')} className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-neutral-900 dark:hover:text-zinc-200 transition-colors mb-6 border-none bg-transparent p-0 outline-none box-border">
               <ArrowLeft size={13} /> Return to login
           </button>
            
@@ -636,14 +650,14 @@ export const ForgotPasswordView = memo(({ state, actions, turnstileRef }) => {
                     </div>
                     
                     <form onSubmit={actions.handleForgotPassword} className="space-y-4 box-border w-full">
-                      <input type="email" placeholder="Email Address" className="w-full h-11 border border-neutral-200 dark:border-zinc-800 bg-neutral-50/40 dark:bg-zinc-900/20 px-4 rounded-xl text-sm outline-none transition-all box-border focus:bg-white dark:focus:bg-zinc-955 focus:border-indigo-600 dark:focus:border-zinc-500 focus:ring-4 focus:ring-indigo-600/5 text-neutral-800 dark:text-zinc-100 placeholder:text-neutral-400" value={state.formData.email} onChange={(e) => actions.updateField('email', e.target.value)} required />
+                      <input type="email" placeholder="Email Address" className="w-full h-11 border border-neutral-200 dark:border-zinc-800 bg-neutral-50/40 dark:bg-zinc-900/20 px-4 rounded-xl text-sm outline-none transition-all box-border focus:bg-white dark:focus:bg-zinc-950 focus:border-indigo-600 dark:focus:border-zinc-500 focus:ring-4 focus:ring-indigo-600/5 text-neutral-800 dark:text-zinc-100 placeholder:text-neutral-400" value={state.formData.email} onChange={(e) => actions.updateField('email', e.target.value)} required />
                        
                       {state.CLOUDFLARE_SITE_KEY && (
                           <div className="flex justify-center py-2 bg-neutral-50 dark:bg-zinc-900/50 border border-neutral-200 dark:border-zinc-800 rounded-xl min-h-[65px] items-center box-border w-full">
                               <Turnstile ref={turnstileRef} siteKey={state.CLOUDFLARE_SITE_KEY} onSuccess={actions.setCaptchaToken} onExpire={() => actions.setCaptchaToken(null)} onError={() => actions.setCaptchaToken(null)} theme="light" />
                           </div>
                       )}
-                      <ActionButton loading={state.loading}>
+                      <ActionButton type="submit" loading={state.loading}>
                           Send Verification Code
                       </ActionButton>
                     </form>
@@ -682,7 +696,7 @@ export const UpdatePasswordView = memo(({ state, actions }) => {
     <div className="w-full min-h-screen grid lg:grid-cols-2 bg-white dark:bg-zinc-950 box-border">
       <div className="flex flex-col justify-center px-6 py-12 sm:px-16 lg:px-24 xl:px-32 relative z-10 box-border">
         <motion.div key="update-form" variants={viewVariants} initial="hidden" animate="visible" exit="exit" className="w-full max-w-sm mx-auto box-border">
-           <button onClick={() => actions.setViewMode('login')} className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-neutral-900 dark:hover:text-zinc-200 transition-colors mb-6 border-none bg-transparent p-0 outline-none box-border">
+           <button type="button" onClick={() => actions.setViewMode('login')} className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-neutral-900 dark:hover:text-zinc-200 transition-colors mb-6 border-none bg-transparent p-0 outline-none box-border">
               <ArrowLeft size={13} /> Cancel
            </button>
            
@@ -693,14 +707,14 @@ export const UpdatePasswordView = memo(({ state, actions }) => {
            
            <form onSubmit={actions.handleUpdatePassword} className="space-y-4 box-border w-full">
              <div className="relative flex items-center box-border w-full">
-               <input type={showPassword ? "text" : "password"} placeholder="New Secure Password" className="w-full h-11 border border-neutral-200 dark:border-zinc-800 bg-neutral-50/40 dark:bg-zinc-900/20 px-4 pr-10 rounded-xl text-sm outline-none transition-all box-border focus:bg-white dark:focus:bg-zinc-950 focus:border-indigo-600 dark:focus:border-zinc-500 focus:ring-4 focus:ring-indigo-600/5 dark:focus:ring-zinc-100/5 text-neutral-800 dark:text-zinc-100 placeholder:text-neutral-400" value={state.newPassword} onChange={(e) => actions.setNewPassword(e.target.value)} required minLength={7}/>
+               <input type={showPassword ? "text" : "password"} placeholder="New Secure Password" className="w-full h-11 border border-neutral-200 dark:border-zinc-800 bg-neutral-50/40 dark:bg-zinc-900/20 px-4 pr-10 rounded-xl text-sm outline-none transition-all box-border focus:bg-white dark:focus:bg-zinc-955 focus:border-indigo-600 dark:focus:border-zinc-500 focus:ring-4 focus:ring-indigo-600/5 dark:focus:ring-zinc-100/5 text-neutral-800 dark:text-zinc-100 placeholder:text-neutral-400" value={state.newPassword} onChange={(e) => actions.setNewPassword(e.target.value)} required minLength={7}/>
                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 text-neutral-400 hover:text-neutral-700 dark:hover:text-zinc-200 transition-colors p-1 rounded-lg box-border">
                   {showPassword ? <EyeOff size={15}/> : <Eye size={15}/>}
                 </button>
              </div>
              <PasswordSecurityPanel password={state.newPassword} />
              
-             <ActionButton loading={state.loading}>
+             <ActionButton type="submit" loading={state.loading}>
                 Update Password
              </ActionButton>
            </form>
