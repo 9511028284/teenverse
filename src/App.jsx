@@ -348,11 +348,7 @@ export default function App() {
             <Auth 
                 setView={setView} 
                 onLogin={(msg) => showToast(msg)} 
-                onSignUpSuccess={() => {
-                    supabase.auth.getSession().then(({ data }) => {
-                        if(data?.session) handleSession(data.session);
-                    });
-                }} 
+                onSessionReady={handleSession}
             />
         } />
 

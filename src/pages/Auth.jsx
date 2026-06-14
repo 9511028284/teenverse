@@ -7,8 +7,8 @@ import { useAuthLogic } from '../hooks/useAuthLogic';
 import { Toast } from '../components/auth/AuthUI';
 import { LoginView, SignupView, ForgotPasswordView, UpdatePasswordView } from '../components/auth/AuthForms';
 
-export default function Auth({ setView, onLogin }) {
-  const { state, actions, refs } = useAuthLogic(onLogin);
+export default function Auth({ setView, onLogin, onSessionReady }) {
+  const { state, actions, refs } = useAuthLogic(onLogin, onSessionReady);
   
   // Theme State Management (Defaulted to true for Dark Mode)
   const [isDark, setIsDark] = useState(true);

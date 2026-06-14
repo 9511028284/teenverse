@@ -307,6 +307,7 @@ Deno.serve(async (req: Request) => {
     return json(
       {
         token,
+        clientId: hubbleClientId,
         expiresIn: TOKEN_TTL_SECONDS,
       },
       corsHeaders,

@@ -29,11 +29,12 @@ const buildSignupPayload = (source = {}) => {
   };
 };
 
-export const useAuthLogic = (onLogin) => {
+export const useAuthLogic = (onLogin, onSessionReady) => {
   // ─── CORE VIEW STATE MACHINERY ─────────────────────────────────────────────
   const [viewMode, setViewMode] = useState('login');
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [verificationSent, setVerificationSent] = useState(false); 
    
@@ -537,9 +538,68 @@ export const useAuthLogic = (onLogin) => {
     }
   };
 
+  const handleGoogleCredentialResponse = useCallback(async (response) => {
+    const credential = response?.credential;
+    if (!credential) {
+      showToast("Google did not return a valid sign-in token.");
+      return;
+    }
+
+    setGoogleLoading(true);
+    try {
+      setRememberedSessionPreference(rememberMe);
+
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: "google",
+        token: credential,
+      });
+
+      if (error) {
+        console.error("Google login error:", error.message);
+        throw new Error("Google sign-in failed. Please try again.");
+      }
+
+      const [
+        { data: { session }, error: sessionError },
+        { data: { user }, error: userError },
+      ] = await Promise.all([
+        supabase.auth.getSession(),
+        supabase.auth.getUser(),
+      ]);
+
+      if (sessionError) throw sessionError;
+      if (userError) throw userError;
+      if (!session?.user && !user) throw new Error("Google sign-in did not create a session.");
+
+      if (session && onSessionReady) {
+        await onSessionReady(session);
+      } else {
+        await handleAuthRedirect(session?.user || user);
+      }
+    } catch (error) {
+      console.error("Google login error:", error);
+      showToast(error?.message || AUTH_GENERIC_ERROR);
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, [handleAuthRedirect, onSessionReady, rememberMe, showToast]);
+
+  const handleGithubLogin = useCallback(async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) {
+      showToast(AUTH_GENERIC_ERROR);
+      setLoading(false);
+    }
+  }, [showToast]);
+
   return {
     state: {
       viewMode, step, loading, toast, verificationSent,
+      googleLoading,
       showResetVerify, resetOtp, newPassword, agreedToTerms,
       captchaToken, rememberMe, socialUser, isPhoneVerified,
       phoneOtpSent, phoneOtp, phoneOtpReqId,
@@ -552,11 +612,7 @@ export const useAuthLogic = (onLogin) => {
       handleNext, handleBack: () => setStep(s => s - 1), 
       handleFinalSubmit, handleSendPhoneOtp, handleRetryPhoneOtp, handleVerifyPhoneOtp, 
       handleForgotPassword, handleVerifyResetOTP, handleUpdatePassword,
-      handleSocialLogin: async (provider) => {
-          setLoading(true);
-          const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });
-          if(error) { showToast(AUTH_GENERIC_ERROR); setLoading(false); }
-      }
+      handleGoogleCredentialResponse, handleGithubLogin,
     }
   };
 };

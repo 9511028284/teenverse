@@ -21,8 +21,6 @@ const LOADING_OVERLAY_TIMEOUT_MS = 3500;
 const WALLET_REFRESH_DELAY_MS = 1200;
 
 const REQUIRED_ENV = [
-  { label: 'Hubble client ID', keys: ['VITE_HUBBLE_CLIENT_ID'] },
-  { label: 'Hubble app secret', keys: ['VITE_HUBBLE_APP_SECRET'] },
   { label: 'Supabase URL', keys: ['VITE_SUPABASE_URL'] },
   { label: 'Supabase anon or publishable key', keys: ['VITE_SUPABASE_ANON_KEY'] },
 ];
@@ -38,12 +36,11 @@ const getExtraAllowedOrigins = () =>
 
 const normalizeEnv = (value) => (value === 'production' ? 'production' : 'development');
 
-const buildHubbleStoreUrl = ({ clientId, appSecret, token, origin, path = '/' }) => {
+const buildHubbleStoreUrl = ({ clientId, token, origin, path = '/' }) => {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const url = new URL(cleanPath, `${origin}/`);
 
   url.searchParams.set('clientId', clientId);
-  url.searchParams.set('appSecret', appSecret);
   url.searchParams.set('token', token);
 
   return url.toString();
@@ -84,6 +81,7 @@ const Store = ({ user, setUser }) => {
   const [rejectedOrigin, setRejectedOrigin] = useState('');
   const [tokenState, setTokenState] = useState({
     token: '',
+    clientId: '',
     received: false,
     loading: false,
     error: '',
@@ -99,8 +97,6 @@ const Store = ({ user, setUser }) => {
   const envConfig = useMemo(() => {
     const env = normalizeEnv(getEnvValue('VITE_HUBBLE_ENV'));
     const supabaseUrl = getEnvValue('VITE_SUPABASE_URL').replace(/\/$/, '');
-    const clientId = getEnvValue('VITE_HUBBLE_CLIENT_ID');
-    const appSecret = getEnvValue('VITE_HUBBLE_APP_SECRET');
     const supabaseAnonKey = getEnvValue('VITE_SUPABASE_ANON_KEY');
     const hubbleOrigin = HUBBLE_ORIGINS[env];
     const extraAllowedOrigins = getExtraAllowedOrigins();
@@ -113,8 +109,6 @@ const Store = ({ user, setUser }) => {
       env,
       hubbleOrigin,
       allowedOrigins,
-      clientId,
-      appSecret,
       supabaseUrl,
       supabaseAnonKey,
       functionUrl: supabaseUrl ? `${supabaseUrl}/functions/v1/hubble-token` : '',
@@ -184,16 +178,15 @@ const Store = ({ user, setUser }) => {
   }, [refreshWalletBalance, reloadKey]);
 
   const iframeUrl = useMemo(() => {
-    if (hasMissingEnv || !tokenState.token) return '';
+    if (hasMissingEnv || !tokenState.token || !tokenState.clientId) return '';
 
     return buildHubbleStoreUrl({
-      clientId: envConfig.clientId,
-      appSecret: envConfig.appSecret,
+      clientId: tokenState.clientId,
       token: tokenState.token,
       origin: envConfig.hubbleOrigin,
       path: '/',
     });
-  }, [envConfig, hasMissingEnv, tokenState.token]);
+  }, [envConfig.hubbleOrigin, hasMissingEnv, tokenState.clientId, tokenState.token]);
 
   useEffect(() => {
     if (hasMissingEnv) return undefined;
@@ -203,7 +196,7 @@ const Store = ({ user, setUser }) => {
     const fetchToken = async () => {
       setStatus('token_loading');
       setErrorMessage('');
-      setTokenState({ token: '', received: false, loading: true, error: '', expiresAt: null });
+      setTokenState({ token: '', clientId: '', received: false, loading: true, error: '', expiresAt: null });
 
       try {
         const {
@@ -234,9 +227,14 @@ const Store = ({ user, setUser }) => {
           throw new Error('Hubble token response did not include a token.');
         }
 
+        if (!body?.clientId) {
+          throw new Error('Hubble token response did not include a client ID.');
+        }
+
         const expiresIn = Number(body.expiresIn || 60);
         setTokenState({
           token: body.token,
+          clientId: body.clientId,
           received: true,
           loading: false,
           error: '',
@@ -247,7 +245,7 @@ const Store = ({ user, setUser }) => {
         if (error?.name === 'AbortError') return;
 
         const message = error instanceof Error ? error.message : 'Hubble SSO token request failed.';
-        setTokenState({ token: '', received: false, loading: false, error: message, expiresAt: null });
+        setTokenState({ token: '', clientId: '', received: false, loading: false, error: message, expiresAt: null });
         setStatus('error');
         setShowSoftOverlay(false);
         setErrorMessage(message);
@@ -500,8 +498,7 @@ const Store = ({ user, setUser }) => {
                 ['Rejected origin', rejectedOrigin || '—'],
                 ['Supabase function URL', envConfig.functionUrl || '—'],
                 ['Coin base URL', envConfig.coinBaseUrl || '—'],
-                ['Client ID', maskValue(envConfig.clientId)],
-                ['App secret', maskValue(envConfig.appSecret)],
+                ['Client ID', maskValue(tokenState.clientId)],
               ].map(([label, value]) => (
                 <div key={label} className="hs-debug-row">
                   <span className="hs-debug-label">{label}</span>

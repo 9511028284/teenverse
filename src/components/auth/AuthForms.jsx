@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, memo } from 'react';
+import React, { useEffect, useRef, useState, memo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { 
   Eye, EyeOff, Loader2, Check, ShieldCheck, ArrowLeft
@@ -118,6 +118,102 @@ const SocialBtn = ({ onClick, icon, label }) => (
     {icon} <span>Sign in with {label}</span>
   </button>
 );
+
+let googleIdentityInitializedClientId = null;
+let googleCredentialHandler = null;
+
+const dispatchGoogleCredential = (response) => {
+  googleCredentialHandler?.(response);
+};
+
+const GoogleIdentityButton = memo(({ loading, onCredentialResponse, showToast }) => {
+  const containerRef = useRef(null);
+  const buttonRef = useRef(null);
+  const renderedWidthRef = useRef(0);
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+  useEffect(() => {
+    if (!clientId) return undefined;
+    googleCredentialHandler = onCredentialResponse;
+
+    let cancelled = false;
+    let retryTimer = null;
+    let resizeObserver = null;
+
+    const renderButton = () => {
+      if (cancelled || !buttonRef.current || !window.google?.accounts?.id) return;
+      const width = Math.min(400, Math.max(200, Math.floor(containerRef.current?.clientWidth || 0)));
+      if (renderedWidthRef.current === width && buttonRef.current.children.length > 0) return;
+
+      if (googleIdentityInitializedClientId !== clientId) {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: dispatchGoogleCredential,
+          ux_mode: 'popup',
+        });
+        googleIdentityInitializedClientId = clientId;
+      }
+
+      buttonRef.current.innerHTML = '';
+      window.google.accounts.id.renderButton(buttonRef.current, {
+        theme: 'outline',
+        size: 'large',
+        type: 'standard',
+        text: 'signin_with',
+        shape: 'rectangular',
+        logo_alignment: 'left',
+        width,
+      });
+      renderedWidthRef.current = width;
+    };
+
+    const waitForGoogleIdentity = () => {
+      if (window.google?.accounts?.id) {
+        renderButton();
+      } else if (!cancelled) {
+        retryTimer = window.setTimeout(waitForGoogleIdentity, 100);
+      }
+    };
+
+    waitForGoogleIdentity();
+
+    if (containerRef.current && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(renderButton);
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => {
+      cancelled = true;
+      if (googleCredentialHandler === onCredentialResponse) googleCredentialHandler = null;
+      if (retryTimer) window.clearTimeout(retryTimer);
+      resizeObserver?.disconnect();
+    };
+  }, [clientId, onCredentialResponse]);
+
+  if (!clientId) {
+    return (
+      <button
+        type="button"
+        onClick={() => showToast("Google sign-in is not configured.")}
+        className="flex-1 h-11 border border-neutral-200 bg-white hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/80 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-neutral-800 dark:text-zinc-200 transition-all shadow-sm active:scale-[0.99] box-border"
+      >
+        <GoogleIcon />
+        <span>Sign in with Google</span>
+      </button>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="relative flex-1 min-w-0 h-11 overflow-hidden rounded-xl box-border">
+      <div ref={buttonRef} className={`h-11 transition-opacity ${loading ? 'pointer-events-none opacity-50' : ''}`} />
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/70 text-neutral-700 backdrop-blur-[1px] dark:bg-zinc-900/70 dark:text-zinc-200">
+          <Loader2 className="animate-spin" size={16} />
+        </div>
+      )}
+    </div>
+  );
+});
 
 const StepBar = ({ step, total = 4 }) => (
   <div className="flex gap-1.5 mb-6 select-none box-border">
@@ -254,9 +350,9 @@ export const LoginView = memo(({ state, actions, turnstileRef }) => {
              <h2 className="text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-zinc-50" style={serif}>Login</h2>
           </motion.div>
 
-          <motion.div variants={itemVariants} className="flex gap-2.5 mb-4 box-border">
-             <SocialBtn icon={<GoogleIcon />} onClick={() => actions.handleSocialLogin('google')} label="Google" />
-             <SocialBtn icon={<GithubIcon />} onClick={() => actions.handleSocialLogin('github')} label="GitHub" />
+          <motion.div variants={itemVariants} className="flex flex-col gap-2.5 mb-4 box-border">
+             <GoogleIdentityButton loading={state.googleLoading} onCredentialResponse={actions.handleGoogleCredentialResponse} showToast={actions.showToast} />
+             <SocialBtn icon={<GithubIcon />} onClick={actions.handleGithubLogin} label="GitHub" />
           </motion.div>
            
           <motion.div variants={itemVariants} className="flex items-center gap-3 my-6 text-neutral-400 dark:text-zinc-500 text-[10px] font-mono font-bold uppercase tracking-wider before:flex-1 before:h-px before:bg-neutral-200/70 dark:before:bg-zinc-800 after:flex-1 after:h-px after:bg-neutral-200/70 dark:after:bg-zinc-800 box-border">

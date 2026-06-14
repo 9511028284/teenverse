@@ -31,3 +31,4 @@ keys/
 *.pem
 .env
 .env.local
+supabase/.temp/
