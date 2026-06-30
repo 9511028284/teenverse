@@ -624,6 +624,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
       const { error } = await supabase.auth.signInWithIdToken({
         provider: "google",
         token: credential,
+        nonce: response.nonce,
       });
 
       if (error) {

@@ -125,9 +125,21 @@ const SocialBtn = ({ onClick, icon, label }) => (
 
 let googleIdentityInitializedClientId = null;
 let googleCredentialHandler = null;
+let googleIdentityRawNonce = null;
+let googleIdentityInitializationPromise = null;
+
+const generateGoogleNonce = async () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const rawNonce = btoa(String.fromCharCode(...bytes));
+  const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawNonce));
+  const hashedNonce = Array.from(new Uint8Array(hashBuffer))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+  return { rawNonce, hashedNonce };
+};
 
 const dispatchGoogleCredential = (response) => {
-  googleCredentialHandler?.(response);
+  googleCredentialHandler?.({ ...response, nonce: googleIdentityRawNonce });
 };
 
 const GoogleIdentityButton = memo(({ loading, onCredentialResponse, showToast }) => {
@@ -144,20 +156,32 @@ const GoogleIdentityButton = memo(({ loading, onCredentialResponse, showToast })
     let retryTimer = null;
     let resizeObserver = null;
 
-    const renderButton = () => {
+    const renderButton = async () => {
       if (cancelled || !buttonRef.current || !window.google?.accounts?.id) return;
       const width = Math.min(400, Math.max(200, Math.floor(containerRef.current?.clientWidth || 0)));
       if (renderedWidthRef.current === width && buttonRef.current.children.length > 0) return;
 
       if (googleIdentityInitializedClientId !== clientId) {
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: dispatchGoogleCredential,
-          ux_mode: 'popup',
-          use_fedcm_for_button: true,
-        });
-        googleIdentityInitializedClientId = clientId;
+        if (!googleIdentityInitializationPromise) {
+          googleIdentityInitializationPromise = (async () => {
+            const { rawNonce, hashedNonce } = await generateGoogleNonce();
+            googleIdentityRawNonce = rawNonce;
+            window.google.accounts.id.initialize({
+              client_id: clientId,
+              callback: dispatchGoogleCredential,
+              ux_mode: 'popup',
+              nonce: hashedNonce,
+              use_fedcm_for_button: true,
+            });
+            googleIdentityInitializedClientId = clientId;
+          })().finally(() => {
+            googleIdentityInitializationPromise = null;
+          });
+        }
+        await googleIdentityInitializationPromise;
       }
+
+      if (cancelled || !buttonRef.current) return;
 
       buttonRef.current.innerHTML = '';
       window.google.accounts.id.renderButton(buttonRef.current, {
@@ -174,7 +198,7 @@ const GoogleIdentityButton = memo(({ loading, onCredentialResponse, showToast })
 
     const waitForGoogleIdentity = () => {
       if (window.google?.accounts?.id) {
-        renderButton();
+        void renderButton().catch(() => showToast('Google sign-in could not be initialized.'));
       } else if (!cancelled) {
         retryTimer = window.setTimeout(waitForGoogleIdentity, 100);
       }
@@ -183,7 +207,9 @@ const GoogleIdentityButton = memo(({ loading, onCredentialResponse, showToast })
     waitForGoogleIdentity();
 
     if (containerRef.current && typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(renderButton);
+      resizeObserver = new ResizeObserver(() => {
+        void renderButton().catch(() => showToast('Google sign-in could not be initialized.'));
+      });
       resizeObserver.observe(containerRef.current);
     }
 
@@ -193,7 +219,7 @@ const GoogleIdentityButton = memo(({ loading, onCredentialResponse, showToast })
       if (retryTimer) window.clearTimeout(retryTimer);
       resizeObserver?.disconnect();
     };
-  }, [clientId, onCredentialResponse]);
+  }, [clientId, onCredentialResponse, showToast]);
 
   if (!clientId) {
     return (
