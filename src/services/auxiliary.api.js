@@ -1,6 +1,6 @@
 import { supabase } from '../supabase';
 
-const RAW_AUX_WORKER_URL = import.meta.env.VITE_AUX_WORKER_URL || '';
+const RAW_AUX_WORKER_URL = import.meta.env.VITE_AUX_WORKER_URL || 'https://teenverse-aux-worker.teenversehub.workers.dev';
 const AUX_WORKER_URL = RAW_AUX_WORKER_URL.replace(/\/$/, '');
 const ANONYMOUS_ID_KEY = 'teenverse_aux_anonymous_id_v1';
 const SENSITIVE_KEY_PATTERN = /(pan|bank|account|ifsc|aadhaar|aadhar|kyc|password|token|secret|private|prompt|message|body|chat|resume_text|document)/i;

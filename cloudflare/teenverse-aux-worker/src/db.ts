@@ -1,15 +1,10 @@
 export type Portal = 'app' | 'intern' | 'business';
 
-export interface Env {
-  AUX_DB: D1Database;
-  RATE_LIMIT_KV?: KVNamespace;
-  SUPABASE_URL: string;
-  SUPABASE_JWT_ISSUER: string;
+export type Env = Cloudflare.Env & {
   SUPABASE_ANON_KEY?: string;
   INTERNAL_WORKER_SECRET?: string;
   AUX_WORKER_INTERNAL_SECRET?: string;
-  ALLOWED_ORIGINS: string;
-}
+};
 
 export interface AuthContext {
   userId: string;
