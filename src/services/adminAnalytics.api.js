@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 const DEFAULT_LIMIT = 1000;
 
 const TABLE_SPECS = [
+  ['users', 'id,full_name,email,created_at,updated_at', 'created_at'],
   ['profiles', 'id,full_name,email,role,status,onboarding_completed,age_verified,created_at,updated_at', 'created_at'],
   ['freelancers', 'id,name,email,source,status,kyc_status,is_kyc_verified,last_login_date,completion_rate,rating,specialty,created_at', 'created_at'],
   ['clients', 'id,name,email,source,status,kyc_status,is_kyc_verified,created_at', 'created_at'],
@@ -20,6 +21,8 @@ const TABLE_SPECS = [
   ['audit_logs', 'id,action,actor_id,target_id,details,created_at', 'created_at'],
   ['admin_audit_logs', 'id,action_type,admin_id,target_id,metadata,created_at', 'created_at'],
   ['consistency_flags', 'id,code,message,severity,status,user_id,target_type,target_id,created_at,resolved_at', 'created_at'],
+  ['auth_rate_limits', 'id,action,created_at', 'created_at'],
+  ['phone_otp_verifications', 'created_at,verified_at,consumed_at', 'created_at'],
 ];
 
 const countTable = async (table) => {
@@ -70,7 +73,7 @@ const previousPeriod = (from, to) => {
 };
 
 const countRange = async ([table, , dateColumn], { from, to }) => {
-  let query = supabase.from(table).select('*', { count: 'exact', head: true });
+  let query = supabase.from(table).select(dateColumn, { count: 'exact', head: true });
   if (from) query = query.gte(dateColumn, from);
   if (to) query = query.lte(dateColumn, to);
   const { count, error } = await query;
@@ -92,7 +95,7 @@ export const fetchAdminAnalyticsSnapshot = async ({ from, to, limit = DEFAULT_LI
         return { table: spec[0], rows: [], count: 0 };
       }
     })),
-    Promise.all(['profiles', 'freelancers', 'clients', 'jobs', 'services'].map(async (table) => {
+    Promise.all(['users', 'profiles', 'freelancers', 'clients', 'jobs', 'services'].map(async (table) => {
       try {
         return [table, await countTable(table)];
       } catch (error) {
@@ -178,12 +181,12 @@ export const searchCommandCenter = async (input) => {
   const numericId = /^\d+$/.test(safeTerm) ? Number(safeTerm) : null;
 
   const queries = [
-    ['user', supabase.from('profiles').select('id,full_name,email,role,status').or(`full_name.ilike.%${safeTerm}%,email.ilike.%${safeTerm}%`).limit(8), (row) => ({ id: row.id, type: 'user', title: row.full_name || row.email || row.id, detail: `${row.role} · ${row.status}`, module: 'marketplace' })],
+    ['user', supabase.from('profiles').select('id,full_name,email,role,status').or(`full_name.ilike.%${safeTerm}%,email.ilike.%${safeTerm}%`).limit(8), (row) => ({ id: row.id, type: 'user', title: row.full_name || row.email || row.id, detail: `${row.role} · ${row.status}`, module: 'users' })],
     ['job', supabase.from('jobs').select('id,title,category,budget').ilike('title', `%${safeTerm}%`).limit(8), (row) => ({ id: row.id, type: 'job', title: row.title, detail: `${row.category || 'Uncategorized'} · ₹${Number(row.budget || 0).toLocaleString('en-IN')}`, module: 'marketplace' })],
     ['order', supabase.from('escrow_orders').select('id,status,bid_amount,client_id').ilike('id', `%${safeTerm}%`).limit(8), (row) => ({ id: row.id, type: 'order', title: `Order ${row.id}`, detail: `${row.status} · ₹${Number(row.bid_amount || 0).toLocaleString('en-IN')}`, module: 'marketplace' })],
     ['ticket', supabase.from('support_tickets').select('id,subject,status,user_id').ilike('subject', `%${safeTerm}%`).limit(8), (row) => ({ id: row.id, type: 'ticket', title: row.subject, detail: row.status, module: 'support' })],
     ['report', supabase.from('reports').select('id,reason,status,target_type,target_id').ilike('reason', `%${safeTerm}%`).limit(8), (row) => ({ id: row.id, type: 'report', title: row.reason, detail: `${row.target_type || 'target'} · ${row.status}`, module: 'operations' })],
-    ['payment', supabase.from('payment_logs').select('id,order_id,status,amount').ilike('order_id', `%${safeTerm}%`).limit(8), (row) => ({ id: row.id, type: 'payment', title: `Payment ${row.order_id}`, detail: `${row.status} · ₹${Number(row.amount || 0).toLocaleString('en-IN')}`, module: 'finance' })],
+    ['payment', supabase.from('payment_logs').select('id,order_id,status,amount').ilike('order_id', `%${safeTerm}%`).limit(8), (row) => ({ id: row.id, type: 'payment', title: `Payment ${row.order_id}`, detail: `${row.status} · ₹${Number(row.amount || 0).toLocaleString('en-IN')}`, module: 'payments' })],
     ['activity', supabase.from('audit_logs').select('id,action,actor_id,created_at').ilike('action', `%${safeTerm}%`).limit(8), (row) => ({ id: row.id, type: 'activity', title: row.action, detail: row.actor_id || 'System', module: 'settings' })],
   ];
 

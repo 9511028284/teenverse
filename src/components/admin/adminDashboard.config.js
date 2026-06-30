@@ -10,18 +10,21 @@ const READ_BUSINESS = ['founder', 'admin', 'finance', 'operations', 'viewer'];
 const module = (id, label, group, roles, model = id, dateScoped = true) => ({ id, label, group, roles, model, dateScoped });
 
 export const DASHBOARDS = [
-  module('overview', 'Company Overview', 'Overview', ALL, 'founder'),
-  module('marketing', 'Marketing', 'Marketing', GROWTH),
+  module('overview', 'Overview', 'Overview', ALL, 'founder'),
   module('marketplace', 'Marketplace', 'Marketplace', READ_BUSINESS),
-  module('finance', 'Finance', 'Finance', FINANCE, 'revenue'),
+  module('marketing', 'Marketing', 'Marketing', GROWTH),
+  module('users', 'Users', 'Users', ALL, 'user-growth'),
+  module('revenue', 'Revenue', 'Revenue', FINANCE),
+  module('payments', 'Payments', 'Payments', FINANCE),
   module('operations', 'Operations', 'Operations', OPS),
+  module('support', 'Support', 'Support', SUPPORT),
   module('product', 'Product Analytics', 'Product Analytics', ['founder', 'admin', 'developer', 'marketing', 'viewer']),
-  module('ai', 'AI Monitoring', 'AI', TECH),
+  module('ai', 'AI Analytics', 'AI Analytics', TECH),
   module('infrastructure', 'Infrastructure', 'Infrastructure', TECH),
   module('security', 'Security', 'Security', ['founder', 'admin', 'developer', 'operations']),
-  module('support', 'Support', 'Support', SUPPORT),
-  module('team', 'Team & Deployments', 'Team', [...LEADERS, 'developer']),
-  module('settings', 'Settings & Audit', 'Settings', ALL, 'settings', false),
+  module('team', 'Team', 'Team', [...LEADERS, 'developer']),
+  module('reports', 'Reports', 'Reports', FINANCE, 'notifications', false),
+  module('settings', 'Settings', 'Settings', ALL, 'settings', false),
 ];
 
 export const DATE_PRESETS = [

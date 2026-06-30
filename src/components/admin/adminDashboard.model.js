@@ -2,6 +2,7 @@ const number = (value) => Number(value) || 0;
 const sum = (rows, key) => rows.reduce((total, row) => total + number(row[key]), 0);
 const average = (rows, key) => rows.length ? sum(rows, key) / rows.length : 0;
 const rate = (value, total) => total ? (value / total) * 100 : 0;
+const clamp = (value) => Math.max(0, Math.min(100, Math.round(number(value))));
 const byStatus = (rows, statuses) => rows.filter((row) => statuses.includes(String(row.status || '').toLowerCase()));
 const metric = (label, value, format = 'number', hint, change = null) => ({ label, value, format, change, hint });
 const unavailable = (label, format = 'number') => metric(label, null, format);
@@ -79,11 +80,32 @@ const common = (snapshot) => {
 const founderModel = (snapshot, liveRows = []) => {
   const c = common(snapshot);
   const { data } = c;
-  const totalUsers = snapshot.totals.profiles || 0;
+  const totalUsers = snapshot.totals.users || snapshot.totals.profiles || 0;
   const openTickets = snapshot.operationalCounts?.openTickets ?? (data.support_tickets || []).filter((row) => !['resolved', 'closed'].includes(String(row.status || '').toLowerCase())).length;
   const failedPayments = byStatus(data.payment_logs || [], ['failed', 'error']).length;
   const activeUsers = uniqueActorsSince(data.audit_logs || [], 30);
-  const pendingPayments = byStatus(data.escrow_orders || [], ['funded', 'processing', 'pending']).length;
+  const escrows = data.escrow_orders || [];
+  const pendingPayments = byStatus(escrows, ['funded', 'processing', 'pending']).length;
+  const heldEscrow = byStatus(escrows, ['funded', 'held']);
+  const paymentLogs = data.payment_logs || [];
+  const marketplaceScore = c.applications.length
+    ? clamp((rate(c.hired.length, c.applications.length) + rate(c.completed.length, Math.max(c.hired.length, 1))) / 2)
+    : null;
+  const revenueScore = paymentLogs.length ? clamp(rate(c.successfulPaymentLogs.length, paymentLogs.length)) : null;
+  const profileRows = data.profiles || [];
+  const growthScore = profileRows.length ? clamp(rate(profileRows.filter((row) => row.onboarding_completed).length, profileRows.length)) : null;
+  const infrastructureSignals = [
+    clamp(100 - (snapshot.issues.length * 20)),
+    snapshot.externalTelemetry?.infrastructure?.vercel ? (snapshot.externalTelemetry.infrastructure.vercel.status === 'healthy' ? 100 : 0) : null,
+    snapshot.externalTelemetry?.infrastructure ? ({ healthy: 100, warning: 50, error: 0 }[snapshot.externalTelemetry.infrastructure.d1Status] ?? null) : null,
+  ].filter((value) => value !== null);
+  const infrastructureScore = infrastructureSignals.length ? clamp(infrastructureSignals.reduce((total, value) => total + value, 0) / infrastructureSignals.length) : null;
+  const suspiciousEvents = (data.audit_logs || []).filter((row) => /fail|suspicious|fraud|blocked|ban/i.test(row.action)).length;
+  const lockouts = profileRows.filter((row) => ['suspended', 'banned', 'locked'].includes(String(row.status || '').toLowerCase())).length;
+  const openFlags = (data.consistency_flags || []).filter((row) => row.status !== 'resolved').length;
+  const securityScore = clamp(100 - (suspiciousEvents * 10) - (lockouts * 20) - (openFlags * 15));
+  const healthScores = [marketplaceScore, revenueScore, growthScore, infrastructureScore, securityScore].filter((value) => value !== null);
+  const overallScore = healthScores.length ? clamp(healthScores.reduce((total, value) => total + value, 0) / healthScores.length) : null;
   const priorities = [
     openTickets ? `Resolve ${openTickets} open support ticket${openTickets === 1 ? '' : 's'}.` : null,
     pendingPayments ? `Review ${pendingPayments} pending payment${pendingPayments === 1 ? '' : 's'}.` : null,
@@ -101,12 +123,24 @@ const founderModel = (snapshot, liveRows = []) => {
   return {
     description: 'A concise, source-backed view of company health, growth, marketplace activity, and revenue.',
     metrics: [
-      metric('Total Users', totalUsers), metric('New Users', snapshot.rangeCounts.profiles || 0, 'number', 'Compared with the previous period', periodChange(snapshot.rangeCounts.profiles, snapshot.previousRangeCounts?.profiles)), metric('Active Users', activeUsers),
-      metric('Open Jobs', snapshot.operationalCounts?.openJobs ?? (data.jobs || []).filter((row) => !row.is_archived && !row.hired_freelancer_id).length), metric('Applications', c.applications.length),
-      metric('GMV', c.gmv, 'currency'), metric('Platform Revenue', c.commission, 'currency'), metric('Open Tickets', openTickets), metric('Source Warnings', snapshot.issues.length),
+      metric('Total Users', totalUsers), metric('New Users', snapshot.rangeCounts.users ?? snapshot.rangeCounts.profiles ?? 0, 'number', 'Compared with the previous period', periodChange(snapshot.rangeCounts.users ?? snapshot.rangeCounts.profiles, snapshot.previousRangeCounts?.users ?? snapshot.previousRangeCounts?.profiles)), metric('Active Users', activeUsers),
+      metric('Clients', snapshot.totals.clients || 0), metric('Freelancers', snapshot.totals.freelancers || 0),
+      metric('Open Jobs', snapshot.operationalCounts?.openJobs ?? (data.jobs || []).filter((row) => !row.is_archived && !row.hired_freelancer_id).length, 'number', 'Compared with the previous period', periodChange(snapshot.rangeCounts.jobs, snapshot.previousRangeCounts?.jobs)),
+      metric('Applications', c.applications.length, 'number', 'Compared with the previous period', periodChange(snapshot.rangeCounts.applications, snapshot.previousRangeCounts?.applications)),
+      metric('Orders', escrows.length, 'number', 'Compared with the previous period', periodChange(snapshot.rangeCounts.escrow_orders, snapshot.previousRangeCounts?.escrow_orders)),
+      metric('GMV', c.gmv, 'currency'), metric('Platform Revenue', c.commission, 'currency'), metric('Escrow Balance', sum(heldEscrow, 'bid_amount'), 'currency'),
+      metric('Pending Payouts', pendingPayments), metric('Failed Payments', failedPayments), metric('Open Tickets', openTickets), metric('Source Warnings', snapshot.issues.length),
+    ],
+    health: [
+      { label: 'Overall', score: overallScore, basis: 'Average of the available health dimensions below.', action: overallScore !== null && overallScore < 70 ? 'Open the weakest dimension and address its recorded blockers.' : 'Keep watching the lowest-scoring dimension.' },
+      { label: 'Marketplace', score: marketplaceScore, basis: c.applications.length ? 'Average of application-to-hire and hire-to-completion rates.' : 'Needs application activity before a score can be calculated.', action: 'Reduce stalled applications and incomplete hires.' },
+      { label: 'Revenue', score: revenueScore, basis: paymentLogs.length ? 'Successful payment events as a share of all recorded payment events.' : 'Needs payment events before a score can be calculated.', action: 'Investigate failed payments and reconcile pending releases.' },
+      { label: 'Growth', score: growthScore, basis: profileRows.length ? 'Completed onboarding as a share of profiles created in this period.' : 'Needs profiles in this period before a score can be calculated.', action: 'Remove friction from the lowest-converting onboarding step.' },
+      { label: 'Infrastructure', score: infrastructureScore, basis: 'Supabase query health plus connected Vercel and Cloudflare probes.', action: 'Repair failed sources or unhealthy production probes.' },
+      { label: 'Security', score: securityScore, basis: 'Starts at 100 and deducts for persisted suspicious events, lockouts, and unresolved flags.', action: 'Review recent security events and unresolved trust flags.' },
     ],
     charts: [
-      { type: 'line', title: 'User Growth', subtitle: 'New user records by day', series: dailySeries(data.profiles || [], 'created_at') },
+      { type: 'line', title: 'User Growth', subtitle: 'New user records by day', series: dailySeries(data.users?.length ? data.users : data.profiles || [], 'created_at') },
       { type: 'line', title: 'Revenue Trend', subtitle: 'Successful payment volume by day', series: dailySeries(c.paidApplications, 'paid_at', 'bid_amount'), format: 'currency' },
       { type: 'bar', title: 'Conversion Funnel', subtitle: 'Recorded users progressing through marketplace milestones', series: [
         { label: 'Signup', value: totalUsers },
@@ -129,7 +163,7 @@ const founderModel = (snapshot, liveRows = []) => {
         : 'User acquisition data is connected but no records matched this period.',
       opportunity: c.applications.length && !c.hired.length
         ? 'The largest growth opportunity is improving application-to-hire conversion.'
-        : `The strongest current signal is ${snapshot.rangeCounts.profiles || 0} new user registrations in this period.`,
+        : `The strongest current signal is ${snapshot.rangeCounts.users ?? snapshot.rangeCounts.profiles ?? 0} new user registrations in this period.`,
       risk: failedPayments || openTickets
         ? `${failedPayments} failed payment events and ${openTickets} open support tickets are the largest recorded operational risks.`
         : 'No failed payments or open support tickets were recorded in this period.',
@@ -173,13 +207,13 @@ const marketingModel = (snapshot) => {
 const growthModel = (snapshot) => {
   const c = common(snapshot);
   const active = c.data.audit_logs || [];
-  const newUsers = snapshot.rangeCounts.profiles || 0;
+  const newUsers = snapshot.rangeCounts.users ?? snapshot.rangeCounts.profiles ?? 0;
   const activated = (c.data.profiles || []).filter((row) => row.onboarding_completed).length;
   return {
     description: 'Acquisition, activation, active-user, and retention signals derived from persisted user and audit events.',
-    metrics: [metric('Daily Active Users', uniqueActorsSince(active, 1)), metric('Weekly Active Users', uniqueActorsSince(active, 7)), metric('Monthly Active Users', uniqueActorsSince(active, 30)), metric('Returning Users', Math.max(0, uniqueActorsSince(active, 30) - newUsers)), metric('New Users', newUsers, 'number', 'Compared with the previous period', periodChange(newUsers, snapshot.previousRangeCounts?.profiles)), unavailable('Churn', 'percent'), metric('Activation Rate', rate(activated, c.data.profiles?.length || 0), 'percent'), unavailable('Retention Cohorts', 'percent')],
+    metrics: [metric('Daily Active Users', uniqueActorsSince(active, 1)), metric('Weekly Active Users', uniqueActorsSince(active, 7)), metric('Monthly Active Users', uniqueActorsSince(active, 30)), metric('Returning Users', Math.max(0, uniqueActorsSince(active, 30) - newUsers)), metric('New Users', newUsers, 'number', 'Compared with the previous period', periodChange(newUsers, snapshot.previousRangeCounts?.users ?? snapshot.previousRangeCounts?.profiles)), unavailable('Churn', 'percent'), metric('Activation Rate', rate(activated, c.data.profiles?.length || 0), 'percent'), unavailable('Retention Cohorts', 'percent')],
     charts: [
-      { type: 'line', title: 'Growth Curve', subtitle: 'New users by day', series: dailySeries(c.data.profiles || [], 'created_at') },
+      { type: 'line', title: 'Growth Curve', subtitle: 'New users by day', series: dailySeries(c.data.users?.length ? c.data.users : c.data.profiles || [], 'created_at') },
       { type: 'bar', title: 'User Segments', subtitle: 'Profile roles in the selected period', series: groupCount(c.data.profiles || [], 'role') },
       { type: 'line', title: 'Activity Trend', subtitle: 'Recorded product audit events', series: dailySeries(active, 'created_at') },
     ],
@@ -313,11 +347,13 @@ const infrastructureModel = (snapshot) => {
 const securityModel = (snapshot) => {
   const audits = snapshot.data.audit_logs || [];
   const suspicious = audits.filter((row) => /fail|suspicious|fraud|blocked|ban/i.test(row.action));
+  const rateLimitEvents = snapshot.data.auth_rate_limits || [];
+  const phoneVerifications = snapshot.data.phone_otp_verifications || [];
   return {
     description: 'Rate limiting, suspicious events, account risk, and security operations from persisted audit sources.',
-    metrics: [metric('Failed Logins', audits.filter((row) => /login.*fail|fail.*login/i.test(row.action)).length), metric('Suspicious Activity', suspicious.length), unavailable('Rate Limit Hits'), unavailable('OTP Abuse'), metric('Fraud Detection', (snapshot.data.consistency_flags || []).length), unavailable('Device Changes'), unavailable('Login Locations'), metric('Account Lockouts', (snapshot.data.profiles || []).filter((row) => ['suspended', 'banned', 'locked'].includes(row.status)).length)],
-    charts: [{ type: 'line', title: 'Security Timeline', series: dailySeries(suspicious, 'created_at') }],
-    integrations: ['Protected auth rate-limit telemetry endpoint', 'Authentication sign-in logs', 'Device fingerprint history', 'Geo-IP login enrichment'],
+    metrics: [metric('Failed Logins', audits.filter((row) => /login.*fail|fail.*login/i.test(row.action)).length), metric('Suspicious Activity', suspicious.length), metric('Rate Limit Events', rateLimitEvents.length), metric('Phone Verifications', phoneVerifications.length), metric('Fraud Detection', (snapshot.data.consistency_flags || []).length), unavailable('Device Changes'), unavailable('Login Locations'), metric('Account Lockouts', (snapshot.data.profiles || []).filter((row) => ['suspended', 'banned', 'locked'].includes(row.status)).length)],
+    charts: [{ type: 'line', title: 'Security Timeline', series: dailySeries(suspicious, 'created_at') }, { type: 'bar', title: 'Rate Limit Actions', series: groupCount(rateLimitEvents, 'action') }],
+    integrations: ['Authentication sign-in logs', 'Device fingerprint history', 'Geo-IP login enrichment'],
     table: { title: 'Recent Security Events', rows: suspicious.map((row) => ({ ...row, occurred: formatDateTime(row.created_at), detail: row.details ? JSON.stringify(row.details) : '—' })), columns: [{ key: 'action', label: 'Action' }, { key: 'actor_id', label: 'Actor' }, { key: 'detail', label: 'Context' }, { key: 'occurred', label: 'Occurred' }] },
   };
 };
@@ -353,7 +389,7 @@ const permissionsModel = () => ({
 });
 
 const notificationsModel = () => ({
-  description: 'Personal Command Center alert preferences. Persist these settings through a staff-preferences endpoint when available.',
+  description: 'Export any module as CSV, Excel, PDF, or print, and prepare recurring report delivery settings.',
   metrics: [unavailable('Saved Preferences'), unavailable('Scheduled Reports')],
   charts: [],
   notificationPreferences: true,
@@ -377,14 +413,13 @@ const settingsModel = (snapshot) => {
   const connectorModel = connectorsModel(snapshot);
   const audit = auditModel(snapshot);
   return {
-    description: 'Connector health, role visibility, personal notification settings, and auditable admin activity in one place.',
+    description: 'Connector health, role visibility, and auditable admin activity in one place.',
     metrics: [
       ...connectorModel.metrics,
       metric('Audit Events', audit.metrics[0]?.value || 0),
     ],
     connectors: connectorModel.connectors,
     permissions: true,
-    notificationPreferences: true,
     charts: audit.charts,
     table: audit.table,
   };
@@ -392,7 +427,7 @@ const settingsModel = (snapshot) => {
 
 const executiveModel = (snapshot) => {
   const c = common(snapshot);
-  const totalUsers = snapshot.totals.profiles || 0;
+  const totalUsers = snapshot.totals.users || snapshot.totals.profiles || 0;
   const openJobs = (c.data.jobs || []).filter((row) => !row.is_archived).length;
   const marketplaceHealth = rate(c.completed.length + openJobs, Math.max(c.applications.length + openJobs, 1));
   return {
@@ -419,7 +454,11 @@ const specializeModel = (moduleId, model, snapshot) => {
   const withTable = (description, title, rows, columns) => ({ ...model, description, table: { title, rows, columns } });
   const occurred = (value) => formatDateTime(value);
 
-  if (moduleId === 'users') return withTable('Search and monitor all admin-readable user profiles.', 'Users', (data.profiles || []).map((row) => ({ ...row, created: occurred(row.created_at) })), [{ key: 'full_name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'role', label: 'Role' }, { key: 'status', label: 'Status' }, { key: 'created', label: 'Created' }]);
+  if (moduleId === 'users') {
+    const profiles = new Map((data.profiles || []).map((row) => [row.id, row]));
+    const users = data.users?.length ? data.users : data.profiles || [];
+    return withTable('Search and monitor all admin-readable user accounts with profile status where available.', 'Users', users.map((row) => ({ ...row, ...profiles.get(row.id), full_name: profiles.get(row.id)?.full_name || row.full_name, email: profiles.get(row.id)?.email || row.email, role: profiles.get(row.id)?.role || 'Profile pending', status: profiles.get(row.id)?.status || 'Profile pending', created: occurred(row.created_at) })), [{ key: 'full_name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'role', label: 'Role' }, { key: 'status', label: 'Status' }, { key: 'created', label: 'Created' }]);
+  }
   if (moduleId === 'freelancers') return withTable('Freelancer growth, verification, availability, and quality signals.', 'Freelancers', (data.freelancers || []).map((row) => ({ ...row, created: occurred(row.created_at) })), [{ key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'kyc_status', label: 'KYC' }, { key: 'completion_rate', label: 'Completion' }, { key: 'created', label: 'Created' }]);
   if (moduleId === 'clients') return withTable('Client acquisition, verification, and marketplace demand.', 'Clients', (data.clients || []).map((row) => ({ ...row, created: occurred(row.created_at) })), [{ key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'kyc_status', label: 'KYC' }, { key: 'source', label: 'Source' }, { key: 'created', label: 'Created' }]);
   if (moduleId === 'website-analytics') {

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, Check, CircleDot, PlugZap, Save, Search, ShieldCheck, Sparkles } from 'lucide-react';
+import { Activity, AlertTriangle, Check, CircleDot, PlugZap, Save, Search, ShieldCheck, Sparkles } from 'lucide-react';
 import { DASHBOARDS } from './adminDashboard.config';
 
 const cx = (...values) => values.filter(Boolean).join(' ');
@@ -24,6 +24,35 @@ export const InsightsPanel = ({ insights }) => {
     </section>
   );
 };
+
+const healthTone = (score) => {
+  if (score === null || score === undefined) return { label: 'Unavailable', bar: 'bg-slate-300', text: 'text-slate-500' };
+  if (score >= 80) return { label: 'Healthy', bar: 'bg-emerald-500', text: 'text-emerald-600' };
+  if (score >= 60) return { label: 'Watch', bar: 'bg-amber-500', text: 'text-amber-600' };
+  return { label: 'At risk', bar: 'bg-rose-500', text: 'text-rose-600' };
+};
+
+export const BusinessHealthPanel = ({ items = [] }) => (
+  <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex items-start gap-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300"><Activity size={17} /></span>
+      <div><h2 className="font-bold text-slate-950 dark:text-white">Business health</h2><p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">Explainable scores calculated only from connected operational signals.</p></div>
+    </div>
+    <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {items.map((item) => {
+        const tone = healthTone(item.score);
+        return (
+          <article key={item.label} className="rounded-xl border border-slate-100 p-4 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">{item.label}</p><span className={`text-xs font-bold ${tone.text}`}>{item.score === null || item.score === undefined ? tone.label : `${item.score}/100 · ${tone.label}`}</span></div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${item.score ?? 0}%` }} /></div>
+            <p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">{item.basis}</p>
+            <p className="mt-2 text-xs font-semibold leading-5 text-slate-700 dark:text-slate-300">Next: {item.action}</p>
+          </article>
+        );
+      })}
+    </div>
+  </section>
+);
 
 export const ConnectorGrid = ({ connectors = [] }) => (
   <section>

@@ -50,12 +50,13 @@ import {
   LineChart,
   StatusGrid,
 } from './AdminPrimitives';
-import { ConnectorGrid, GlobalSearchResults, InsightsPanel, NotificationPreferences, PermissionsMatrix } from './CommandCenterPanels';
+import { BusinessHealthPanel, ConnectorGrid, GlobalSearchResults, InsightsPanel, NotificationPreferences, PermissionsMatrix } from './CommandCenterPanels';
 import { formatMetricValue } from './adminFormatters';
 
 const ICONS = {
   founder: LayoutDashboard,
   marketing: BarChart3,
+  users: UsersRound,
   'user-growth': UsersRound,
   marketplace: BriefcaseBusiness,
   revenue: CircleDollarSign,
@@ -67,6 +68,7 @@ const ICONS = {
   infrastructure: Building2,
   security: ShieldCheck,
   team: Users,
+  reports: FileSpreadsheet,
   executive: Sparkles,
   live: Activity,
 };
@@ -75,14 +77,17 @@ const GROUP_ICONS = {
   Overview: LayoutDashboard,
   Marketing: BarChart3,
   Marketplace: BriefcaseBusiness,
-  Finance: CircleDollarSign,
+  Users: UsersRound,
+  Revenue: CircleDollarSign,
+  Payments: CreditCard,
   Operations: Wrench,
   'Product Analytics': Activity,
-  AI: Bot,
+  'AI Analytics': Bot,
   Infrastructure: Building2,
   Security: ShieldCheck,
   Support: Headphones,
   Team: Users,
+  Reports: FileSpreadsheet,
   Settings: ShieldCheck,
 };
 
@@ -210,6 +215,8 @@ const DashboardContent = ({ dashboard, model, livePaused, onToggleLive, onReques
     {model.alerts?.length > 0 && <div className="grid gap-2">{model.alerts.map((alert) => <div key={alert} className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">{alert}</div>)}</div>}
 
     {model.insights && <InsightsPanel insights={model.insights} />}
+
+    {model.health?.length > 0 && <BusinessHealthPanel items={model.health} />}
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{model.metrics.filter((item) => item.value !== null && item.value !== undefined).map((item) => <KpiCard key={item.label} metric={item} />)}</div>
 
