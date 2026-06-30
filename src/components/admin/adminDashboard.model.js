@@ -67,51 +67,47 @@ const common = (snapshot) => {
   const data = snapshot.data || {};
   const applications = data.applications || [];
   const paidApplications = applications.filter((row) => ['paid', 'released', 'completed'].includes(String(row.payment_status || row.status || '').toLowerCase()));
+  const successfulPaymentLogs = byStatus(data.payment_logs || [], ['success', 'successful', 'paid', 'captured', 'deposited', 'released', 'completed']);
   const completed = byStatus(applications, ['completed', 'paid', 'released']);
   const hired = applications.filter((row) => ['accepted', 'hired', 'in_progress', 'completed', 'paid', 'released'].includes(String(row.status || '').toLowerCase()));
-  const gmv = sum(paidApplications, 'bid_amount') || sum(data.payment_logs || [], 'amount');
-  const commission = sum(paidApplications, 'platform_fee') || gmv * 0.05;
+  const gmv = sum(paidApplications, 'bid_amount') || sum(successfulPaymentLogs, 'amount');
+  const commission = sum(paidApplications, 'platform_fee');
   const activity = activityRows(data).map((row) => ({ ...row, occurred: formatDateTime(row.created_at) }));
-  return { data, applications, paidApplications, completed, hired, gmv, commission, activity };
+  return { data, applications, paidApplications, successfulPaymentLogs, completed, hired, gmv, commission, activity };
 };
 
-const founderModel = (snapshot) => {
+const founderModel = (snapshot, liveRows = []) => {
   const c = common(snapshot);
   const { data } = c;
   const totalUsers = snapshot.totals.profiles || 0;
-  const openTickets = (data.support_tickets || []).filter((row) => row.status !== 'resolved').length;
+  const openTickets = snapshot.operationalCounts?.openTickets ?? (data.support_tickets || []).filter((row) => !['resolved', 'closed'].includes(String(row.status || '').toLowerCase())).length;
   const failedPayments = byStatus(data.payment_logs || [], ['failed', 'error']).length;
   const activeUsers = uniqueActorsSince(data.audit_logs || [], 30);
   const pendingPayments = byStatus(data.escrow_orders || [], ['funded', 'processing', 'pending']).length;
-  const escrowBalance = sum(byStatus(data.escrow_orders || [], ['funded', 'held']), 'bid_amount');
-  const securityAlerts = (data.consistency_flags || []).filter((row) => row.status !== 'resolved').length;
-  const healthInputs = [failedPayments === 0, openTickets < 10, snapshot.issues.length === 0, pendingPayments < 10];
-  const healthScore = rate(healthInputs.filter(Boolean).length, healthInputs.length);
-  const growthScore = Math.min(100, rate(snapshot.rangeCounts.profiles || 0, Math.max(totalUsers, 1)) * 10 + rate(c.hired.length, Math.max(c.applications.length, 1)));
-  const riskScore = Math.min(100, failedPayments * 12 + openTickets * 3 + snapshot.issues.length * 10);
   const priorities = [
     openTickets ? `Resolve ${openTickets} open support ticket${openTickets === 1 ? '' : 's'}.` : null,
     pendingPayments ? `Review ${pendingPayments} pending payment${pendingPayments === 1 ? '' : 's'}.` : null,
     failedPayments ? `Investigate ${failedPayments} failed payment event${failedPayments === 1 ? '' : 's'}.` : null,
     snapshot.issues.length ? `Restore ${snapshot.issues.length} unavailable analytics source${snapshot.issues.length === 1 ? '' : 's'}.` : null,
   ].filter(Boolean);
+  const liveActivity = liveRows.map((row) => ({
+    id: row.id,
+    event: row.label || row.event || 'Realtime update',
+    detail: row.record?.title || row.record?.subject || row.record?.full_name || row.event || 'Record changed',
+    source: row.type || 'Realtime',
+    occurred: formatDateTime(row.created_at),
+  }));
 
   return {
-    description: 'Company-wide marketplace, growth, revenue, support, and platform-health view.',
+    description: 'A concise, source-backed view of company health, growth, marketplace activity, and revenue.',
     metrics: [
       metric('Total Users', totalUsers), metric('New Users', snapshot.rangeCounts.profiles || 0, 'number', 'Compared with the previous period', periodChange(snapshot.rangeCounts.profiles, snapshot.previousRangeCounts?.profiles)), metric('Active Users', activeUsers),
-      metric('DAU', uniqueActorsSince(data.audit_logs || [], 1)), metric('WAU', uniqueActorsSince(data.audit_logs || [], 7)), metric('MAU', activeUsers),
-      metric('Freelancers', snapshot.totals.freelancers || 0), metric('Clients', snapshot.totals.clients || 0), metric('Jobs Posted', snapshot.totals.jobs || 0),
-      metric('Applications', c.applications.length), metric('Hires', c.hired.length), metric('Completed Projects', c.completed.length),
-      metric('Orders', (data.escrow_orders || []).length), metric('Completion Rate', rate(c.completed.length, c.hired.length), 'percent'),
-      metric('Total Revenue', c.gmv, 'currency'), metric('GMV', c.gmv, 'currency'), metric('Platform Commission', c.commission, 'currency'), metric('Escrow Balance', escrowBalance, 'currency'), metric('Pending Payouts', pendingPayments),
-      metric('Failed Payments', failedPayments), metric('Support Tickets', openTickets), metric('Business Health', healthScore, 'percent'),
-      metric('Infrastructure Health', snapshot.issues.length ? 0 : 100, 'percent'), metric('Security Alerts', securityAlerts), metric('Growth Score', growthScore, 'percent'), metric('Risk Score', riskScore, 'percent'),
+      metric('Open Jobs', snapshot.operationalCounts?.openJobs ?? (data.jobs || []).filter((row) => !row.is_archived && !row.hired_freelancer_id).length), metric('Applications', c.applications.length),
+      metric('GMV', c.gmv, 'currency'), metric('Platform Revenue', c.commission, 'currency'), metric('Open Tickets', openTickets), metric('Source Warnings', snapshot.issues.length),
     ],
     charts: [
       { type: 'line', title: 'User Growth', subtitle: 'New user records by day', series: dailySeries(data.profiles || [], 'created_at') },
       { type: 'line', title: 'Revenue Trend', subtitle: 'Successful payment volume by day', series: dailySeries(c.paidApplications, 'paid_at', 'bid_amount'), format: 'currency' },
-      { type: 'line', title: 'Orders Trend', subtitle: 'Applications created by day', series: dailySeries(c.applications, 'created_at') },
       { type: 'bar', title: 'Conversion Funnel', subtitle: 'Recorded users progressing through marketplace milestones', series: [
         { label: 'Signup', value: totalUsers },
         { label: 'KYC', value: byStatus(data.kyc_status || [], ['verified', 'approved']).length },
@@ -126,6 +122,7 @@ const founderModel = (snapshot) => {
       openTickets ? `${openTickets} support ticket(s) are still open.` : null,
       snapshot.issues.length ? `${snapshot.issues.length} analytics source(s) could not be read.` : null,
     ].filter(Boolean),
+    liveActivity: true,
     insights: {
       summary: totalUsers
         ? `TeenVerseHub has ${totalUsers.toLocaleString('en-IN')} users, ${activeUsers.toLocaleString('en-IN')} active users in the last 30 days, and ${c.applications.length.toLocaleString('en-IN')} applications in the selected period.`
@@ -143,7 +140,7 @@ const founderModel = (snapshot) => {
         'Review the executive dashboard before the next operating meeting.',
       ].filter(Boolean),
     },
-    table: { title: 'Recent Activity', description: 'Latest persisted events across core product tables.', rows: c.activity.slice(0, 100), columns: tableColumns.activity },
+    table: { title: 'Recent Activity', description: 'Realtime events followed by the latest persisted Supabase records.', rows: [...liveActivity, ...c.activity].slice(0, 100), columns: tableColumns.activity },
   };
 };
 
@@ -159,10 +156,10 @@ const marketingModel = (snapshot) => {
     metrics: [web ? metric('Visitors', web.visitors) : unavailable('Visitors'), web ? metric('Tracked Events', web.events) : unavailable('Tracked Events'), metric('Attributed Signups', signups, 'number', 'Compared with the previous period', periodChange(signups, previousSignups)), unavailable('CAC', 'currency'), unavailable('CPA', 'currency'), unavailable('ROI', 'percent'), metric('Revenue', c.gmv, 'currency'), unavailable('Conversion Rate', 'percent'), unavailable('Retention', 'percent'), unavailable('Bounce Rate', 'percent')],
     charts: [
       { type: 'bar', title: 'Traffic Sources', subtitle: 'Signup attribution from profile source fields', series: groupCount(acquisition, 'source') },
-      { type: 'line', title: 'Campaign Signups', subtitle: 'Attributed profiles created by day', series: dailySeries(acquisition, 'created_at') },
-      { type: 'bar', title: 'Cost vs Revenue', subtitle: 'Revenue is live; campaign cost requires an ad-platform connector', series: [{ label: 'Recorded revenue', value: c.gmv }] , format: 'currency' },
+      web ? { type: 'line', title: 'Website Activity', subtitle: 'First-party events stored in Cloudflare D1', series: web.dailyEvents || [] } : { type: 'line', title: 'Signup Trend', subtitle: 'Attributed profiles created by day', series: dailySeries(acquisition, 'created_at') },
+      web ? { type: 'bar', title: 'Top Website Paths', series: web.topPaths || [] } : { type: 'bar', title: 'Recorded Revenue', series: [{ label: 'Successful payment volume', value: c.gmv }], format: 'currency' },
     ],
-    integrations: ['Web analytics visitor events', 'Meta/Instagram Ads spend', 'Google Ads spend', 'LinkedIn campaign spend'],
+    integrations: [!web ? 'Website analytics events' : null, 'Meta/Instagram campaign metrics', 'Google Ads spend'].filter(Boolean),
     table: { title: 'Acquisition Channels', description: 'No cost or visitor metrics are fabricated.', rows: channels, columns: [{ key: 'channel', label: 'Channel' }, { key: 'signups', label: 'Signups' }, { key: 'conversion', label: 'Conversion' }, { key: 'cac', label: 'CAC' }, { key: 'roi', label: 'ROI' }] },
   };
 };
@@ -188,7 +185,7 @@ const growthModel = (snapshot) => {
 const marketplaceModel = (snapshot) => {
   const c = common(snapshot);
   const jobs = c.data.jobs || [];
-  const openJobs = jobs.filter((row) => !row.is_archived && !row.hired_freelancer_id).length;
+  const openJobs = snapshot.operationalCounts?.openJobs ?? jobs.filter((row) => !row.is_archived && !row.hired_freelancer_id).length;
   const closedJobs = jobs.filter((row) => row.is_archived || row.hired_freelancer_id).length;
   const categories = groupCount(jobs, 'category');
   const jobRows = jobs.map((row) => ({ ...row, budget: `₹${number(row.budget).toLocaleString('en-IN')}`, created: formatDateTime(row.created_at), state: row.is_archived ? 'Closed' : row.hired_freelancer_id ? 'Hired' : 'Open' }));
@@ -203,10 +200,9 @@ const marketplaceModel = (snapshot) => {
 const revenueModel = (snapshot) => {
   const c = common(snapshot);
   const refunds = byStatus(c.data.payment_logs || [], ['refunded', 'refund']).reduce((total, row) => total + number(row.amount), 0);
-  const net = Math.max(0, c.commission - refunds);
   return {
-    description: 'GMV, platform fees, refunds, and net revenue from payment and application records.',
-    metrics: [metric('GMV', c.gmv, 'currency'), metric('Platform Revenue', c.commission, 'currency'), metric('Commission', c.commission, 'currency'), unavailable('Subscription Revenue', 'currency'), metric('Refunds', refunds, 'currency'), unavailable('Gateway Fees', 'currency'), unavailable('Taxes', 'currency'), metric('Net Revenue', net, 'currency'), metric('Period Revenue', c.commission, 'currency'), unavailable('Annual Revenue', 'currency')],
+    description: 'Only recorded successful payment volume, stored platform fees, and explicit refunds are shown.',
+    metrics: [metric('GMV', c.gmv, 'currency'), metric('Platform Revenue', c.commission, 'currency'), metric('Successful Payments', c.successfulPaymentLogs.length), metric('Refunds', refunds, 'currency'), unavailable('Gateway Fees', 'currency'), unavailable('Taxes', 'currency')],
     charts: [{ type: 'line', title: 'Revenue Trend', series: dailySeries(c.paidApplications, 'paid_at', 'platform_fee'), format: 'currency' }, { type: 'bar', title: 'Revenue Sources', series: [{ label: 'Marketplace commission', value: c.commission }, { label: 'Refund impact', value: refunds }], format: 'currency' }],
     integrations: ['Subscription billing ledger', 'Gateway fee and tax reconciliation', 'Forecasting model'],
     table: { title: 'Payment Ledger', rows: (c.data.payment_logs || []).map((row) => ({ ...row, amount: `₹${number(row.amount).toLocaleString('en-IN')}`, occurred: formatDateTime(row.created_at) })), columns: tableColumns.payments },
@@ -257,7 +253,7 @@ const supportModel = (snapshot) => {
   const resolutionHours = closed.map((row) => (new Date(row.updated_at) - new Date(row.created_at)) / 3600000).filter(Number.isFinite);
   return {
     description: 'Ticket volume, status, and response workload from the support system.',
-    metrics: [metric('Open Tickets', tickets.length - closed.length), metric('Closed Tickets', closed.length), unavailable('SLA', 'percent'), metric('Resolution Time', resolutionHours.length ? resolutionHours.reduce((a, b) => a + b, 0) / resolutionHours.length : 0, 'duration'), unavailable('Average Response Time', 'duration'), unavailable('Satisfaction Score', 'decimal')],
+    metrics: [metric('Open Tickets', snapshot.operationalCounts?.openTickets ?? tickets.length - closed.length), metric('Resolved in Period', closed.length), unavailable('SLA', 'percent'), metric('Average Resolution Time', resolutionHours.length ? resolutionHours.reduce((a, b) => a + b, 0) / resolutionHours.length : 0, 'duration'), unavailable('Average Response Time', 'duration'), unavailable('Satisfaction Score', 'decimal')],
     charts: [{ type: 'bar', title: 'Ticket Status', series: groupCount(tickets, 'status') }, { type: 'line', title: 'Ticket Volume', series: dailySeries(tickets, 'created_at') }],
     integrations: ['SLA policy events', 'First-response timestamps', 'Post-resolution CSAT survey'],
     table: { title: 'Support Tickets', rows: tickets.map((row) => ({ ...row, created: formatDateTime(row.created_at), updated: formatDateTime(row.updated_at) })), columns: [{ key: 'subject', label: 'Subject' }, { key: 'user_id', label: 'User' }, { key: 'status', label: 'Status' }, { key: 'created', label: 'Created' }, { key: 'updated', label: 'Updated' }] },
@@ -320,13 +316,16 @@ const securityModel = (snapshot) => {
   };
 };
 
-const teamModel = () => ({
-  description: 'Team delivery workspace. No team, task, sprint, deployment, or calendar tables exist yet, so the module exposes explicit integration points.',
-  metrics: [unavailable('Team Members'), unavailable('Assigned Tasks'), unavailable('Completed Tasks'), unavailable('Pending Tasks'), unavailable('Sprint Progress', 'percent'), unavailable('Productivity', 'percent'), unavailable('Bugs Fixed'), unavailable('Deployments')],
-  charts: [],
-  statuses: [{ label: 'Kanban', status: 'unknown', description: 'Connect a tasks table or Linear/Jira integration.' }, { label: 'Calendar', status: 'unknown', description: 'Connect sprint dates and team availability.' }],
-  integrations: ['Team membership and permission tables', 'Task and sprint service', 'Deployment event webhook', 'Calendar integration'],
-});
+const teamModel = (snapshot) => {
+  const deployments = snapshot.externalTelemetry?.infrastructure?.deployments || [];
+  return {
+    description: 'Deployment history is live; task and sprint data stays hidden until a real project-management source is connected.',
+    metrics: [metric('Deployments', deployments.length), metric('Ready', deployments.filter((row) => row.state === 'READY').length), metric('Failed', deployments.filter((row) => /ERROR|FAILED/i.test(row.state || '')).length)],
+    charts: [{ type: 'bar', title: 'Deployment Status', series: groupCount(deployments, 'state') }],
+    integrations: ['Task and sprint service', 'Team calendar'],
+    table: { title: 'Deployment History', rows: deployments.map((row) => ({ ...row, created: formatDateTime(row.created_at), commit: row.commit_sha?.slice(0, 8) || '—' })), columns: [{ key: 'provider', label: 'Provider' }, { key: 'project_name', label: 'Project' }, { key: 'state', label: 'State' }, { key: 'target', label: 'Target' }, { key: 'commit', label: 'Commit' }, { key: 'created', label: 'Created' }] },
+  };
+};
 
 const connectorsModel = (snapshot) => ({
   description: 'Unified server-side connector registry. Credentials stay outside the browser and every integration exposes health, retry, caching, and rate-limit behavior.',
@@ -365,6 +364,23 @@ const auditModel = (snapshot) => {
     metrics: [metric('Audit Events', rows.length), metric('Admin Actions', snapshot.data.admin_audit_logs?.length || 0), metric('Product Actions', snapshot.data.audit_logs?.length || 0)],
     charts: [{ type: 'bar', title: 'Action Distribution', series: groupCount(rows, 'action') }],
     table: { title: 'Audit Log', rows, columns: [{ key: 'action', label: 'Action' }, { key: 'actor', label: 'Actor' }, { key: 'target', label: 'Target' }, { key: 'occurred', label: 'Occurred' }] },
+  };
+};
+
+const settingsModel = (snapshot) => {
+  const connectorModel = connectorsModel(snapshot);
+  const audit = auditModel(snapshot);
+  return {
+    description: 'Connector health, role visibility, personal notification settings, and auditable admin activity in one place.',
+    metrics: [
+      ...connectorModel.metrics,
+      metric('Audit Events', audit.metrics[0]?.value || 0),
+    ],
+    connectors: connectorModel.connectors,
+    permissions: true,
+    notificationPreferences: true,
+    charts: audit.charts,
+    table: audit.table,
   };
 };
 
@@ -449,7 +465,7 @@ const specializeModel = (moduleId, model, snapshot) => {
 
 export const buildDashboardModel = (dashboardId, snapshot, liveRows = [], moduleId = dashboardId) => {
   const builders = {
-    founder: founderModel,
+    founder: (value) => founderModel(value, liveRows),
     marketing: marketingModel,
     'user-growth': growthModel,
     marketplace: marketplaceModel,
@@ -468,6 +484,7 @@ export const buildDashboardModel = (dashboardId, snapshot, liveRows = [], module
     permissions: permissionsModel,
     notifications: notificationsModel,
     audit: auditModel,
+    settings: settingsModel,
   };
   return specializeModel(moduleId, (builders[dashboardId] || founderModel)(snapshot), snapshot);
 };

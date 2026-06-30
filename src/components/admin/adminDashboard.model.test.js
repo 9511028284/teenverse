@@ -28,12 +28,12 @@ test('builds every configured dashboard without mock fallbacks', () => {
 
 test('limits finance staff to permitted dashboards', () => {
   const ids = getVisibleDashboards('finance').map((dashboard) => dashboard.id);
-  assert.ok(ids.includes('revenue'));
-  assert.ok(ids.includes('payments'));
-  assert.ok(ids.includes('escrow'));
-  assert.ok(ids.includes('users'));
-  assert.ok(!ids.includes('permissions'));
-  assert.ok(!ids.includes('kyc'));
+  assert.ok(ids.includes('overview'));
+  assert.ok(ids.includes('marketplace'));
+  assert.ok(ids.includes('finance'));
+  assert.ok(ids.includes('settings'));
+  assert.ok(!ids.includes('operations'));
+  assert.ok(!ids.includes('security'));
 });
 
 test('exposes every requested Command Center group', () => {
@@ -47,16 +47,21 @@ test('builds connector status without fabricated metrics', () => {
   assert.equal(model.metrics.find((item) => item.label === 'Healthy').value, 1);
 });
 
-test('maps Cloudflare telemetry into website intelligence', () => {
+test('maps Cloudflare telemetry into the consolidated marketing view', () => {
   const telemetrySnapshot = {
     ...snapshot,
     externalTelemetry: {
       web: { visitors: 12, pageViews: 30, events: 44, topPaths: [{ label: '/', value: 20 }], dailyEvents: [], eventTypes: [] },
     },
   };
-  const model = buildDashboardModel('marketing', telemetrySnapshot, [], 'website-analytics');
+  const model = buildDashboardModel('marketing', telemetrySnapshot, [], 'marketing');
   assert.equal(model.metrics.find((item) => item.label === 'Visitors').value, 12);
-  assert.equal(model.table.rows[0].path, '/');
+  assert.ok(model.charts.some((chart) => chart.title === 'Top Website Paths'));
+});
+
+test('keeps navigation concise and non-duplicative', () => {
+  assert.equal(DASHBOARDS.length, 12);
+  assert.equal(new Set(DASHBOARDS.map((dashboard) => dashboard.model)).size, 12);
 });
 
 test('resolves a bounded date range', () => {

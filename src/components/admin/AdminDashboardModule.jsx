@@ -100,7 +100,7 @@ const downloadBlob = (name, content, type) => {
 const exportRows = (dashboard, model, format) => {
   const rows = model.table?.rows?.length
     ? model.table.rows
-    : model.metrics.map((item) => ({ Metric: item.label, Value: formatMetricValue(item.value, item.format) }));
+    : model.metrics.filter((item) => item.value !== null && item.value !== undefined).map((item) => ({ Metric: item.label, Value: formatMetricValue(item.value, item.format) }));
   const keys = rows.length ? Object.keys(rows[0]).filter((key) => !['record', 'raw_data', 'details', 'metadata'].includes(key)) : ['Metric', 'Value'];
   const safe = (value) => String(value ?? '').replaceAll('"', '""');
   const delimiter = format === 'excel' ? '\t' : ',';
@@ -200,7 +200,7 @@ const DashboardContent = ({ dashboard, model, livePaused, onToggleLive, onReques
 
   return (
   <div className="space-y-6">
-    {dashboard.id === 'live' && (
+    {model.liveActivity && (
       <div className="flex items-center justify-between rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 dark:border-indigo-900/50 dark:bg-indigo-950/30">
         <div><p className="text-sm font-bold text-indigo-950 dark:text-indigo-100">Realtime stream</p><p className="text-xs text-indigo-700 dark:text-indigo-300">{livePaused ? 'New events are paused locally.' : 'Listening for Supabase changes.'}</p></div>
         <button type="button" onClick={onToggleLive} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">{livePaused ? <Play size={15} /> : <Pause size={15} />}{livePaused ? 'Resume' : 'Pause'}</button>
@@ -211,7 +211,7 @@ const DashboardContent = ({ dashboard, model, livePaused, onToggleLive, onReques
 
     {model.insights && <InsightsPanel insights={model.insights} />}
 
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{model.metrics.map((item) => <KpiCard key={item.label} metric={item} />)}</div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{model.metrics.filter((item) => item.value !== null && item.value !== undefined).map((item) => <KpiCard key={item.label} metric={item} />)}</div>
 
     {model.charts?.length > 0 && <div className="grid gap-5 xl:grid-cols-2">{model.charts.map((chart) => chart.type === 'bar' ? <BarChart key={chart.title} {...chart} /> : <LineChart key={chart.title} {...chart} />)}</div>}
 
@@ -225,13 +225,13 @@ const DashboardContent = ({ dashboard, model, livePaused, onToggleLive, onReques
 
     {model.integrations?.length > 0 && (
       <section className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900/50">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Integration backlog</h3>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">These values are intentionally not mocked.</p>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Data not connected</h3>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">These metrics stay hidden until a verified source is available.</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">{model.integrations.map((item) => <div key={item} className="rounded-xl bg-white px-3 py-2 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{item}</div>)}</div>
       </section>
     )}
 
-    {model.table && <DataTable key={`${dashboard.id}-${model.table.title}`} {...model.table} selectable={model.table.operational} bulkActions={model.table.operational ? bulkActions : []} filterKey={dashboard.id === 'live' ? 'source' : model.table.operational ? 'queue' : undefined} actions={model.table.operational ? (row) => (
+    {model.table && <DataTable key={`${dashboard.id}-${model.table.title}`} {...model.table} selectable={model.table.operational} bulkActions={model.table.operational ? bulkActions : []} filterKey={model.liveActivity ? 'source' : model.table.operational ? 'queue' : undefined} actions={model.table.operational ? (row) => (
       <div className="inline-flex gap-1.5">
         {row.type.includes('kyc') && row.status !== 'verified' && <button type="button" onClick={() => onRequestAction({ type: row.type, id: row.id, status: 'verified', message: `Approve KYC for ${row.subject}?` })} className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700">Approve</button>}
         {row.type.includes('kyc') && row.status !== 'rejected' && <button type="button" onClick={() => onRequestAction({ type: row.type, id: row.id, status: 'rejected', message: `Reject KYC for ${row.subject}?` })} className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700">Reject</button>}
@@ -249,7 +249,7 @@ const DashboardContent = ({ dashboard, model, livePaused, onToggleLive, onReques
 export default function AdminDashboardModule({ user, onLogout }) {
   const role = getAdminRole(user);
   const visibleDashboards = useMemo(() => getVisibleDashboards(role), [role]);
-  const initialDashboard = visibleDashboards.some((item) => item.id === 'founder') ? 'founder' : visibleDashboards[0]?.id;
+  const initialDashboard = visibleDashboards.some((item) => item.id === 'overview') ? 'overview' : visibleDashboards[0]?.id;
   const [activeId, setActiveId] = useState(initialDashboard);
   const [preset, setPreset] = useState('30d');
   const [customDates, setCustomDates] = useState({ from: '', to: '' });
@@ -355,10 +355,7 @@ export default function AdminDashboardModule({ user, onLogout }) {
   }), [livePaused]);
 
   const model = useMemo(() => snapshot ? buildDashboardModel(activeDashboard.model || activeDashboard.id, snapshot, liveRows, activeDashboard.id) : null, [activeDashboard.id, activeDashboard.model, liveRows, snapshot]);
-  const groups = useMemo(() => {
-    const filtered = visibleDashboards.filter((item) => item.label.toLowerCase().includes(navSearch.toLowerCase()));
-    return filtered.reduce((result, item) => ({ ...result, [item.group]: [...(result[item.group] || []), item] }), {});
-  }, [navSearch, visibleDashboards]);
+  const navigationItems = useMemo(() => visibleDashboards.filter((item) => item.label.toLowerCase().includes(navSearch.toLowerCase())), [navSearch, visibleDashboards]);
 
   const notifications = useMemo(() => [
     ...(model?.alerts || []).map((message) => ({ source: activeDashboard.group, severity: 'warning', message })),
@@ -396,9 +393,9 @@ export default function AdminDashboardModule({ user, onLogout }) {
           {!sidebarCollapsed && <div className="min-w-0"><p className="truncate text-sm font-bold">TeenVerse</p><p className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Command Center</p></div>}
           <button type="button" aria-label="Close sidebar" onClick={() => setMobileSidebar(false)} className="ml-auto lg:hidden"><X size={18} /></button>
         </div>
-        {!sidebarCollapsed && <label className="relative mx-3 mt-3"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={navSearch} onChange={(event) => setNavSearch(event.target.value)} placeholder="Find dashboard…" className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950" /></label>}
+        {!sidebarCollapsed && <label className="relative mx-3 mt-3"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={navSearch} onChange={(event) => setNavSearch(event.target.value)} placeholder="Find section…" className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-950" /></label>}
         <nav className="mt-3 flex-1 overflow-y-auto px-2 pb-4" aria-label="Admin dashboards">
-          {Object.entries(groups).map(([group, items]) => <div key={group} className="mb-4">{!sidebarCollapsed && <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{group}</p>}{items.map((item) => { const Icon = ICONS[item.id] || ICONS[item.model] || GROUP_ICONS[item.group] || MoreHorizontal; return <button key={item.id} type="button" title={sidebarCollapsed ? item.label : undefined} onClick={() => { setActiveId(item.id); setMobileSidebar(false); }} className={cx('mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition', activeDashboard.id === item.id ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800', sidebarCollapsed && 'justify-center px-0')}><Icon size={17} className="shrink-0" />{!sidebarCollapsed && <span className="truncate">{item.label.replace(' Dashboard', '')}</span>}</button>;})}</div>)}
+          {navigationItems.map((item) => { const Icon = ICONS[item.id] || ICONS[item.model] || GROUP_ICONS[item.group] || MoreHorizontal; return <button key={item.id} type="button" title={sidebarCollapsed ? item.label : undefined} onClick={() => { setActiveId(item.id); setMobileSidebar(false); }} className={cx('mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition', activeDashboard.id === item.id ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800', sidebarCollapsed && 'justify-center px-0')}><Icon size={17} className="shrink-0" />{!sidebarCollapsed && <span className="truncate">{item.label}</span>}</button>;})}
         </nav>
         <div className="border-t border-slate-200 p-3 dark:border-slate-800">
           <button type="button" onClick={() => setSidebarCollapsed((value) => !value)} className="hidden w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 lg:flex">{sidebarCollapsed ? <ChevronsRight size={16} /> : <><ChevronsLeft size={16} /> Collapse</>}</button>
@@ -422,10 +419,10 @@ export default function AdminDashboardModule({ user, onLogout }) {
         <main className="mx-auto max-w-[1680px] p-4 sm:p-6 lg:p-8">
           {!online && <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200"><WifiOff size={16} /> Offline — showing the last in-memory snapshot. Mutating actions may fail until connectivity returns.</div>}
           <div className="mb-6 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-            <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-300">Analytics & operations</p><h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{activeDashboard.label}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">{model?.description || 'Loading live operational intelligence…'}</p></div>
+            <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-300">TeenVerse Command Center</p><h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{activeDashboard.label}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">{model?.description || 'Loading live operational intelligence…'}</p>{snapshot && <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wide"><span className={cx('rounded-full px-2.5 py-1', snapshot.issues.length ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300')}>{snapshot.issues.length ? `Supabase partial · ${snapshot.issues.length} warnings` : 'Supabase live'}</span>{snapshot.externalTelemetry && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">Cloudflare D1</span>}<span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500 dark:bg-slate-800">Measured values only</span></div>}</div>
             <div className="flex flex-wrap items-center gap-2 print:hidden">
-              <label className="relative"><CalendarRange size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><select value={preset} onChange={(event) => setPreset(event.target.value)} className="h-10 appearance-none rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-sm font-medium outline-none dark:border-slate-700 dark:bg-slate-900">{DATE_PRESETS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-              {preset === 'custom' && <><input type="date" value={customDates.from} onChange={(event) => setCustomDates((value) => ({ ...value, from: event.target.value }))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" /><input type="date" value={customDates.to} onChange={(event) => setCustomDates((value) => ({ ...value, to: event.target.value }))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" /></>}
+              {activeDashboard.dateScoped !== false && <label className="relative"><CalendarRange size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><select value={preset} onChange={(event) => setPreset(event.target.value)} className="h-10 appearance-none rounded-xl border border-slate-200 bg-white pl-9 pr-8 text-sm font-medium outline-none dark:border-slate-700 dark:bg-slate-900">{DATE_PRESETS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
+              {activeDashboard.dateScoped !== false && preset === 'custom' && <><input type="date" value={customDates.from} onChange={(event) => setCustomDates((value) => ({ ...value, from: event.target.value }))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" /><input type="date" value={customDates.to} onChange={(event) => setCustomDates((value) => ({ ...value, to: event.target.value }))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" /></>}
               <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900"><RefreshCcw size={15} className={loading ? 'animate-spin' : ''} /> Refresh</button>
               {model && <ExportMenu dashboard={activeDashboard} model={model} />}
             </div>

@@ -7,78 +7,21 @@ const SUPPORT = ['founder', 'admin', 'support', 'operations'];
 const TECH = ['founder', 'admin', 'developer'];
 const READ_BUSINESS = ['founder', 'admin', 'finance', 'operations', 'viewer'];
 
-const module = (id, label, group, roles, model = id) => ({ id, label, group, roles, model });
+const module = (id, label, group, roles, model = id, dateScoped = true) => ({ id, label, group, roles, model, dateScoped });
 
 export const DASHBOARDS = [
-  module('founder', 'Founder Dashboard', 'Overview', LEADERS),
-  module('executive', 'Executive Dashboard', 'Overview', ['founder', 'admin', 'finance', 'viewer']),
-  module('live', 'Live Activity Center', 'Overview', ALL),
-
-  module('social-analytics', 'Social Analytics', 'Marketing', GROWTH, 'marketing'),
-  module('campaign-analytics', 'Campaign Analytics', 'Marketing', GROWTH, 'marketing'),
-  module('website-analytics', 'Website Analytics', 'Marketing', GROWTH, 'marketing'),
-  module('conversion-funnel', 'Conversion Funnel', 'Marketing', GROWTH, 'founder'),
-
-  module('users', 'Users', 'Marketplace', READ_BUSINESS, 'user-growth'),
-  module('jobs', 'Jobs', 'Marketplace', READ_BUSINESS, 'marketplace'),
-  module('applications', 'Applications', 'Marketplace', READ_BUSINESS, 'marketplace'),
-  module('orders', 'Orders', 'Marketplace', READ_BUSINESS, 'marketplace'),
-  module('freelancers', 'Freelancers', 'Marketplace', READ_BUSINESS, 'user-growth'),
-  module('clients', 'Clients', 'Marketplace', READ_BUSINESS, 'user-growth'),
-
-  module('revenue', 'Revenue', 'Finance', FINANCE),
-  module('payments', 'Payments', 'Finance', FINANCE),
-  module('escrow', 'Escrow', 'Finance', FINANCE, 'payments'),
-  module('payouts', 'Payouts', 'Finance', FINANCE, 'payments'),
-  module('refunds', 'Refunds', 'Finance', FINANCE, 'payments'),
-
-  module('kyc', 'KYC', 'Operations', OPS, 'operations'),
-  module('reports', 'Reports', 'Operations', OPS, 'operations'),
-  module('moderation', 'Moderation', 'Operations', OPS, 'operations'),
-  module('fraud-detection', 'Fraud Detection', 'Operations', OPS, 'operations'),
-  module('verification-queue', 'Verification Queue', 'Operations', OPS, 'operations'),
-
-  module('feature-usage', 'Feature Usage', 'Product Analytics', ['founder', 'admin', 'developer', 'marketing', 'viewer'], 'product'),
-  module('user-journey', 'User Journey', 'Product Analytics', ['founder', 'admin', 'developer', 'marketing', 'viewer'], 'product'),
-  module('retention', 'Retention', 'Product Analytics', ['founder', 'admin', 'developer', 'marketing', 'viewer'], 'user-growth'),
-  module('churn', 'Churn', 'Product Analytics', ['founder', 'admin', 'developer', 'marketing', 'viewer'], 'user-growth'),
-  module('search-analytics', 'Search Analytics', 'Product Analytics', ['founder', 'admin', 'developer', 'marketing', 'viewer'], 'product'),
-
-  module('ai-usage', 'AI Usage', 'AI', TECH, 'ai'),
-  module('token-consumption', 'Token Consumption', 'AI', TECH, 'ai'),
-  module('ai-costs', 'AI Costs', 'AI', TECH, 'ai'),
-  module('model-performance', 'Model Performance', 'AI', TECH, 'ai'),
-  module('ai-insights', 'AI Insights', 'AI', LEADERS, 'founder'),
-
-  module('api-health', 'API Health', 'Infrastructure', TECH, 'infrastructure'),
-  module('database-health', 'Database Health', 'Infrastructure', TECH, 'infrastructure'),
-  module('storage', 'Storage', 'Infrastructure', TECH, 'infrastructure'),
-  module('edge-functions', 'Edge Functions', 'Infrastructure', TECH, 'infrastructure'),
-  module('performance', 'Performance', 'Infrastructure', TECH, 'infrastructure'),
-  module('error-monitoring', 'Error Monitoring', 'Infrastructure', TECH, 'infrastructure'),
-
-  module('login-activity', 'Login Activity', 'Security', ['founder', 'admin', 'developer', 'operations'], 'security'),
-  module('otp-monitoring', 'OTP Monitoring', 'Security', ['founder', 'admin', 'developer', 'operations'], 'security'),
-  module('suspicious-activity', 'Suspicious Activity', 'Security', ['founder', 'admin', 'developer', 'operations'], 'security'),
-  module('devices', 'Devices', 'Security', ['founder', 'admin', 'developer', 'operations'], 'security'),
-  module('sessions', 'Sessions', 'Security', ['founder', 'admin', 'developer', 'operations'], 'security'),
-  module('security-alerts', 'Security Alerts', 'Security', ['founder', 'admin', 'developer', 'operations'], 'security'),
-
-  module('tickets', 'Tickets', 'Support', SUPPORT, 'support'),
-  module('live-chat-metrics', 'Live Chat Metrics', 'Support', SUPPORT, 'support'),
-  module('sla', 'SLA', 'Support', SUPPORT, 'support'),
-  module('customer-satisfaction', 'Customer Satisfaction', 'Support', SUPPORT, 'support'),
-
-  module('tasks', 'Tasks', 'Team', LEADERS, 'team'),
-  module('sprint-progress', 'Sprint Progress', 'Team', LEADERS, 'team'),
-  module('productivity', 'Productivity', 'Team', LEADERS, 'team'),
-  module('deployments', 'Deployments', 'Team', [...LEADERS, 'developer'], 'team'),
-
-  module('api-connections', 'API Connections', 'Settings', LEADERS, 'connectors'),
-  module('team-members', 'Team Members', 'Settings', LEADERS, 'team'),
-  module('permissions', 'Permissions', 'Settings', LEADERS, 'permissions'),
-  module('notification-preferences', 'Notification Preferences', 'Settings', ALL, 'notifications'),
-  module('audit-logs', 'Audit Logs', 'Settings', [...LEADERS, 'developer', 'operations'], 'audit'),
+  module('overview', 'Company Overview', 'Overview', ALL, 'founder'),
+  module('marketing', 'Marketing', 'Marketing', GROWTH),
+  module('marketplace', 'Marketplace', 'Marketplace', READ_BUSINESS),
+  module('finance', 'Finance', 'Finance', FINANCE, 'revenue'),
+  module('operations', 'Operations', 'Operations', OPS),
+  module('product', 'Product Analytics', 'Product Analytics', ['founder', 'admin', 'developer', 'marketing', 'viewer']),
+  module('ai', 'AI Monitoring', 'AI', TECH),
+  module('infrastructure', 'Infrastructure', 'Infrastructure', TECH),
+  module('security', 'Security', 'Security', ['founder', 'admin', 'developer', 'operations']),
+  module('support', 'Support', 'Support', SUPPORT),
+  module('team', 'Team & Deployments', 'Team', [...LEADERS, 'developer']),
+  module('settings', 'Settings & Audit', 'Settings', ALL, 'settings', false),
 ];
 
 export const DATE_PRESETS = [
