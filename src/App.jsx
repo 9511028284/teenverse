@@ -22,11 +22,14 @@ import OpportunityDetailApply from './components/opportunities/OpportunityDetail
 import MyOpportunityApplications from './components/opportunities/MyOpportunityApplications';
 import {
   ensureIndividualProfile,
+  getIndividualProfile,
+  getLegacyAccountContext,
   getPortalMode,
   getRedirectPathForPortal,
   PORTAL_MODES,
   PORTAL_URLS,
 } from './services/phase1.api';
+import { hasCompletedAppOnboarding } from './utils/accountOnboarding';
 import { trackAnalyticsEvent } from './services/auxiliary.api';
 import {
   DASHBOARD_ROLES,
@@ -548,6 +551,13 @@ export default function App() {
     const isPublic = publicRoutePrefixes.some(
       (path) => currentPath === path || currentPath.startsWith(path + '/')
     );
+    const isAuthPage = [
+      '/',
+      '/login',
+      '/signup',
+      '/individual/login',
+      '/individual/signup',
+    ].includes(currentPath);
 
     const isTermsPage = currentPath.startsWith('/termsagreement');
 
@@ -616,7 +626,38 @@ export default function App() {
         }
       }
 
-      const { profile, legacy } = await ensureIndividualProfile(u);
+      const [existingProfile, existingLegacy, parentMatchResult] = await Promise.all([
+        getIndividualProfile(u),
+        getLegacyAccountContext(u),
+        supabase
+          .from('parent_consents')
+          .select('user_id')
+          .eq('parent_email', u.email)
+          .maybeSingle(),
+      ]);
+      const parentMatch = parentMatchResult.data;
+
+      if (!hasCompletedAppOnboarding({
+        profile: existingProfile,
+        legacy: existingLegacy,
+        parentMatch,
+      })) {
+        setUser(null);
+        if (!isAuthPage && !isPublic) {
+          navigate('/signup', { replace: true });
+        }
+        setLoading(false);
+        return;
+      }
+
+      let profile = existingProfile;
+      let legacy = existingLegacy;
+
+      if (!profile) {
+        const ensuredAccount = await ensureIndividualProfile(u);
+        profile = ensuredAccount.profile;
+        legacy = ensuredAccount.legacy;
+      }
 
       if (!profile) {
         throw new Error('Unable to load or create profile.');
@@ -634,12 +675,6 @@ export default function App() {
         legacy,
         fallback: baseRedirectPath,
       });
-
-      const { data: parentMatch } = await supabase
-        .from('parent_consents')
-        .select('user_id')
-        .eq('parent_email', u.email)
-        .maybeSingle();
 
       const parentRedirectPath = PARENT_PORTAL_URL;
 
@@ -762,6 +797,11 @@ export default function App() {
     inFlightSessionSyncRef.current = { key, promise };
     return promise;
   }, [getSessionSyncKey, handleSession]);
+
+  const handleAuthSessionReady = useCallback(
+    (session) => syncSessionOnce(session, { force: true }),
+    [syncSessionOnce],
+  );
 
   // Auth & Session Logic
   useEffect(() => {
@@ -922,7 +962,7 @@ export default function App() {
               <Auth
                 setView={setView}
                 onLogin={(msg) => showToast(msg)}
-                onSessionReady={(session) => syncSessionOnce(session, { force: true })}
+                onSessionReady={handleAuthSessionReady}
               />
           }
         />
@@ -934,7 +974,7 @@ export default function App() {
                 key="individual-login"
                 setView={setView}
                 onLogin={(msg) => showToast(msg)}
-                onSessionReady={(session) => syncSessionOnce(session, { force: true })}
+                onSessionReady={handleAuthSessionReady}
                 initialMode="login"
                 signupRole="freelancer"
                 lockSignupRole
@@ -949,7 +989,7 @@ export default function App() {
                 key="individual-signup"
                 setView={setView}
                 onLogin={(msg) => showToast(msg)}
-                onSessionReady={(session) => syncSessionOnce(session, { force: true })}
+                onSessionReady={handleAuthSessionReady}
                 initialMode="signup"
                 signupRole="freelancer"
                 lockSignupRole

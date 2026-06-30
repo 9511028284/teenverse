@@ -80,6 +80,34 @@ Deno.serve(async (req: Request) => {
       }
     };
 
+    const markOnboardingCompleted = async () => {
+      const { data: existingProfile, error: updateError } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          email,
+          full_name: name,
+          onboarding_completed: true,
+        })
+        .eq("id", user.id)
+        .select("id")
+        .maybeSingle();
+
+      if (updateError) throw updateError;
+      if (existingProfile) return;
+
+      const { error: insertError } = await supabaseAdmin
+        .from("profiles")
+        .insert({
+          id: user.id,
+          email,
+          full_name: name,
+          role: role === "client" ? "business" : "student",
+          onboarding_completed: true,
+        });
+
+      if (insertError) throw insertError;
+    };
+
     const { data: verifiedPhone, error: verificationError } = await supabaseAdmin
       .from("phone_otp_verifications")
       .select("phone, expires_at, consumed_by")
@@ -140,6 +168,7 @@ Deno.serve(async (req: Request) => {
 
       if (error) throw error;
 
+      await markOnboardingCompleted();
       await finalizeSignup();
 
       return json({ success: true, role, profile: data });
@@ -156,6 +185,7 @@ Deno.serve(async (req: Request) => {
 
     if (error) throw error;
 
+    await markOnboardingCompleted();
     await finalizeSignup();
 
     return json({ success: true, role, profile: data });

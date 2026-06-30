@@ -220,13 +220,17 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     });
   };
 
-  const handleAuthRedirect = useCallback(async (user) => {
+  const handleAuthRedirect = useCallback(async (user, session = null) => {
     try {
       const { data: freelancerData } = await supabase.from('freelancers').select('phone').eq('id', user.id).maybeSingle();
       const { data: clientData } = await supabase.from('clients').select('phone').eq('id', user.id).maybeSingle();
 
       if (freelancerData?.phone?.length > 5 || clientData?.phone?.length > 5) {
-         onLogin(`Welcome back!`);
+         if (session && onSessionReady) {
+           await onSessionReady(session);
+         } else {
+           onLogin(`Welcome back!`);
+         }
       } else {
          const pendingProfile = getPendingSignupProfileForUser(user);
 
@@ -300,25 +304,25 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     } catch {
       showToast("Session redirection fault encountered.");
     }
-  }, [checkPhoneVerification, lockedSignupRole, onLogin, showToast]);
+  }, [checkPhoneVerification, lockedSignupRole, onLogin, onSessionReady, showToast]);
 
   // ─── AUTH INTERLOCK EVENTS ──────────────────────────────────────────────────
   useEffect(() => {
-    if (onSessionReady) return undefined;
-
     const checkActiveSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) handleAuthRedirect(session.user);
+      if (session) handleAuthRedirect(session.user, session);
     };
     checkActiveSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session && viewMode !== 'update_password') {
-        handleAuthRedirect(session.user);
+        window.setTimeout(() => {
+          void handleAuthRedirect(session.user, session);
+        }, 0);
       }
     });
     return () => subscription.unsubscribe();
-  }, [handleAuthRedirect, onSessionReady, viewMode]);
+  }, [handleAuthRedirect, viewMode]);
 
   // Clear toast memory cleanly
   useEffect(() => {
@@ -644,18 +648,14 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
       if (userError) throw userError;
       if (!session?.user && !user) throw new Error("Google sign-in did not create a session.");
 
-      if (session && onSessionReady) {
-        await onSessionReady(session);
-      } else {
-        await handleAuthRedirect(session?.user || user);
-      }
+      await handleAuthRedirect(session?.user || user, session);
     } catch (error) {
       console.error("Google login error:", error);
       showToast(error?.message || AUTH_GENERIC_ERROR);
     } finally {
       setGoogleLoading(false);
     }
-  }, [handleAuthRedirect, onSessionReady, rememberMe, showToast]);
+  }, [handleAuthRedirect, rememberMe, showToast]);
 
   const handleGithubLogin = useCallback(async () => {
     setLoading(true);
