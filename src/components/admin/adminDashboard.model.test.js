@@ -47,6 +47,18 @@ test('builds connector status without fabricated metrics', () => {
   assert.equal(model.metrics.find((item) => item.label === 'Healthy').value, 1);
 });
 
+test('maps Cloudflare telemetry into website intelligence', () => {
+  const telemetrySnapshot = {
+    ...snapshot,
+    externalTelemetry: {
+      web: { visitors: 12, pageViews: 30, events: 44, topPaths: [{ label: '/', value: 20 }], dailyEvents: [], eventTypes: [] },
+    },
+  };
+  const model = buildDashboardModel('marketing', telemetrySnapshot, [], 'website-analytics');
+  assert.equal(model.metrics.find((item) => item.label === 'Visitors').value, 12);
+  assert.equal(model.table.rows[0].path, '/');
+});
+
 test('resolves a bounded date range', () => {
   const range = resolveDateRange('custom', { from: '2026-06-01', to: '2026-06-30' });
   assert.ok(new Date(range.from) < new Date(range.to));
