@@ -82,6 +82,22 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     setToast({ message: msg, type });
   }, []);
 
+  const getFreshCaptchaToken = () => {
+    if (!CLOUDFLARE_SITE_KEY) return null;
+
+    try {
+      if (turnstileRef.current?.isExpired?.()) return null;
+      return turnstileRef.current?.getResponse?.() || captchaToken;
+    } catch {
+      return null;
+    }
+  };
+
+  const resetCaptcha = () => {
+    setCaptchaToken(null);
+    turnstileRef.current?.reset?.();
+  };
+
   // Resilient defensive hardware footprint audit
   const getDeviceFingerprint = () => {
     if (typeof window === 'undefined') return {};
@@ -323,6 +339,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
         try {
             const { e164Phone } = getPhoneIdentifiers();
             setFormData(prev => ({ ...prev, phone: e164Phone }));
+            setCaptchaToken(null);
             setStep(4);
         } catch (error) {
             showToast(error.message || "Enter a valid mobile number.");
@@ -368,20 +385,25 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     setLoading(true);
     try {
       if (viewMode === 'login') {
+        const loginCaptchaToken = getFreshCaptchaToken();
+        if (CLOUDFLARE_SITE_KEY && !loginCaptchaToken) {
+          throw new Error("Please complete the security check.");
+        }
+
         setRememberedSessionPreference(rememberMe);
         const { error } = await supabase.auth.signInWithPassword({
-            email: formData.email.trim().toLowerCase(), password: formData.password, options: { captchaToken } 
+            email: formData.email.trim().toLowerCase(),
+            password: formData.password,
+            options: { captchaToken: loginCaptchaToken },
         });
         if (error) throw new Error(LOGIN_ERROR);
       } else {
         await completeSignup();
       }
-      turnstileRef.current?.reset?.();
-      setCaptchaToken(null);
+      resetCaptcha();
     } catch (err) {
       showToast(err.message || AUTH_GENERIC_ERROR);
-      turnstileRef.current?.reset?.();
-      setCaptchaToken(null); 
+      resetCaptcha();
     } finally {
       setLoading(false);
     }
@@ -396,6 +418,11 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
         if (!getPasswordSecurityStatus(formData.password).isStrong) throw new Error(PASSWORD_SECURITY_ERROR);
         if (!isValidEmail(formData.email)) throw new Error("Enter a valid email address.");
 
+        const signupCaptchaToken = getFreshCaptchaToken();
+        if (CLOUDFLARE_SITE_KEY && !signupCaptchaToken) {
+          throw new Error("Please complete the security check.");
+        }
+
         const { data, error } = await supabase.auth.signUp({
             email: formData.email, password: formData.password,
             options: { 
@@ -405,7 +432,8 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
                   device_fingerprint: deviceMeta,
                   [SIGNUP_PROFILE_METADATA_KEY]: signupPayload,
                 },
-                captchaToken, emailRedirectTo: window.location.origin
+                captchaToken: signupCaptchaToken,
+                emailRedirectTo: window.location.origin,
             } 
         });
         if (error) throw new Error(AUTH_GENERIC_ERROR);
@@ -433,14 +461,18 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
 
   // ─── THIRD-PARTY SMS AUTH DISPATCHERS ───────────────────────────────────────
   const handleSendPhoneOtp = async () => {
-    if (CLOUDFLARE_SITE_KEY && !captchaToken) return showToast("Please complete the security check.");
+    const activeCaptchaToken = getFreshCaptchaToken();
+    if (CLOUDFLARE_SITE_KEY && !activeCaptchaToken) {
+      resetCaptcha();
+      return showToast("Please complete the security check.");
+    }
 
     setOtpLoading(true);
     setOtpAction('send');
     try {
         const { msg91Identifier, e164Phone } = getPhoneIdentifiers();
         const { data, error } = await supabase.functions.invoke('send-phone-otp', {
-          body: { phone: e164Phone, identifier: msg91Identifier, captchaToken },
+          body: { phone: e164Phone, identifier: msg91Identifier, captchaToken: activeCaptchaToken },
         });
         if (error || !data?.success) throw new Error(data?.error || "Failed to send OTP.");
 
@@ -450,10 +482,10 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
         setIsPhoneVerified(false);
         setFormData(prev => ({ ...prev, phone: e164Phone }));
         showToast("OTP sent to your mobile number.", "success");
-        turnstileRef.current?.reset?.();
-        setCaptchaToken(null);
+        resetCaptcha();
     } catch (err) {
         showToast(err.message || "We couldn't send the OTP. Please try again.");
+        resetCaptcha();
     } finally {
         setOtpLoading(false);
         setOtpAction(null);
@@ -509,7 +541,11 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if(!isValidEmail(formData.email)) return showToast("Enter a valid email address.");
-    if (CLOUDFLARE_SITE_KEY && !captchaToken) return showToast("Please complete the security check.");
+    const activeCaptchaToken = getFreshCaptchaToken();
+    if (CLOUDFLARE_SITE_KEY && !activeCaptchaToken) {
+      resetCaptcha();
+      return showToast("Please complete the security check.");
+    }
 
     setLoading(true);
     try {
@@ -520,13 +556,11 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
         
       setShowResetVerify(true);
       showToast(RESET_SENT_MESSAGE, "success");
-      turnstileRef.current?.reset?.();
-      setCaptchaToken(null);
+      resetCaptcha();
     } catch {
       showToast(RESET_SENT_MESSAGE, "success");
       setShowResetVerify(true);
-      turnstileRef.current?.reset?.();
-      setCaptchaToken(null);
+      resetCaptcha();
     } finally {
       setLoading(false);
     }

@@ -85,8 +85,29 @@ export async function assertTurnstile(captchaToken: unknown) {
     method: "POST",
     body: form,
   });
-  const result = await response.json();
-  if (!result?.success) throw new Error("Security check failed.");
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok || !result?.success) {
+    const errorCodes = Array.isArray(result?.["error-codes"])
+      ? result["error-codes"].map(String)
+      : [];
+
+    console.error("Turnstile verification rejected", {
+      errorCodes,
+      hostname: typeof result?.hostname === "string" ? result.hostname : null,
+      action: typeof result?.action === "string" ? result.action : null,
+    });
+
+    if (errorCodes.includes("missing-input-secret") || errorCodes.includes("invalid-input-secret")) {
+      throw new Error("Security check is not configured correctly.");
+    }
+
+    if (errorCodes.includes("timeout-or-duplicate")) {
+      throw new Error("Security check expired. Please complete it again.");
+    }
+
+    throw new Error("Security check failed. Please complete it again.");
+  }
 }
 
 export async function assertRateLimit(action: string, key: string, limit: number, windowSeconds: number) {
