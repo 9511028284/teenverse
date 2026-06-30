@@ -154,6 +154,7 @@ const GoogleIdentityButton = memo(({ loading, onCredentialResponse, showToast })
           client_id: clientId,
           callback: dispatchGoogleCredential,
           ux_mode: 'popup',
+          use_fedcm_for_button: true,
         });
         googleIdentityInitializedClientId = clientId;
       }

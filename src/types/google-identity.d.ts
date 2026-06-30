@@ -9,6 +9,7 @@ declare global {
             client_id: string;
             callback: (response: { credential?: string }) => void;
             ux_mode?: "popup" | "redirect";
+            use_fedcm_for_button?: boolean;
           }) => void;
           renderButton: (
             parent: HTMLElement,
