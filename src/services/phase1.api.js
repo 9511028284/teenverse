@@ -104,11 +104,11 @@ export const getDashboardPathForRole = (role) => {
 };
 
 export const getLegacyAccountContext = async (authUser) => {
-  const email = authUser?.email || '';
+  const email = String(authUser?.email || '').trim().toLowerCase();
 
   const [adminById, adminByEmail, client, freelancer] = await Promise.all([
     safeMaybeSingle(supabase.from('admins').select('*').eq('id', authUser.id)),
-    email ? safeMaybeSingle(supabase.from('admins').select('*').eq('email', email)) : Promise.resolve(null),
+    email ? safeMaybeSingle(supabase.from('admins').select('*').ilike('email', email)) : Promise.resolve(null),
     safeMaybeSingle(supabase.from('clients').select('*').eq('id', authUser.id)),
     safeMaybeSingle(supabase.from('freelancers').select('*').eq('id', authUser.id)),
   ]);

@@ -222,10 +222,26 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
 
   const handleAuthRedirect = useCallback(async (user, session = null) => {
     try {
-      const { data: freelancerData } = await supabase.from('freelancers').select('phone').eq('id', user.id).maybeSingle();
-      const { data: clientData } = await supabase.from('clients').select('phone').eq('id', user.id).maybeSingle();
+      const normalizedEmail = String(user?.email || '').trim().toLowerCase();
+      const [
+        { data: adminData },
+        { data: freelancerData },
+        { data: clientData },
+      ] = await Promise.all([
+        normalizedEmail
+          ? supabase.from('admins').select('email').ilike('email', normalizedEmail).maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabase.from('freelancers').select('phone').eq('id', user.id).maybeSingle(),
+        supabase.from('clients').select('phone').eq('id', user.id).maybeSingle(),
+      ]);
 
-      if (freelancerData?.phone?.length > 5 || clientData?.phone?.length > 5) {
+      if (adminData) {
+         if (session && onSessionReady) {
+           await onSessionReady(session);
+         } else {
+           onLogin('Welcome back!');
+         }
+      } else if (freelancerData?.phone?.length > 5 || clientData?.phone?.length > 5) {
          if (session && onSessionReady) {
            await onSessionReady(session);
          } else {
@@ -395,12 +411,15 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
         }
 
         setRememberedSessionPreference(rememberMe);
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
             email: formData.email.trim().toLowerCase(),
             password: formData.password,
             options: { captchaToken: loginCaptchaToken },
         });
         if (error) throw new Error(LOGIN_ERROR);
+        if (data?.session && onSessionReady) {
+          await onSessionReady(data.session);
+        }
       } else {
         await completeSignup();
       }
