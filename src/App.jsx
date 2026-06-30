@@ -30,6 +30,7 @@ import {
   PORTAL_URLS,
 } from './services/phase1.api';
 import { hasCompletedAppOnboarding } from './utils/accountOnboarding';
+import { resolveSessionDashboardRole } from './utils/sessionDashboardRole';
 import { trackAnalyticsEvent } from './services/auxiliary.api';
 import {
   DASHBOARD_ROLES,
@@ -167,11 +168,13 @@ const buildSessionUser = (authUser, profile, legacy = {}, context = {}) => {
     activeDashboardRole: DASHBOARD_ROLES.CLIENT,
   });
 
-  if (activeDashboardRole === DASHBOARD_ROLES.FREELANCER && legacy.freelancer) {
-    return buildFreelancerSession();
-  }
+  const resolvedDashboardRole = resolveSessionDashboardRole({
+    preferredRole: activeDashboardRole,
+    hasClient: Boolean(legacy.client),
+    hasFreelancer: Boolean(legacy.freelancer),
+  });
 
-  if (activeDashboardRole === DASHBOARD_ROLES.CLIENT && legacy.client) {
+  if (resolvedDashboardRole === DASHBOARD_ROLES.CLIENT) {
     return buildClientSession();
   }
 
