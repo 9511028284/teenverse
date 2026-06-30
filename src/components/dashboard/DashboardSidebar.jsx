@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   BookOpen,
+  ArrowLeftRight,
   Briefcase,
   ChevronDown,
   Crown,
@@ -128,6 +129,8 @@ const DashboardSidebar = ({
   tab,
   setTab,
   onLogout,
+  onSwitchDashboardRole,
+  roleSwitching,
   energy = 0,
   jobsCount = 0,
   applicationsCount = 0,
@@ -136,6 +139,8 @@ const DashboardSidebar = ({
   const initial = user?.name?.[0]?.toUpperCase() || <User size={18} />;
   const profileTarget = isClient ? 'settings' : 'profile';
   const safeProgress = Math.max(0, Math.min(100, Number(progressPercent) || 0));
+  const switchTargetRole = isClient ? 'freelancer' : 'client';
+  const isSwitchingThisRole = roleSwitching === switchTargetRole;
 
  React.useEffect(() => {
   if (typeof window === 'undefined') return;
@@ -393,6 +398,30 @@ const DashboardSidebar = ({
             )}
 
             {/* Logout Button */}
+            {onSwitchDashboardRole && (
+              <button
+                type="button"
+                onClick={() => onSwitchDashboardRole(switchTargetRole)}
+                disabled={Boolean(roleSwitching)}
+                className={cx(
+                  'mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200/70 bg-indigo-50/80 py-2.5 text-xs font-black uppercase tracking-wider text-indigo-700 transition-all duration-300 hover:-translate-y-0.5 hover:bg-indigo-100 hover:shadow-md hover:shadow-indigo-500/10 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-70 disabled:shadow-none dark:border-indigo-500/20 dark:bg-indigo-950/30 dark:text-indigo-300 dark:hover:bg-indigo-900/40',
+                  zenMode ? 'h-11 px-0' : 'px-3'
+                )}
+                title={zenMode ? `Switch to ${switchTargetRole}` : undefined}
+              >
+                <ArrowLeftRight size={15} className={isSwitchingThisRole ? 'animate-spin' : ''} />
+                {!zenMode && (
+                  <span>
+                    {isSwitchingThisRole
+                      ? 'Switching...'
+                      : isClient
+                        ? 'Switch to Freelancer'
+                        : 'Switch to Client'}
+                  </span>
+                )}
+              </button>
+            )}
+
             <button
               type="button"
               onClick={onLogout}

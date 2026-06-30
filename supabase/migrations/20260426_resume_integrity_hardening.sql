@@ -56,6 +56,20 @@ create table if not exists public.resume_verifications (
   unique (target_type, target_id)
 );
 
+do $$
+begin
+  if to_regclass('public.resume_verifications') is not null then
+    alter table public.resume_verifications
+      add column if not exists section text;
+
+    alter table public.resume_verifications
+      add column if not exists reference_id uuid;
+
+    alter table public.resume_verifications
+      add column if not exists proof_url text;
+  end if;
+end $$;
+
 alter table if exists public.resume_verifications
   add column if not exists target_type text,
   add column if not exists target_id uuid,
@@ -119,13 +133,18 @@ create table if not exists public.resume_proof_validation_logs (
   created_at timestamptz not null default now()
 );
 
-create unique index if not exists freelancers_guardian_pan_hash_unique
-  on public.freelancers (guardian_pan_hash)
-  where guardian_pan_hash is not null;
+do $$
+begin
+  if to_regclass('public.freelancers') is not null then
+    create unique index if not exists freelancers_guardian_pan_hash_unique
+      on public.freelancers (guardian_pan_hash)
+      where guardian_pan_hash is not null;
 
-create unique index if not exists freelancers_account_number_hash_unique
-  on public.freelancers (account_number_hash)
-  where account_number_hash is not null;
+    create unique index if not exists freelancers_account_number_hash_unique
+      on public.freelancers (account_number_hash)
+      where account_number_hash is not null;
+  end if;
+end $$;
 
 create or replace function public.sync_resume_verification_state()
 returns trigger
@@ -215,11 +234,16 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_flag_resume_timeline_risk on public.resume_experiences;
-create trigger trg_flag_resume_timeline_risk
-before insert or update of start_date, end_date, source
-on public.resume_experiences
-for each row execute function public.flag_resume_timeline_risk();
+do $$
+begin
+  if to_regclass('public.resume_experiences') is not null then
+    drop trigger if exists trg_flag_resume_timeline_risk on public.resume_experiences;
+    create trigger trg_flag_resume_timeline_risk
+    before insert or update of start_date, end_date, source
+    on public.resume_experiences
+    for each row execute function public.flag_resume_timeline_risk();
+  end if;
+end $$;
 
 create or replace function public.apply_reputation_risk(p_user uuid)
 returns text
@@ -385,77 +409,100 @@ begin
 end;
 $$;
 
-create or replace view public.platform_verified_resume_work as
-select
-  a.id,
-  a.freelancer_id as user_id,
-  coalesce(j.title, 'Platform Work') as title,
-  a.status,
-  a.bid_amount,
-  a.created_at,
-  coalesce(a.paid_at, a.completed_at, a.submitted_at, a.started_at, a.created_at) as updated_at
-from public.applications a
-left join public.jobs j on j.id = a.job_id
-where a.status in ('Accepted', 'Submitted', 'Completed', 'Paid', 'Processing');
+do $$
+begin
+  if to_regclass('public.applications') is not null
+     and to_regclass('public.jobs') is not null then
+    execute $view$
+      create or replace view public.platform_verified_resume_work as
+      select
+        a.id,
+        a.freelancer_id as user_id,
+        coalesce(j.title, 'Platform Work') as title,
+        a.status,
+        a.bid_amount,
+        a.created_at,
+        coalesce(a.paid_at, a.completed_at, a.submitted_at, a.started_at, a.created_at) as updated_at
+      from public.applications a
+      left join public.jobs j on j.id = a.job_id
+      where a.status in ('Accepted', 'Submitted', 'Completed', 'Paid', 'Processing')
+    $view$;
 
-comment on view public.platform_verified_resume_work is
-'Platform-backed work items that can be shown in the VERIFIED section of resumes.';
+    execute $view$
+      comment on view public.platform_verified_resume_work is
+      'Platform-backed work items that can be shown in the VERIFIED section of resumes.'
+    $view$;
+  end if;
+end $$;
 
-create or replace view public.client_resume_view as
-select
-  f.id as user_id,
-  f.name,
-  f.specialty,
-  f.trust_score,
-  f.trust_score_breakdown,
-  f.risk_level,
-  coalesce(platform_work.items, '[]'::jsonb) as verified_platform_work,
-  coalesce(verified_experiences.items, '[]'::jsonb) as verified_experiences,
-  coalesce(verified_skills.items, '[]'::jsonb) as verified_skills
-from public.freelancers f
-left join lateral (
-  select jsonb_agg(jsonb_build_object(
-    'id', pvw.id,
-    'title', pvw.title,
-    'status', pvw.status,
-    'created_at', pvw.created_at,
-    'updated_at', pvw.updated_at
-  ) order by pvw.updated_at desc) as items
-  from public.platform_verified_resume_work pvw
-  where pvw.user_id = f.id
-) platform_work on true
-left join lateral (
-  select jsonb_agg(jsonb_build_object(
-    'id', e.id,
-    'title', e.title,
-    'company', e.company,
-    'description', e.description,
-    'start_date', e.start_date,
-    'end_date', e.end_date,
-    'proof_metadata', e.proof_metadata
-  ) order by e.start_date desc nulls last) as items
-  from public.resume_experiences e
-  join public.resume_verifications rv
-    on rv.target_type = 'experience'
-   and rv.target_id = e.id
-   and rv.status = 'verified'
-  where e.user_id = f.id
-) verified_experiences on true
-left join lateral (
-  select jsonb_agg(jsonb_build_object(
-    'id', s.id,
-    'skill_name', s.skill_name,
-    'source', s.source,
-    'proof_metadata', s.proof_metadata
-  ) order by s.created_at desc nulls last) as items
-  from public.resume_skills s
-  join public.resume_verifications rv
-    on rv.target_type = 'skill'
-   and rv.target_id = s.id
-   and rv.status = 'verified'
-  where s.user_id = f.id
-) verified_skills on true
-where coalesce(f.risk_level, 'low') <> 'high';
+do $$
+begin
+  if to_regclass('public.freelancers') is not null
+     and to_regclass('public.platform_verified_resume_work') is not null
+     and to_regclass('public.resume_experiences') is not null
+     and to_regclass('public.resume_verifications') is not null
+     and to_regclass('public.resume_skills') is not null then
+    execute $view$
+      create or replace view public.client_resume_view as
+      select
+        f.id as user_id,
+        f.name,
+        f.specialty,
+        f.trust_score,
+        f.trust_score_breakdown,
+        f.risk_level,
+        coalesce(platform_work.items, '[]'::jsonb) as verified_platform_work,
+        coalesce(verified_experiences.items, '[]'::jsonb) as verified_experiences,
+        coalesce(verified_skills.items, '[]'::jsonb) as verified_skills
+      from public.freelancers f
+      left join lateral (
+        select jsonb_agg(jsonb_build_object(
+          'id', pvw.id,
+          'title', pvw.title,
+          'status', pvw.status,
+          'created_at', pvw.created_at,
+          'updated_at', pvw.updated_at
+        ) order by pvw.updated_at desc) as items
+        from public.platform_verified_resume_work pvw
+        where pvw.user_id = f.id
+      ) platform_work on true
+      left join lateral (
+        select jsonb_agg(jsonb_build_object(
+          'id', e.id,
+          'title', e.title,
+          'company', e.company,
+          'description', e.description,
+          'start_date', e.start_date,
+          'end_date', e.end_date,
+          'proof_metadata', e.proof_metadata
+        ) order by e.start_date desc nulls last) as items
+        from public.resume_experiences e
+        join public.resume_verifications rv
+          on rv.target_type = 'experience'
+         and rv.target_id = e.id
+         and rv.status = 'verified'
+        where e.user_id = f.id
+      ) verified_experiences on true
+      left join lateral (
+        select jsonb_agg(jsonb_build_object(
+          'id', s.id,
+          'skill_name', s.skill_name,
+          'source', s.source,
+          'proof_metadata', s.proof_metadata
+        ) order by s.created_at desc nulls last) as items
+        from public.resume_skills s
+        join public.resume_verifications rv
+          on rv.target_type = 'skill'
+         and rv.target_id = s.id
+         and rv.status = 'verified'
+        where s.user_id = f.id
+      ) verified_skills on true
+      where coalesce(f.risk_level, 'low') <> 'high'
+    $view$;
 
-comment on view public.client_resume_view is
-'Client-safe resume surface. It excludes self-declared and AI-only resume claims and hides high-risk profiles.';
+    execute $view$
+      comment on view public.client_resume_view is
+      'Client-safe resume surface. It excludes self-declared and AI-only resume claims and hides high-risk profiles.'
+    $view$;
+  end if;
+end $$;

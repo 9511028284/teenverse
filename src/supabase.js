@@ -1,5 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
+/**
+ * @typedef {import('./types/supabase').Database} Database
+ * @typedef {import('@supabase/supabase-js').SupabaseClient<Database>} TypedSupabaseClient
+ */
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const rememberPreferenceKey = 'teenverse_remember_me';
@@ -34,6 +39,7 @@ export const setRememberedSessionPreference = (remember) => {
   window.localStorage.setItem(rememberPreferenceKey, remember ? 'true' : 'false');
 };
 
+/** @type {TypedSupabaseClient} */
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     persistSession: true,

@@ -1,0 +1,16 @@
+"binding": "teenverse_aux",
+      "database_name": "teenverse_aux",
+      "database_id": "33d32454-adcc-4947-b20f-cda92108112c"
+
+
+      🌀 Creating namespace with title "RATE_LIMIT_KV"
+✨ Success!
+To access your new KV Namespace in your Worker, add the following snippet to your configuration file:
+{
+  "kv_namespaces": [
+    {
+      "binding": "RATE_LIMIT_KV",
+      "id": "436054bdf4e046e8b201179c33f0951a"
+    }
+  ]
+}

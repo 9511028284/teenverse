@@ -1,20 +1,83 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { supabase } from './supabase'; 
+import { AnimatePresence, motion } from 'framer-motion';
+import { supabase } from './supabase';
 import Toast from './components/ui/Toast';
-import { SpeedInsights } from "@vercel/speed-insights/react";
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
+import { ArrowLeftRight, Briefcase, Loader2, ShieldCheck, User } from 'lucide-react';
 import { normalizeExpiredSubscription } from './utils/subscription';
 import { normalizeIndianPhone } from './utils/validators';
-import { getPendingSignupProfile, removePendingSignupProfile } from './utils/pendingSignupProfile';
+import { getPendingSignupProfileForUser, removePendingSignupProfile } from './utils/pendingSignupProfile';
 
-// --- Pages (Only App/Dashboard logic remains) ---
-import Auth from './pages/Auth'; 
+// --- Pages ---
+import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import ClientDashboard from './pages/ClientDashboard';
-import TermsAgreement from './pages/TermsAgreement'; 
+import TermsAgreement from './pages/TermsAgreement';
 import AdminDashboard from './pages/AdminPage';
 import PlatformAIAssistant from './components/features/PlatformAIAssistant';
+import PublicOpportunityList from './components/opportunities/PublicOpportunityList';
+import OpportunityDetailApply from './components/opportunities/OpportunityDetailApply';
+import MyOpportunityApplications from './components/opportunities/MyOpportunityApplications';
+import {
+  ensureIndividualProfile,
+  getPortalMode,
+  getRedirectPathForPortal,
+  PORTAL_MODES,
+  PORTAL_URLS,
+} from './services/phase1.api';
+import { trackAnalyticsEvent } from './services/auxiliary.api';
+import {
+  DASHBOARD_ROLES,
+  ensureDashboardRole,
+  getDashboardRolePreference,
+  getOppositeDashboardRole,
+  setDashboardRolePreference,
+} from './services/dashboardRole.api';
+
+const PARENT_PORTAL_URL = PORTAL_URLS.parent;
+const MIN_ROLE_SWITCH_MS = 760;
+
+const isExternalTarget = (target = '') => /^https?:\/\//i.test(target);
+
+const getPrimaryDashboardPath = (sessionUser) => {
+  if (sessionUser?.portalHomePath) return sessionUser.portalHomePath;
+
+  if (sessionUser?.type === 'client') {
+    return '/client-dashboard';
+  }
+
+  return '/dashboard';
+};
+
+const getRolePreferredDashboardPath = ({
+  portalMode,
+  preferredRole,
+  legacy = {},
+  fallback,
+}) => {
+  if (preferredRole === DASHBOARD_ROLES.CLIENT && legacy.client) {
+    return portalMode === PORTAL_MODES.INTERN
+      ? `${PORTAL_URLS.app}/client-dashboard`
+      : '/client-dashboard';
+  }
+
+  if (preferredRole === DASHBOARD_ROLES.FREELANCER && legacy.freelancer) {
+    return '/dashboard';
+  }
+
+  return fallback;
+};
+
+const getRouteGroupForTarget = ({ target }) => {
+  if (isExternalTarget(target)) return [];
+  if (target?.startsWith('/admin')) return ['/admin'];
+
+  if (target?.startsWith('/client-dashboard')) return ['/client-dashboard'];
+  if (target?.startsWith('/dashboard')) return ['/dashboard'];
+  return [target || '/'];
+};
 
 const buildPendingSignupPayload = (profile = {}) => ({
   role: profile.role || 'freelancer',
@@ -31,7 +94,220 @@ const buildPendingSignupPayload = (profile = {}) => ({
   termsVersion: profile.termsVersion || 'v1.0-TeenVerseHub-Terms',
 });
 
-// --- 1. Helper Wrappers ---
+const publicRoutePrefixes = [
+  '/',
+  '/login',
+  '/signup',
+  '/individual/login',
+  '/individual/signup',
+  '/legal',
+  '/termsagreement',
+  '/parent-approval',
+  '/opportunities',
+  '/my-applications',
+];
+
+const getDisplayName = (authUser, profile, fallbackRow) => (
+  fallbackRow?.name ||
+  profile?.full_name ||
+  authUser?.user_metadata?.full_name ||
+  authUser?.user_metadata?.name ||
+  authUser?.email?.split('@')?.[0] ||
+  'TeenVerse user'
+);
+
+const buildSessionUser = (authUser, profile, legacy = {}, context = {}) => {
+  const {
+    portalMode = PORTAL_MODES.APP,
+    portalHomePath = null,
+    activeDashboardRole = null,
+  } = context;
+
+  const base = {
+    ...authUser,
+    email: profile?.email || authUser?.email,
+    name: getDisplayName(authUser, profile, legacy.client || legacy.freelancer),
+    profile,
+    profileRole: profile?.role || 'student',
+    portalMode,
+    portalHomePath,
+    availableDashboardRoles: {
+      client: Boolean(legacy.client),
+      freelancer: Boolean(legacy.freelancer),
+    },
+  };
+
+  if (profile?.role === 'admin') {
+    return { ...base, ...legacy.admin, id: authUser.id, type: 'admin' };
+  }
+
+  const freelancer = legacy.freelancer || {};
+  const buildFreelancerSession = () => ({
+    ...base,
+    ...freelancer,
+    id: authUser.id,
+    email: profile?.email || freelancer.email || authUser?.email,
+    name: getDisplayName(authUser, profile, freelancer),
+    type: 'freelancer',
+    activeDashboardRole: DASHBOARD_ROLES.FREELANCER,
+    unlockedSkills: freelancer.unlocked_skills || [],
+  });
+
+  const buildClientSession = (extra = {}) => ({
+    ...base,
+    ...legacy.client,
+    ...extra,
+    id: authUser.id,
+    email: profile?.email || extra.email || legacy.client?.email || authUser?.email,
+    name: extra.name || getDisplayName(authUser, profile, legacy.client),
+    type: 'client',
+    activeDashboardRole: DASHBOARD_ROLES.CLIENT,
+  });
+
+  if (activeDashboardRole === DASHBOARD_ROLES.FREELANCER && legacy.freelancer) {
+    return buildFreelancerSession();
+  }
+
+  if (activeDashboardRole === DASHBOARD_ROLES.CLIENT && legacy.client) {
+    return buildClientSession();
+  }
+
+  return buildFreelancerSession();
+};
+
+const mergeRoleSwitchLegacy = (legacy = {}, switchResult = {}) => ({
+  ...legacy,
+  client: legacy.client || switchResult.client || null,
+  freelancer: legacy.freelancer || switchResult.freelancer || null,
+});
+
+const wait = (ms) => new Promise((resolve) => {
+  window.setTimeout(resolve, ms);
+});
+
+const getRoleSwitchCopy = (targetRole) => {
+  if (targetRole === DASHBOARD_ROLES.CLIENT) {
+    return {
+      title: 'Opening client dashboard',
+      body: 'Your existing account details are being synced into client tools.',
+      from: 'Freelancer',
+      to: 'Client',
+      Icon: Briefcase,
+    };
+  }
+
+  return {
+    title: 'Opening freelancer dashboard',
+    body: 'Your profile is being prepared for services, applications, and portfolio tools.',
+    from: 'Client',
+    to: 'Freelancer',
+    Icon: User,
+  };
+};
+
+const RoleSwitchOverlay = ({ targetRole, stage }) => {
+  if (!targetRole) return null;
+
+  const copy = getRoleSwitchCopy(targetRole);
+  const Icon = copy.Icon;
+  const steps = [
+    { id: 'preparing', label: 'Preparing' },
+    { id: 'syncing', label: 'Syncing' },
+    { id: 'opening', label: 'Opening' },
+  ];
+  const activeIndex = Math.max(0, steps.findIndex((step) => step.id === stage));
+  const progressWidth = `${Math.min(100, ((activeIndex + 1) / steps.length) * 100)}%`;
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/60 px-4 backdrop-blur-xl"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.22, ease: 'easeOut' }}
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <motion.div
+        className="w-full max-w-md rounded-[28px] border border-white/70 bg-white/95 p-6 text-slate-950 shadow-[0_28px_80px_rgba(15,23,42,0.32),_inset_0_2px_4px_rgba(255,255,255,0.75)] dark:border-white/[0.08] dark:bg-slate-950/95 dark:text-white dark:shadow-[0_28px_80px_rgba(0,0,0,0.48),_inset_0_1px_2px_rgba(255,255,255,0.08)]"
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 18, scale: 0.98 }}
+        transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <motion.span
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-[inset_0_2px_4px_rgba(255,255,255,0.22)] dark:bg-white dark:text-slate-950"
+              animate={{ rotate: [0, 180, 360] }}
+              transition={{ duration: 1.25, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <ArrowLeftRight size={21} strokeWidth={2.5} />
+            </motion.span>
+
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                {copy.from} to {copy.to}
+              </p>
+              <h2 className="mt-1 text-xl font-black text-slate-950 dark:text-white">
+                {copy.title}
+              </h2>
+            </div>
+          </div>
+
+          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300">
+            {steps[activeIndex]?.label || 'Working'}
+          </span>
+        </div>
+
+        <div className="mt-6 flex items-center gap-4 rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-300">
+            <Icon size={20} strokeWidth={2.5} />
+          </span>
+          <p className="text-sm font-semibold leading-6 text-slate-600 dark:text-slate-300">
+            {copy.body}
+          </p>
+        </div>
+
+        <div className="mt-6">
+          <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+            <motion.div
+              className="h-full rounded-full bg-slate-950 dark:bg-white"
+              initial={{ width: '12%' }}
+              animate={{ width: progressWidth }}
+              transition={{ duration: 0.32, ease: 'easeOut' }}
+            />
+          </div>
+
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {steps.map((step, index) => {
+              const isDone = index <= activeIndex;
+
+              return (
+                <div
+                  key={step.id}
+                  className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500"
+                >
+                  <span
+                    className={[
+                      'h-2.5 w-2.5 rounded-full transition-colors duration-300',
+                      isDone ? 'bg-slate-950 dark:bg-white' : 'bg-slate-200 dark:bg-slate-800',
+                    ].join(' ')}
+                  />
+                  <span className={isDone ? 'text-slate-700 dark:text-slate-200' : ''}>
+                    {step.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// --- Helper Wrappers ---
 const LegalWrapper = () => {
   const navigate = useNavigate();
   return <TermsAgreement onAgree={() => navigate('/')} />;
@@ -49,22 +325,31 @@ const ParentApprovalWrapper = () => {
         <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">
           <ShieldCheck size={28} />
         </div>
-        <h1 className="text-2xl font-black text-gray-950 dark:text-white">Parent approval</h1>
+
+        <h1 className="text-2xl font-black text-gray-950 dark:text-white">
+          Parent approval
+        </h1>
+
         <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
           Parent approvals are handled in the dedicated parent portal. Continue there to review or approve this request.
         </p>
+
         {token && (
           <p className="mt-4 break-all rounded-xl bg-gray-50 px-3 py-2 text-xs font-mono text-gray-500 dark:bg-white/5 dark:text-gray-400">
             Token: {token}
           </p>
         )}
+
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <button
-            onClick={() => { window.location.href = 'https://parent.teenversehub.in'; }}
+            onClick={() => {
+              window.location.href = PARENT_PORTAL_URL;
+            }}
             className="flex-1 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-indigo-700"
           >
             Open parent portal
           </button>
+
           <button
             onClick={() => navigate('/')}
             className="flex-1 rounded-2xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
@@ -77,54 +362,123 @@ const ParentApprovalWrapper = () => {
   );
 };
 
-// --- 2. Main App Component ---
+const ExternalRedirect = ({ to }) => {
+  useEffect(() => {
+    window.location.href = to;
+  }, [to]);
+
+  return (
+    <div className="h-[100dvh] w-full bg-[#050505] flex items-center justify-center text-indigo-500">
+      <Loader2 className="animate-spin w-10 h-10" />
+    </div>
+  );
+};
+
+// --- Main App Component ---
 export default function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(null);
   const [toast, setToast] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [roleSwitching, setRoleSwitching] = useState(null);
+  const [roleSwitchStage, setRoleSwitchStage] = useState(null);
   const completingPendingSignupRef = useRef(false);
+  const locationRef = useRef(location);
+  const userRef = useRef(null);
+  const lastPageViewKeyRef = useRef(null);
+  const lastSessionSyncKeyRef = useRef(null);
+  const inFlightSessionSyncRef = useRef(null);
+  const dashboardReadyRef = useRef(false);
+  const dashboardReadyResolveRef = useRef(null);
+  const portalMode = getPortalMode();
 
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigateToPortalTarget = useCallback((target, options = {}) => {
+    if (isExternalTarget(target)) {
+      window.location.href = target;
+      return;
+    }
 
-  // ⚡ OPTIMIZATION: Instant Scroll Restoration
+    navigate(target, options);
+  }, [navigate]);
+
+  useEffect(() => {
+    locationRef.current = location;
+  }, [location]);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  // Instant Scroll Restoration
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [location.pathname]);
 
-  // --- SMART ROUTING CROSS-DOMAIN ---
-  const setView = (viewName) => {
-      switch(viewName) {
-          // If a button in the app tries to go to a marketing page, send them back to the Next.js site!
-          case 'home': 
-          case 'about': 
-          case 'about us':
-          case 'faq': 
-          case 'safety': 
-              window.location.href = 'https://teenversehub.in'; 
-              break;
-              
-          // If they try to access parent routes, teleport them to the subdomain
-          case 'parent-login': 
-          case 'parent-dashboard': 
-          case 'parent portal':
-              window.location.href = 'https://parent.teenversehub.in'; 
-              break;
+  useEffect(() => {
+    if (loading) return;
 
-          // Internal App Routing
-          case 'auth': navigate('/'); break; // Auth is now the root page
-          case 'dashboard': navigate(user?.type === 'client' ? '/client-dashboard' : '/dashboard'); break;
-          case 'legal': window.location.href = 'http://teenversehub.in/legal#official-documents'; break;
-          case 'admin': navigate('/admin'); break;
-          default: navigate('/'); 
-      }
+    const pageViewKey = `${portalMode}:${location.pathname}${location.search || ''}`;
+    if (lastPageViewKeyRef.current === pageViewKey) return;
+    lastPageViewKeyRef.current = pageViewKey;
+
+    const currentUser = userRef.current;
+
+    void trackAnalyticsEvent('page_view', {
+      eventType: 'page_view',
+      path: `${location.pathname}${location.search || ''}`,
+      portal: portalMode,
+      metadata: {
+        authenticated: Boolean(currentUser?.id),
+        role: currentUser?.profileRole || null,
+      },
+    });
+  }, [loading, location.pathname, location.search, portalMode]);
+
+  // Smart routing
+  const setView = (viewName) => {
+    switch (viewName) {
+      case 'home':
+      case 'about':
+      case 'about us':
+      case 'faq':
+      case 'safety':
+        window.location.href = 'https://teenversehub.in';
+        break;
+
+      case 'parent-login':
+      case 'parent-dashboard':
+      case 'parent portal':
+        window.location.href = PARENT_PORTAL_URL;
+        break;
+
+      case 'auth':
+        navigate('/');
+        break;
+
+      case 'dashboard':
+        navigateToPortalTarget(getPrimaryDashboardPath(user));
+        break;
+
+      case 'legal':
+        window.location.href = 'http://teenversehub.in/legal#official-documents';
+        break;
+
+      case 'admin':
+        navigate('/admin/dashboard');
+        break;
+
+      default:
+        navigate('/');
+    }
   };
 
   const handleTermsAccepted = useCallback(async () => {
     if (user?.id) {
       const acceptedAt = new Date().toISOString();
       const termsVersion = 'v1.0-TeenVerseHub-Terms';
+
       const { error } = await supabase
         .from('users')
         .update({
@@ -143,43 +497,96 @@ export default function App() {
       }) : prev);
     }
 
-    navigate(user?.type === 'client' ? '/client-dashboard' : '/dashboard');
-  }, [navigate, user?.id, user?.type]);
+    navigateToPortalTarget(getPrimaryDashboardPath(user));
+  }, [navigateToPortalTarget, user]);
 
   // Redirect handling for approval tokens
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const token = params.get('token');
+
     if (token && !location.pathname.includes('/parent-approval')) {
-       navigate(`/parent-approval?token=${token}`);
+      navigate(`/parent-approval?token=${token}`);
     }
   }, [location, navigate]);
 
-  const showToast = useCallback((message, type = 'success') => { 
-      setToast({ message, type });
-      setTimeout(() => setToast(null), 4000); 
+  const showToast = useCallback((message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
   }, []);
 
-  const handleSession = useCallback(async function handleSessionImpl(session, attempts = 0) {
-    const currentPath = location.pathname;
-    
-    // ✅ Auth/Login is now at '/'
-    const isPublic = ['/', '/legal', '/termsagreement', '/parent-approval'].some(path => currentPath === path || currentPath.startsWith(path + '/'));
+  const markDashboardReady = useCallback(() => {
+    dashboardReadyRef.current = true;
+
+    if (dashboardReadyResolveRef.current) {
+      dashboardReadyResolveRef.current();
+      dashboardReadyResolveRef.current = null;
+    }
+  }, []);
+
+  const waitForDashboardReady = useCallback((timeoutMs = 5000) => new Promise((resolve) => {
+    if (dashboardReadyRef.current) {
+      resolve();
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      dashboardReadyResolveRef.current = null;
+      resolve();
+    }, timeoutMs);
+
+    dashboardReadyResolveRef.current = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+  }), []);
+
+  const handleSession = useCallback(async function handleSessionImpl(session) {
+    const currentPath = locationRef.current.pathname;
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
+
+    const isPublic = publicRoutePrefixes.some(
+      (path) => currentPath === path || currentPath.startsWith(path + '/')
+    );
+
     const isTermsPage = currentPath.startsWith('/termsagreement');
 
-    if (!session) {
-      setUser(null);
-      if (!isPublic) navigate('/'); // Boot unauthorized users back to Auth
-      setLoading(false);
-      return;
+    const isInRouteGroup = (prefixes) => prefixes.some(
+      (prefix) => currentPath === prefix || currentPath.startsWith(`${prefix}/`)
+    );
+
+    const redirectToRoleHome = (target, routeGroup) => {
+      if (isTermsPage) return;
+      if (isPublic && currentPath !== '/') return;
+
+      if (isExternalTarget(target)) {
+        window.location.href = target;
+        return;
+      }
+
+      if (currentPath === '/' || !isInRouteGroup(routeGroup)) {
+        navigate(target, { replace: true });
+      }
+    };
+
+      if (!session) {
+        setUser(null);
+
+        if (!isPublic) {
+          navigate('/', { replace: true });
+        }
+
+        setLoading(false);
+        return;
     }
 
     const u = session.user;
 
     try {
       let completedPendingSignup = false;
-      const pendingProfile = getPendingSignupProfile();
-      const pendingMatchesUser = pendingProfile?.email?.toLowerCase?.() === u.email?.toLowerCase?.();
+      const pendingProfile = getPendingSignupProfileForUser(u);
+      const pendingMatchesUser =
+        pendingProfile?.email?.toLowerCase?.() === u.email?.toLowerCase?.();
 
       if (pendingMatchesUser && pendingProfile?.phone && !completingPendingSignupRef.current) {
         completingPendingSignupRef.current = true;
@@ -189,12 +596,15 @@ export default function App() {
             body: buildPendingSignupPayload(pendingProfile),
           });
 
-          if (error || !data?.success) throw new Error(data?.error || 'Profile completion failed');
+          if (error || !data?.success) {
+            throw new Error(data?.error || 'Profile completion failed');
+          }
 
           removePendingSignupProfile();
           completedPendingSignup = true;
         } catch (error) {
           console.warn('Pending signup completion failed:', error);
+
           showToast(
             /phone verification/i.test(error?.message || '')
               ? 'Phone verification expired. Please verify your mobile number again.'
@@ -206,199 +616,439 @@ export default function App() {
         }
       }
 
-      // 1. ADMIN
-      const { data: adminCheck } = await supabase.from('admins').select('*').eq('email', u.email).maybeSingle();
-      if (adminCheck) {
-        setUser({ ...u, type: "admin" });
-        if (currentPath === '/' || (!currentPath.startsWith('/admin') && !isPublic)) {
-            navigate('/admin');
-        }
-        setLoading(false);
-        return;
+      const { profile, legacy } = await ensureIndividualProfile(u);
+
+      if (!profile) {
+        throw new Error('Unable to load or create profile.');
       }
 
-      // 2. CLIENT
-      let { data: c } = await supabase.from('clients').select('*').eq('id', u.id).maybeSingle();
-      if (c?.phone?.length > 5) { 
-          setUser({ ...c, type: 'client' }); 
-          if (completedPendingSignup && !isTermsPage) {
-              navigate('/termsagreement');
-          } else if (currentPath === '/' || (!currentPath.startsWith('/client-dashboard') && !isTermsPage && !isPublic)) {
-              navigate('/client-dashboard');
-          }
-          setLoading(false);
-          return;
-      }
-      if (c) {
-          setUser(null);
-          if (currentPath !== '/') navigate('/');
-          setLoading(false);
-          return;
-      }
+      const preferredDashboardRole = getDashboardRolePreference();
+      const baseRedirectPath = getRedirectPathForPortal({
+        portalMode,
+        profile,
+        legacy,
+      });
+      const finalRedirectPath = getRolePreferredDashboardPath({
+        portalMode,
+        preferredRole: preferredDashboardRole,
+        legacy,
+        fallback: baseRedirectPath,
+      });
 
-      // 3. FREELANCER
-      let { data: f } = await supabase.from('freelancers').select('*').eq('id', u.id).maybeSingle();
-      if (f?.phone?.length > 5) { 
-          const normalized = normalizeExpiredSubscription(f);
-          if (normalized !== f) {
-              try {
-                  const { error: normalizeError } = await supabase.rpc('normalize_freelancer_subscription', { p_user_id: u.id });
-                  if (normalizeError) console.warn('Subscription refresh failed:', normalizeError);
-              } catch (err) {
-                  console.warn('Subscription refresh failed:', err);
-              }
-          }
-          f = normalized;
-          setUser({ ...f, type: 'freelancer', unlockedSkills: f.unlocked_skills || [] });
-          if (completedPendingSignup && !isTermsPage) {
-              navigate('/termsagreement');
-          } else if (currentPath === '/' || (!currentPath.startsWith('/dashboard') && !isTermsPage && !isPublic)) {
-              navigate('/dashboard');
-          }
-          setLoading(false);
-          return;
-      }
-      if (f) {
-          setUser(null);
-          if (currentPath !== '/') navigate('/');
-          setLoading(false);
-          return;
-      }
-        
-      // 4. PARENT (Instantly teleport them to the Parent Portal Subdomain)
       const { data: parentMatch } = await supabase
         .from('parent_consents')
         .select('user_id')
         .eq('parent_email', u.email)
         .maybeSingle();
 
-      if (parentMatch) {
-          window.location.href = 'https://parent.teenversehub.in';
-          return;
+      const parentRedirectPath = PARENT_PORTAL_URL;
+
+      if (import.meta.env.DEV) {
+        console.info('[TeenVerseHub portal routing]', {
+          portalMode,
+          hostname,
+          userEmail: u.email,
+          profileRole: profile.role,
+          businessProfileExists: false,
+          preferredDashboardRole,
+          finalRedirectPath: profile.role === 'guardian' || parentMatch ? parentRedirectPath : finalRedirectPath,
+        });
       }
 
-      // 5. RETRY
-      if (attempts < 3) {
-          setTimeout(() => handleSessionImpl(session, attempts + 1), 1000);
-          return; 
+      if (profile.role === 'guardian' || parentMatch) {
+        window.location.href = parentRedirectPath;
+        return;
       }
 
-      // 6. FALLBACK
-      console.warn("No profile found.");
-      setUser(null); 
-      if (currentPath !== '/') navigate('/');
+      let sessionUser = buildSessionUser(u, profile, legacy, {
+        portalMode,
+        portalHomePath: finalRedirectPath,
+        activeDashboardRole: preferredDashboardRole,
+      });
+
+      if (profile.role === 'student' && legacy.freelancer) {
+        const normalized = normalizeExpiredSubscription(legacy.freelancer);
+
+        if (normalized !== legacy.freelancer) {
+          try {
+            const { error: normalizeError } = await supabase.rpc(
+              'normalize_freelancer_subscription',
+              { p_user_id: u.id }
+            );
+
+            if (normalizeError) {
+              console.warn('Subscription refresh failed:', normalizeError);
+            }
+          } catch (err) {
+            console.warn('Subscription refresh failed:', err);
+          }
+        }
+
+        sessionUser = buildSessionUser(
+          u,
+          profile,
+          {
+            ...legacy,
+            freelancer: normalized,
+          },
+          {
+            portalMode,
+            portalHomePath: finalRedirectPath,
+            activeDashboardRole: preferredDashboardRole,
+          }
+        );
+      }
+
+      setUser(sessionUser);
+
+      if (completedPendingSignup && !isTermsPage) {
+        navigate('/termsagreement', { replace: true });
+      } else {
+        redirectToRoleHome(
+          finalRedirectPath,
+          getRouteGroupForTarget({
+            target: finalRedirectPath,
+          })
+        );
+      }
+
       setLoading(false);
-
     } catch (err) {
-      console.error("Profile Error:", err);
+      console.error('Profile Error:', err);
+      setUser(null);
+
+      if (!isPublic) {
+        navigate('/', { replace: true });
+      }
+
+      showToast('Could not load your profile. Please try again.', 'error');
       setLoading(false);
     }
-  }, [location.pathname, navigate, showToast]);
+  }, [navigate, portalMode, showToast]);
+
+  const getSessionSyncKey = useCallback((session) => {
+    if (!session?.user?.id) {
+      return `signed-out:${portalMode}`;
+    }
+
+    const preferredRole = getDashboardRolePreference() || 'default';
+    const tokenMarker = session.access_token || session.expires_at || 'active';
+    return `${portalMode}:${session.user.id}:${preferredRole}:${tokenMarker}`;
+  }, [portalMode]);
+
+  const syncSessionOnce = useCallback((session, options = {}) => {
+    const key = getSessionSyncKey(session);
+
+    if (!options.force) {
+      if (inFlightSessionSyncRef.current?.key === key) {
+        return inFlightSessionSyncRef.current.promise;
+      }
+
+      if (lastSessionSyncKeyRef.current === key) {
+        return Promise.resolve();
+      }
+    }
+
+    const promise = Promise.resolve(handleSession(session))
+      .then(() => {
+        lastSessionSyncKeyRef.current = key;
+      })
+      .finally(() => {
+        if (inFlightSessionSyncRef.current?.key === key) {
+          inFlightSessionSyncRef.current = null;
+        }
+      });
+
+    inFlightSessionSyncRef.current = { key, promise };
+    return promise;
+  }, [getSessionSyncKey, handleSession]);
 
   // Auth & Session Logic
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      handleSession(session);
-    };
-    checkUser();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      handleSession(session);
+      await syncSessionOnce(session);
+    };
+
+    void checkUser();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      void syncSessionOnce(session);
     });
+
     return () => subscription.unsubscribe();
-  }, [handleSession]);
+  }, [syncSessionOnce]);
 
   // Theme Logic
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        setDarkMode(true);
+
+    if (
+      savedTheme === 'dark' ||
+      (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
+    ) {
+      setDarkMode(true);
     }
   }, []);
 
   useEffect(() => {
     if (darkMode) {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
     } else {
-        document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
     }
   }, [darkMode]);
 
   const toggleTheme = () => setDarkMode(!darkMode);
-  
- if (loading) {
+  const isInternPortal = portalMode === PORTAL_MODES.INTERN;
+
+  const logout = async (message = 'Logged out successfully') => {
+    await supabase.auth.signOut();
+    navigate('/');
+    showToast(message);
+  };
+
+  const handleSwitchDashboardRole = useCallback(async (targetRole) => {
+    if (!user?.id || roleSwitching) return;
+
+    const safeTargetRole = targetRole || getOppositeDashboardRole(user.type);
+    if (safeTargetRole === user.type) return;
+
+    const switchStartedAt = Date.now();
+    dashboardReadyRef.current = false;
+    setRoleSwitching(safeTargetRole);
+    setRoleSwitchStage('preparing');
+
+    try {
+      const switchResult = await ensureDashboardRole(safeTargetRole);
+      setRoleSwitchStage('syncing');
+
+      const { profile, legacy } = await ensureIndividualProfile(user);
+      const mergedLegacy = mergeRoleSwitchLegacy(legacy, switchResult);
+      const targetPath = getRolePreferredDashboardPath({
+        portalMode,
+        preferredRole: safeTargetRole,
+        legacy: mergedLegacy,
+        fallback: safeTargetRole === DASHBOARD_ROLES.CLIENT ? '/client-dashboard' : '/dashboard',
+      });
+      const nextUser = buildSessionUser(user, profile, mergedLegacy, {
+        portalMode,
+        portalHomePath: targetPath,
+        activeDashboardRole: safeTargetRole,
+      });
+
+      setDashboardRolePreference(safeTargetRole);
+      lastSessionSyncKeyRef.current = null;
+      flushSync(() => {
+        setUser(nextUser);
+        setRoleSwitchStage('opening');
+      });
+      navigateToPortalTarget(targetPath, { replace: true });
+
+      const elapsed = Date.now() - switchStartedAt;
+      await Promise.all([
+        wait(Math.max(220, MIN_ROLE_SWITCH_MS - elapsed)),
+        waitForDashboardReady(),
+      ]);
+
+      showToast(
+        safeTargetRole === DASHBOARD_ROLES.CLIENT
+          ? 'Client dashboard unlocked.'
+          : 'Freelancer dashboard unlocked.',
+        'success',
+      );
+    } catch (error) {
+      showToast(error?.message || 'Could not switch dashboard right now.', 'error');
+    } finally {
+      await wait(180);
+      setRoleSwitching(null);
+      setRoleSwitchStage(null);
+    }
+  }, [navigateToPortalTarget, portalMode, roleSwitching, showToast, user, waitForDashboardReady]);
+
+  const dashboardProps = {
+    user,
+    setUser,
+    onLogout: () => logout(),
+    showToast,
+    darkMode,
+    toggleTheme,
+    onSwitchDashboardRole: handleSwitchDashboardRole,
+    roleSwitching,
+    onDashboardReady: markDashboardReady,
+  };
+
+  if (loading) {
     return (
       <div className="h-[100dvh] w-full bg-[#050505] flex items-center justify-center text-indigo-500">
         <Loader2 className="animate-spin w-10 h-10" />
       </div>
     );
- }
+  }
 
   return (
-   <>
+    <>
       <SpeedInsights />
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      
-      <Routes>
-        {/* ✅ ROOT IS NOW AUTH / LOGIN */}
-        <Route path="/" element={
-            <Auth 
-                setView={setView} 
-                onLogin={(msg) => showToast(msg)} 
-                onSessionReady={handleSession}
-            />
-        } />
 
-        {/* Legal & Onboarding */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      <AnimatePresence>
+        {roleSwitching && (
+          <RoleSwitchOverlay
+            targetRole={roleSwitching}
+            stage={roleSwitchStage}
+          />
+        )}
+      </AnimatePresence>
+
+      <Routes>
+        {/* Root login/auth */}
+        <Route
+          path="/"
+          element={
+              <Auth
+                setView={setView}
+                onLogin={(msg) => showToast(msg)}
+                onSessionReady={(session) => syncSessionOnce(session, { force: true })}
+              />
+          }
+        />
+
+        <Route
+          path="/login"
+          element={
+              <Auth
+                key="individual-login"
+                setView={setView}
+                onLogin={(msg) => showToast(msg)}
+                onSessionReady={(session) => syncSessionOnce(session, { force: true })}
+                initialMode="login"
+                signupRole="freelancer"
+                lockSignupRole
+            />
+          }
+        />
+
+        <Route
+          path="/signup"
+          element={
+              <Auth
+                key="individual-signup"
+                setView={setView}
+                onLogin={(msg) => showToast(msg)}
+                onSessionReady={(session) => syncSessionOnce(session, { force: true })}
+                initialMode="signup"
+                signupRole="freelancer"
+                lockSignupRole
+            />
+          }
+        />
+
+        <Route path="/individual/login" element={<Navigate to="/login" replace />} />
+        <Route path="/individual/signup" element={<Navigate to="/signup" replace />} />
+
+        {/* Legal & parent approval */}
         <Route path="/legal" element={<LegalWrapper />} />
         <Route path="/termsagreement" element={<TermsAgreement onAgree={handleTermsAccepted} />} />
         <Route path="/parent-approval" element={<ParentApprovalWrapper />} />
 
-        {/* Secure Dashboards */}
-        <Route path="/admin" element={
+        <Route
+          path="/opportunities"
+          element={<PublicOpportunityList portalMode={portalMode} />}
+        />
+
+        <Route
+          path="/opportunities/:id"
+          element={<OpportunityDetailApply user={user} portalMode={portalMode} />}
+        />
+
+        <Route
+          path="/my-applications"
+          element={
+            user?.id
+              ? <MyOpportunityApplications userId={user.id} />
+              : <Navigate to="/login" replace />
+          }
+        />
+
+        {/* Admin dashboard */}
+        <Route
+          path="/admin"
+          element={
+            user?.profileRole === 'admin'
+              ? <Navigate to="/admin/dashboard" replace />
+              : <Navigate to="/" replace />
+          }
+        />
+
+        <Route
+          path="/admin/dashboard/*"
+          element={
             user?.type === 'admin' ? (
-                <AdminDashboard 
-                    user={user} 
-                    onLogout={async () => { await supabase.auth.signOut(); navigate('/'); showToast('Logged out'); }} 
-                />
-            ) : <Navigate to="/" />
-        } />
+              <AdminDashboard
+                user={user}
+                onLogout={() => logout('Logged out')}
+              />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
 
-        <Route path="/client-dashboard/*" element={
-            user?.type === 'client' ? (
-                <ClientDashboard 
-                    user={user} 
-                    setUser={setUser} 
-                    onLogout={async () => { await supabase.auth.signOut(); navigate('/'); showToast('Logged out successfully'); }} 
-                    showToast={showToast} 
-                    darkMode={darkMode} 
-                    toggleTheme={toggleTheme} 
-                />
-            ) : user?.type === 'freelancer' ? <Navigate to="/dashboard" /> : <Navigate to="/" />
-        } />
+        {/* Client dashboard stays on the app portal. Intern users redirect externally when needed. */}
+        <Route
+          path="/client-dashboard/*"
+          element={
+            isInternPortal && user?.type === 'client' ? (
+              <ExternalRedirect to={`${PORTAL_URLS.app}/client-dashboard`} />
+            ) : user?.type === 'client' ? (
+              <ClientDashboard {...dashboardProps} />
+            ) : user?.type === 'freelancer' ||
+              user?.profileRole === 'student' ||
+              user?.profileRole === 'intern' ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
 
-        <Route path="/dashboard/*" element={
-            user?.type === 'client' ? (
-                <Navigate to="/client-dashboard" />
-            ) : user?.type === 'freelancer' ? (
-                <Dashboard 
-                    user={user} 
-                    setUser={setUser} 
-                    onLogout={async () => { await supabase.auth.signOut(); navigate('/'); showToast('Logged out successfully'); }} 
-                    showToast={showToast} 
-                    darkMode={darkMode} 
-                    toggleTheme={toggleTheme} 
-                />
-            ) : <Navigate to="/" />
-        } />
+        {/* Shared /dashboard route: individual dashboard on app/intern. */}
+        <Route
+          path="/dashboard/*"
+          element={
+            user?.profileRole === 'guardian' ? (
+              <ExternalRedirect to={PARENT_PORTAL_URL} />
+            ) : user?.type === 'client' ? (
+              <Navigate to="/client-dashboard" replace />
+            ) : user?.type === 'freelancer' ||
+              user?.profileRole === 'student' ||
+              user?.profileRole === 'intern' ? (
+              <Dashboard {...dashboardProps} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
 
         {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
       <PlatformAIAssistant user={user} showToast={showToast} />
-   </>
+    </>
   );
 }

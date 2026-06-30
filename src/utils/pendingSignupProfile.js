@@ -1,4 +1,5 @@
 export const PENDING_SIGNUP_PROFILE_KEY = 'teenverse_pending_signup_profile';
+export const SIGNUP_PROFILE_METADATA_KEY = 'signup_profile';
 
 const getBrowserStorage = () => {
   if (typeof window === 'undefined') return null;
@@ -20,6 +21,33 @@ export const getPendingSignupProfile = () => {
     storage.removeItem(PENDING_SIGNUP_PROFILE_KEY);
     return null;
   }
+};
+
+const getMetadataSignupProfile = (user) => {
+  const profile = user?.user_metadata?.[SIGNUP_PROFILE_METADATA_KEY];
+  if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return null;
+
+  const userEmail = String(user?.email || '').trim().toLowerCase();
+  const profileEmail = String(profile.email || '').trim().toLowerCase();
+
+  if (userEmail && profileEmail && userEmail !== profileEmail) return null;
+
+  return {
+    ...profile,
+    email: userEmail || profileEmail,
+  };
+};
+
+export const getPendingSignupProfileForUser = (user) => {
+  const storedProfile = getPendingSignupProfile();
+  const userEmail = String(user?.email || '').trim().toLowerCase();
+  const storedEmail = String(storedProfile?.email || '').trim().toLowerCase();
+
+  if (storedProfile && (!userEmail || storedEmail === userEmail)) {
+    return storedProfile;
+  }
+
+  return getMetadataSignupProfile(user);
 };
 
 export const setPendingSignupProfile = (profile) => {

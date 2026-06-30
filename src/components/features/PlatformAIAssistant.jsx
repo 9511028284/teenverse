@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../supabase';
 import { getEffectivePlanName } from '../../utils/subscription';
+import { logAiUsage } from '../../services/auxiliary.api';
 
 const STATIC_QUICK_PROMPTS = [
   'Why can I not apply to this job?',
@@ -294,6 +295,18 @@ const PlatformAIAssistant = ({ user, showToast }) => {
       }
 
       const answer = data?.data?.answer || data?.data?.message || 'I could not generate a useful answer. Please try again.';
+      const usage = data?.data?.usage || {};
+      void logAiUsage({
+        feature: 'platform_ai_assistant',
+        model: data?.data?.model,
+        input_tokens: usage.input_tokens || usage.prompt_tokens || 0,
+        output_tokens: usage.output_tokens || usage.completion_tokens || 0,
+        metadata: {
+          provider: data?.data?.provider,
+          plan,
+          route: location.pathname,
+        },
+      });
       
       // Parse the response to split the core response text from suggested follow-ups
       const parsed = parseAiResponse(answer);

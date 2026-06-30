@@ -1,0 +1,18 @@
+name = "teenverse-aux-worker"
+main = "src/index.ts"
+compatibility_date = "2026-06-18"
+
+[[d1_databases]]
+      "binding": "teenverse_aux"
+      "database_name": "teenverse_aux"
+      "database_id": "33d32454-adcc-4947-b20f-cda92108112c"
+
+
+[[kv_namespaces]]
+"binding": "RATE_LIMIT_KV"
+      "id": "436054bdf4e046e8b201179c33f0951a"
+
+[vars]
+SUPABASE_URL = "https://bjxmxihjcbgieaohqipw.supabase.co"
+SUPABASE_JWT_ISSUER = "https://bjxmxihjcbgieaohqipw.supabase.co/auth/v1"
+ALLOWED_ORIGINS = "https://app.teenversehub.in,https://intern.teenversehub.in,https://business.teenversehub.in,http://localhost:5173,http://localhost:5174"

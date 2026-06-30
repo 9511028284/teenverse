@@ -875,12 +875,30 @@ const ClientContent = ({ user, setUser, showToast, logic }) => {
 };
 
 // ─── MASTER DASHBOARD COMPONENT EXPORT ────────────────────────────────────────
-export const ClientDashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
+export const ClientDashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme, initialTab, onSwitchDashboardRole, roleSwitching, onDashboardReady }) => {
   const logic = useDashboardLogic(user, setUser, showToast);
   const { state, setters } = logic;
+  const { setTab } = setters;
+  const initialTabAppliedRef = React.useRef(false);
   const activeNav = clientNav.find((item) => item.id === state.tab) || clientNav[0];
 
+  React.useEffect(() => {
+    if (!initialTab || initialTabAppliedRef.current) return;
+    initialTabAppliedRef.current = true;
+    setTab(initialTab);
+  }, [initialTab, setTab]);
+
+  React.useEffect(() => {
+    if (!state.isLoading) onDashboardReady?.();
+  }, [state.isLoading, onDashboardReady]);
+
   if (state.isLoading) {
+    if (roleSwitching) {
+      return (
+        <div className="h-screen bg-[#F4F6FA] dark:bg-[#070A14]" aria-hidden="true" />
+      );
+    }
+
     return (
       <div className="flex h-screen items-center justify-center bg-[#F4F6FA] text-slate-900 dark:bg-[#070A14] dark:text-white select-none">
         <div className="text-center space-y-4">
@@ -918,6 +936,8 @@ export const ClientDashboard = ({ user, setUser, onLogout, showToast, darkMode, 
         energy={state.energy}
         jobsCount={state.jobs.length}
         applicationsCount={state.applications.length}
+        onSwitchDashboardRole={onSwitchDashboardRole}
+        roleSwitching={roleSwitching}
       />
 
       <main className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden box-border">

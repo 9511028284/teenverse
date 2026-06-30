@@ -38,7 +38,7 @@ const pageVariants = {
 };
 const pageTransition = { type: "tween", ease: "easeInOut", duration: 0.35 };
 
-const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }) => {
+const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme, onSwitchDashboardRole, roleSwitching, onDashboardReady }) => {
   const logic = useDashboardLogic(user, setUser, showToast);
   const { state, setters, actions } = logic;
   const { setActiveChat, setTab } = setters;
@@ -50,6 +50,10 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
       SAFE_QUIZZES, profileCardRef, isQuizLoading,
       reportModal, notificationPermission
   } = state;
+
+  React.useEffect(() => {
+    if (!isLoading) onDashboardReady?.();
+  }, [isLoading, onDashboardReady]);
 
   const getTabIcon = () => {
     const icons = {
@@ -70,6 +74,12 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
 
   // --- EDITORIAL CLAY-GLASS LOADING SCREEN ---
   if (isLoading) {
+    if (roleSwitching) {
+      return (
+        <div className="h-screen bg-[#F4F6FA] dark:bg-[#070A14]" aria-hidden="true" />
+      );
+    }
+
     return (
         <motion.div initial={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex h-screen items-center justify-center bg-[#F8FAFC] dark:bg-[#070A14]">
           <div className="flex flex-col items-center gap-6 relative px-4 text-center">
@@ -104,6 +114,8 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme }
         menuOpen={menuOpen} setMenuOpen={setters.setMenuOpen} zenMode={zenMode} setZenMode={setters.setZenMode}
         tab={tab} setTab={setters.setTab} onLogout={onLogout} energy={energy}
         jobsCount={jobs.length} applicationsCount={applications.length}
+        onSwitchDashboardRole={onSwitchDashboardRole}
+        roleSwitching={roleSwitching}
       />
 
       <main className="flex-1 flex flex-col min-w-0 relative z-10">

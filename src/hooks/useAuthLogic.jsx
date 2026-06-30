@@ -2,7 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { setRememberedSessionPreference, supabase } from '../supabase'; 
 import { PASSWORD_SECURITY_ERROR, getPasswordSecurityStatus } from '../utils/passwordSecurity';
 import { isValidEmail, normalizeIndianPhone, toMsg91Identifier } from '../utils/validators';
-import { getPendingSignupProfile, removePendingSignupProfile, setPendingSignupProfile } from '../utils/pendingSignupProfile';
+import {
+  getPendingSignupProfileForUser,
+  removePendingSignupProfile,
+  setPendingSignupProfile,
+  SIGNUP_PROFILE_METADATA_KEY,
+} from '../utils/pendingSignupProfile';
 
 // Safe environment boundary extractions with clean short-circuits
 const CLOUDFLARE_SITE_KEY = typeof window !== 'undefined' ? (import.meta.env.VITE_CLOUDFLARE_SITE_KEY || null) : null;
@@ -29,10 +34,14 @@ const buildSignupPayload = (source = {}) => {
   };
 };
 
-export const useAuthLogic = (onLogin, onSessionReady) => {
+export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
+  const lockedSignupRole = options.lockSignupRole ? (options.signupRole || 'freelancer') : null;
+  const defaultViewMode = options.initialMode === 'signup' ? 'signup' : 'login';
+  const defaultSignupStep = defaultViewMode === 'signup' && lockedSignupRole ? 2 : 1;
+
   // ─── CORE VIEW STATE MACHINERY ─────────────────────────────────────────────
-  const [viewMode, setViewMode] = useState('login');
-  const [step, setStep] = useState(1);
+  const [viewMode, setViewMode] = useState(defaultViewMode);
+  const [step, setStep] = useState(defaultSignupStep);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -61,7 +70,7 @@ export const useAuthLogic = (onLogin, onSessionReady) => {
 
   // Consolidated Onboarding Identity Object Schema
   const [formData, setFormData] = useState({
-    role: 'freelancer', email: '', password: '', name: '', phone: '', 
+    role: lockedSignupRole || 'freelancer', email: '', password: '', name: '', phone: '',
     nationality: 'India', source: '', dob: '', gender: 'Male', org: '', 
     referralCode: ''
   });
@@ -203,7 +212,7 @@ export const useAuthLogic = (onLogin, onSessionReady) => {
       if (freelancerData?.phone?.length > 5 || clientData?.phone?.length > 5) {
          onLogin(`Welcome back!`);
       } else {
-         const pendingProfile = getPendingSignupProfile();
+         const pendingProfile = getPendingSignupProfileForUser(user);
 
          const pendingMatchesUser = pendingProfile?.email?.toLowerCase?.() === user.email?.toLowerCase?.();
 
@@ -229,6 +238,7 @@ export const useAuthLogic = (onLogin, onSessionReady) => {
                  ...prev,
                  ...pendingProfile,
                  email: user.email || pendingProfile.email || '',
+                 role: lockedSignupRole || pendingProfile.role || prev.role,
                }));
                setIsPhoneVerified(false);
                if (pendingProfile?.dob) {
@@ -250,12 +260,12 @@ export const useAuthLogic = (onLogin, onSessionReady) => {
          }
 
          setSocialUser(user);
-         setFormData(prev => ({ 
+         setFormData(prev => ({
            ...prev, 
            ...(pendingMatchesUser ? pendingProfile : {}),
            email: user.email || pendingProfile?.email || '', 
            name: pendingProfile?.name || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || '', 
-           role: pendingProfile?.role || 'freelancer' 
+           role: lockedSignupRole || pendingProfile?.role || 'freelancer'
          }));
          if (pendingMatchesUser && pendingProfile?.phone) {
            setIsPhoneVerified(await checkPhoneVerification(pendingProfile.phone));
@@ -269,15 +279,17 @@ export const useAuthLogic = (onLogin, onSessionReady) => {
            setAge(calculatedAge);
          }
          setViewMode('signup');
-         setStep(pendingMatchesUser ? 4 : 1); 
+         setStep(pendingMatchesUser ? 4 : lockedSignupRole ? 3 : 1);
       }
     } catch {
       showToast("Session redirection fault encountered.");
     }
-  }, [checkPhoneVerification, onLogin, showToast]);
+  }, [checkPhoneVerification, lockedSignupRole, onLogin, showToast]);
 
   // ─── AUTH INTERLOCK EVENTS ──────────────────────────────────────────────────
   useEffect(() => {
+    if (onSessionReady) return undefined;
+
     const checkActiveSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) handleAuthRedirect(session.user);
@@ -290,7 +302,7 @@ export const useAuthLogic = (onLogin, onSessionReady) => {
       }
     });
     return () => subscription.unsubscribe();
-  }, [handleAuthRedirect, viewMode]);
+  }, [handleAuthRedirect, onSessionReady, viewMode]);
 
   // Clear toast memory cleanly
   useEffect(() => {
@@ -316,6 +328,27 @@ export const useAuthLogic = (onLogin, onSessionReady) => {
             showToast(error.message || "Enter a valid mobile number.");
         }
     }
+  };
+
+  const handleBack = () => {
+    if (lockedSignupRole && step <= 2) {
+      setViewMode('login');
+      setStep(defaultSignupStep);
+      return;
+    }
+
+    setStep(s => Math.max(1, s - 1));
+  };
+
+  const goToSignup = () => {
+    setFormData(prev => ({ ...prev, role: lockedSignupRole || prev.role || 'freelancer' }));
+    setViewMode('signup');
+    setStep(lockedSignupRole ? 2 : 1);
+  };
+
+  const goToLogin = () => {
+    setViewMode('login');
+    setStep(defaultSignupStep);
   };
 
   const handleFinalSubmit = async () => {
@@ -366,7 +399,12 @@ export const useAuthLogic = (onLogin, onSessionReady) => {
         const { data, error } = await supabase.auth.signUp({
             email: formData.email, password: formData.password,
             options: { 
-                data: { full_name: formData.name, role: formData.role, device_fingerprint: deviceMeta },
+                data: {
+                  full_name: formData.name,
+                  role: formData.role,
+                  device_fingerprint: deviceMeta,
+                  [SIGNUP_PROFILE_METADATA_KEY]: signupPayload,
+                },
                 captchaToken, emailRedirectTo: window.location.origin
             } 
         });
@@ -603,13 +641,14 @@ export const useAuthLogic = (onLogin, onSessionReady) => {
       showResetVerify, resetOtp, newPassword, agreedToTerms,
       captchaToken, rememberMe, socialUser, isPhoneVerified,
       phoneOtpSent, phoneOtp, phoneOtpReqId,
-      otpLoading, otpAction, formData, age, CLOUDFLARE_SITE_KEY
+      otpLoading, otpAction, formData, age, CLOUDFLARE_SITE_KEY,
+      lockedSignupRole
     },
     refs: { turnstileRef },
     actions: {
       setViewMode, setStep, setResetOtp, setShowResetVerify, setNewPassword, setAgreedToTerms,
       setCaptchaToken, setRememberMe, setPhoneOtp, updateField, showToast, setIsPhoneVerified, setVerificationSent,
-      handleNext, handleBack: () => setStep(s => s - 1), 
+      handleNext, handleBack, goToSignup, goToLogin,
       handleFinalSubmit, handleSendPhoneOtp, handleRetryPhoneOtp, handleVerifyPhoneOtp, 
       handleForgotPassword, handleVerifyResetOTP, handleUpdatePassword,
       handleGoogleCredentialResponse, handleGithubLogin,

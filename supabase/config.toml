@@ -562,3 +562,18 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/fund-escrow-with-wallet/deno.json"
 entrypoint = "./functions/fund-escrow-with-wallet/index.ts"
+
+[functions.switch-dashboard-role]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/switch-dashboard-role/index.ts"
+
+[functions.admin-review-actions]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/admin-review-actions/index.ts"
+
+[functions.sync-opportunity-cache]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/sync-opportunity-cache/index.ts"

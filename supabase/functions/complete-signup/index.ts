@@ -17,6 +17,10 @@ function cleanText(value: unknown, maxLength = 120) {
   return String(value || "").trim().slice(0, maxLength);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function makeReferralCode(name: string) {
   const seed = cleanText(name, 24).split(/\s+/)[0]?.replace(/[^a-z0-9]/gi, "").toUpperCase() || "TVH";
   const suffix = crypto.getRandomValues(new Uint16Array(1))[0] % 9000 + 1000;
@@ -29,10 +33,18 @@ Deno.serve(async (req: Request) => {
 
   try {
     const user = await getAuthenticatedUser(req);
-    const body = await req.json();
+    const requestBody = await req.json();
+    const userMetadata = isRecord(user.user_metadata) ? user.user_metadata : {};
+    const storedSignupProfile = isRecord(userMetadata.signup_profile)
+      ? userMetadata.signup_profile
+      : {};
+    const body = {
+      ...storedSignupProfile,
+      ...(isRecord(requestBody) ? requestBody : {}),
+    };
     const role = String(body.role || "").trim();
     const name = cleanText(body.name);
-    const email = cleanText(body.email || user.email || "", 254).toLowerCase();
+    const email = cleanText(user.email || "", 254).toLowerCase();
     const phone = normalizeIndianPhone(body.phone);
     const nationality = cleanText(body.nationality || "India", 64);
     const source = cleanText(body.source, 80);
@@ -47,6 +59,26 @@ Deno.serve(async (req: Request) => {
 
     const supabaseAdmin = getSupabaseAdmin();
     const nowIso = new Date().toISOString();
+
+    const finalizeSignup = async () => {
+      const { error: consumeError } = await supabaseAdmin
+        .from("phone_otp_verifications")
+        .update({ consumed_by: user.id, consumed_at: nowIso })
+        .eq("phone", phone);
+
+      if (consumeError) console.error("complete-signup: phone verification cleanup failed", consumeError);
+
+      if (userMetadata.signup_profile) {
+        const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+          user_metadata: {
+            ...userMetadata,
+            signup_profile: null,
+          },
+        });
+
+        if (metadataError) console.error("complete-signup: signup metadata cleanup failed", metadataError);
+      }
+    };
 
     const { data: verifiedPhone, error: verificationError } = await supabaseAdmin
       .from("phone_otp_verifications")
@@ -108,10 +140,7 @@ Deno.serve(async (req: Request) => {
 
       if (error) throw error;
 
-      await supabaseAdmin
-        .from("phone_otp_verifications")
-        .update({ consumed_by: user.id, consumed_at: nowIso })
-        .eq("phone", phone);
+      await finalizeSignup();
 
       return json({ success: true, role, profile: data });
     }
@@ -127,10 +156,7 @@ Deno.serve(async (req: Request) => {
 
     if (error) throw error;
 
-    await supabaseAdmin
-      .from("phone_otp_verifications")
-      .update({ consumed_by: user.id, consumed_at: nowIso })
-      .eq("phone", phone);
+    await finalizeSignup();
 
     return json({ success: true, role, profile: data });
   } catch (error) {

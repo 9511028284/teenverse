@@ -409,7 +409,7 @@ export const LoginView = memo(({ state, actions, turnstileRef }) => {
           </motion.div>
            
           <motion.div variants={itemVariants} className="text-center text-xs text-neutral-500 dark:text-zinc-400 mt-6 select-none box-border">
-             Don’t have an account? <button type="button" onClick={() => actions.setViewMode('signup')} className="font-bold text-indigo-600 dark:text-zinc-400 hover:text-indigo-700 dark:hover:text-zinc-200 transition-colors">Sign up</button>
+             Don’t have an account? <button type="button" onClick={actions.goToSignup} className="font-bold text-indigo-600 dark:text-zinc-400 hover:text-indigo-700 dark:hover:text-zinc-200 transition-colors">Sign up</button>
           </motion.div>
         </motion.form>
       </div>
@@ -436,16 +436,16 @@ export const SignupView = memo(({ state, actions, turnstileRef }) => {
       <div className="flex flex-col justify-center px-6 py-12 sm:px-16 lg:px-24 xl:px-32 relative z-10 box-border overflow-hidden">
         <div className="w-full max-w-sm mx-auto box-border relative flex flex-col min-h-[480px]">
           
-          <button type="button" onClick={step > 1 ? actions.handleBack : () => actions.setViewMode('login')} className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-neutral-900 dark:hover:text-zinc-200 transition-colors mb-6 border-none bg-transparent p-0 outline-none box-border w-fit">
+          <button type="button" onClick={step > 1 ? actions.handleBack : actions.goToLogin} className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-neutral-900 dark:hover:text-zinc-200 transition-colors mb-6 border-none bg-transparent p-0 outline-none box-border w-fit">
               <ArrowLeft size={13} /> Back
           </button>
 
-          {step > 1 && <StepBar step={step} />}
+          {step > 1 && <StepBar step={state.lockedSignupRole ? step - 1 : step} total={state.lockedSignupRole ? 3 : 4} />}
 
           <div className="relative flex-1 w-full box-border">
             <AnimatePresence mode="popLayout" initial={false} custom={direction}>
                 {/* STEP 1: PATH CHOICE */}
-                {step === 1 && (
+                {step === 1 && !state.lockedSignupRole && (
                     <motion.div key="step1" custom={direction} variants={stepVariants} initial="enter" animate="center" exit="exit" className="space-y-5 box-border w-full">
                         <div className="space-y-1 box-border">
                             <h2 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-zinc-50" style={serif}>Choose your path.</h2>
@@ -485,7 +485,7 @@ export const SignupView = memo(({ state, actions, turnstileRef }) => {
                 {step === 2 && !socialUser && (
                     <motion.div key="step2" custom={direction} variants={stepVariants} initial="enter" animate="center" exit="exit" className="space-y-4 box-border w-full">
                         <div className="space-y-1 box-border">
-                            <h2 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-zinc-50" style={serif}>Credentials.</h2>
+                            <h2 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-zinc-50" style={serif}>{state.lockedSignupRole ? 'Individual credentials.' : 'Credentials.'}</h2>
                             <p className="text-xs text-neutral-400 dark:text-zinc-500 leading-relaxed">Enter your email and create a secure password.</p>
                         </div>
                         
