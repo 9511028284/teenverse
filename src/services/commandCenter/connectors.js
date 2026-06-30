@@ -29,7 +29,16 @@ const fetchWithPolicy = async (url, options = {}, policy = {}) => {
         await wait(Math.min(retryAfter * 1000, 10000));
         continue;
       }
-      if (!response.ok) throw new Error(`Connector returned HTTP ${response.status}`);
+      if (!response.ok) {
+        let message = `Connector returned HTTP ${response.status}`;
+        try {
+          const payload = await response.json();
+          if (payload?.error) message = String(payload.error);
+        } catch {
+          // Keep the status-based message when the connector does not return JSON.
+        }
+        throw new Error(message);
+      }
       return response;
     } catch (error) {
       lastError = error;
@@ -86,8 +95,8 @@ class CommandCenterConnector {
     if (this.id === 'supabase') return { id: this.id, status: 'healthy', latencyMs: null, message: 'Connected through the native authenticated Supabase client.' };
     const startedAt = performance.now();
     try {
-      await this.request('/health', {}, 10000);
-      return { id: this.id, status: 'healthy', latencyMs: Math.round(performance.now() - startedAt), message: 'Connector is responding.' };
+      const result = await this.request('/health', {}, 10000);
+      return { id: this.id, status: 'healthy', latencyMs: Math.round(performance.now() - startedAt), message: result?.message || 'Connector is responding.' };
     } catch (error) {
       return { id: this.id, status: 'error', latencyMs: Math.round(performance.now() - startedAt), message: error.message };
     }
