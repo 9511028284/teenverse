@@ -4,6 +4,7 @@ import {
   jsonResponse,
   type RouteContext,
 } from '../db';
+import { getMetaAnalytics } from '../meta';
 
 type SummaryRow = {
   total: number;
@@ -143,6 +144,7 @@ export const handleCommandCenterMetrics = async (
     archiveSummary,
     deployments,
     vercel,
+    meta,
   ] = await Promise.all([
     env.AUX_DB.prepare(`
       select count(*) as total,
@@ -199,6 +201,7 @@ export const handleCommandCenterMetrics = async (
       from platform_deployments order by created_at desc limit 20
     `).all<Record<string, string | null>>(),
     probeVercel(env.VERCEL_PRODUCTION_URL),
+    getMetaAnalytics(env, range),
   ]);
 
   const requestCf = request.cf;
@@ -231,6 +234,7 @@ export const handleCommandCenterMetrics = async (
       blockedRequests: Number(rateLimitSummary?.blocked || 0),
     },
     archives: archiveSummary || {},
+    meta,
     infrastructure: {
       d1Status: 'healthy',
       d1LatencyMs: Math.round(performance.now() - d1StartedAt),
@@ -239,5 +243,30 @@ export const handleCommandCenterMetrics = async (
       vercel,
       deployments: rows(deployments),
     },
+  }, { status: 200 }, context.corsHeaders);
+};
+
+export const handleMetaHealth = async (
+  request: Request,
+  context: RouteContext,
+) => {
+  const role = await requireStaffRole(request, context);
+  if (!role) return errorResponse('Staff access required.', 403, context.corsHeaders);
+
+  const meta = await getMetaAnalytics(context.env);
+  if (meta.status === 'not_configured') {
+    return errorResponse(meta.message, 503, context.corsHeaders);
+  }
+  if (meta.status === 'error') {
+    return errorResponse(meta.message, 502, context.corsHeaders);
+  }
+
+  return jsonResponse({
+    success: true,
+    status: meta.status,
+    message: meta.message,
+    facebookPages: meta.facebook.pages,
+    instagramAccounts: meta.instagram.accounts,
+    cached: meta.cached,
   }, { status: 200 }, context.corsHeaders);
 };

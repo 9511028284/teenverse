@@ -7,6 +7,9 @@ compatibility_flags = ["nodejs_compat"]
 enabled = true
 head_sampling_rate = 1
 
+[secrets]
+required = ["INTERNAL_WORKER_SECRET", "META_GRAPH_ACCESS_TOKEN", "SUPABASE_ANON_KEY"]
+
 [[d1_databases]]
 binding = "AUX_DB"
 database_name = "teenverse_aux"

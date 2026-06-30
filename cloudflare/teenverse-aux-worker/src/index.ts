@@ -14,7 +14,7 @@ import {
   handleWebhookPayloadArchive,
 } from './routes/archive';
 import { handleAiUsage } from './routes/ai';
-import { handleCommandCenterMetrics } from './routes/commandCenter';
+import { handleCommandCenterMetrics, handleMetaHealth } from './routes/commandCenter';
 import { handleFeedbackMessage } from './routes/feedback';
 import {
   handleOpportunityCacheDelete,
@@ -72,6 +72,10 @@ const routeRequest = async (request: Request, env: Env) => {
 
   if (request.method === 'GET' && path === '/v1/command-center/metrics') {
     return handleCommandCenterMetrics(request, context);
+  }
+
+  if (request.method === 'GET' && path === '/v1/meta/health') {
+    return handleMetaHealth(request, context);
   }
 
   if (request.method === 'POST' && path === '/v1/rate-limit/event') {

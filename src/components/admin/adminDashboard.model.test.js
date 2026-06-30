@@ -59,6 +59,28 @@ test('maps Cloudflare telemetry into the consolidated marketing view', () => {
   assert.ok(model.charts.some((chart) => chart.title === 'Top Website Paths'));
 });
 
+test('maps Meta Graph telemetry into the consolidated marketing view', () => {
+  const telemetrySnapshot = {
+    ...snapshot,
+    externalTelemetry: {
+      meta: {
+        status: 'healthy',
+        facebook: { followers: 80 },
+        instagram: {
+          followers: 120,
+          latestDailyReach: 45,
+          daily: [{ label: '2026-06-30', value: 45 }],
+        },
+      },
+    },
+  };
+  const model = buildDashboardModel('marketing', telemetrySnapshot, [], 'marketing');
+  assert.equal(model.metrics.find((item) => item.label === 'Meta Followers').value, 200);
+  assert.equal(model.metrics.find((item) => item.label === 'IG Daily Reach').value, 45);
+  assert.ok(model.charts.some((chart) => chart.title === 'Social Audience'));
+  assert.ok(model.charts.some((chart) => chart.title === 'Instagram Reach'));
+});
+
 test('keeps navigation concise and non-duplicative', () => {
   assert.equal(DASHBOARDS.length, 12);
   assert.equal(new Set(DASHBOARDS.map((dashboard) => dashboard.model)).size, 12);

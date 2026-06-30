@@ -95,11 +95,12 @@ class CommandCenterConnector {
 }
 
 const AUX_WORKER_URL = import.meta.env.VITE_AUX_WORKER_URL || 'https://teenverse-aux-worker.teenversehub.workers.dev';
+const META_WORKER_URL = `${AUX_WORKER_URL.replace(/\/$/, '')}/v1/meta`;
 
 const definitions = [
-  ['meta', 'Meta Graph API', 'VITE_META_CONNECTOR_URL', 'Social reach, engagement, reels, stories, and campaigns'],
-  ['instagram', 'Instagram Insights', 'VITE_INSTAGRAM_CONNECTOR_URL', 'Audience growth and content performance'],
-  ['facebook', 'Facebook Insights', 'VITE_FACEBOOK_CONNECTOR_URL', 'Page and campaign performance'],
+  ['meta', 'Meta Graph API', 'VITE_META_CONNECTOR_URL', 'Social reach, engagement, reels, stories, and campaigns', META_WORKER_URL],
+  ['instagram', 'Instagram Insights', 'VITE_INSTAGRAM_CONNECTOR_URL', 'Audience growth and content performance', META_WORKER_URL],
+  ['facebook', 'Facebook Insights', 'VITE_FACEBOOK_CONNECTOR_URL', 'Page and campaign performance', META_WORKER_URL],
   ['ga4', 'Google Analytics 4', 'VITE_GA4_CONNECTOR_URL', 'Visitors, sessions, traffic, and funnels'],
   ['clarity', 'Microsoft Clarity', 'VITE_CLARITY_CONNECTOR_URL', 'Heatmaps, recordings, and UX friction'],
   ['vercel', 'Vercel Analytics', 'VITE_VERCEL_ANALYTICS_CONNECTOR_URL', 'Web vitals and deployment analytics', AUX_WORKER_URL],

@@ -147,19 +147,25 @@ const founderModel = (snapshot, liveRows = []) => {
 const marketingModel = (snapshot) => {
   const c = common(snapshot);
   const web = snapshot.externalTelemetry?.web;
+  const meta = snapshot.externalTelemetry?.meta;
+  const metaConnected = meta?.status === 'healthy';
+  const metaFollowers = metaConnected
+    ? number(meta.facebook?.followers) + number(meta.instagram?.followers)
+    : null;
   const acquisition = [...(c.data.freelancers || []), ...(c.data.clients || [])];
   const signups = acquisition.length;
   const previousSignups = number(snapshot.previousRangeCounts?.freelancers) + number(snapshot.previousRangeCounts?.clients);
   const channels = groupCount(acquisition, 'source').map((item) => ({ id: item.label, channel: item.label, signups: item.value, conversion: null, revenue: null, cac: null, roi: null }));
   return {
-    description: 'Acquisition channel performance using real signup attribution. Ad spend and visitor tracking require campaign integrations.',
-    metrics: [web ? metric('Visitors', web.visitors) : unavailable('Visitors'), web ? metric('Tracked Events', web.events) : unavailable('Tracked Events'), metric('Attributed Signups', signups, 'number', 'Compared with the previous period', periodChange(signups, previousSignups)), unavailable('CAC', 'currency'), unavailable('CPA', 'currency'), unavailable('ROI', 'percent'), metric('Revenue', c.gmv, 'currency'), unavailable('Conversion Rate', 'percent'), unavailable('Retention', 'percent'), unavailable('Bounce Rate', 'percent')],
+    description: 'Acquisition performance combining signup attribution, first-party website events, and connected Meta audience data.',
+    metrics: [web ? metric('Visitors', web.visitors) : unavailable('Visitors'), web ? metric('Tracked Events', web.events) : unavailable('Tracked Events'), metaConnected ? metric('Meta Followers', metaFollowers) : unavailable('Meta Followers'), metaConnected && meta.instagram?.latestDailyReach !== null ? metric('IG Daily Reach', meta.instagram.latestDailyReach) : unavailable('IG Daily Reach'), metric('Attributed Signups', signups, 'number', 'Compared with the previous period', periodChange(signups, previousSignups)), unavailable('CAC', 'currency'), unavailable('CPA', 'currency'), unavailable('ROI', 'percent'), metric('Revenue', c.gmv, 'currency'), unavailable('Conversion Rate', 'percent')],
     charts: [
       { type: 'bar', title: 'Traffic Sources', subtitle: 'Signup attribution from profile source fields', series: groupCount(acquisition, 'source') },
       web ? { type: 'line', title: 'Website Activity', subtitle: 'First-party events stored in Cloudflare D1', series: web.dailyEvents || [] } : { type: 'line', title: 'Signup Trend', subtitle: 'Attributed profiles created by day', series: dailySeries(acquisition, 'created_at') },
-      web ? { type: 'bar', title: 'Top Website Paths', series: web.topPaths || [] } : { type: 'bar', title: 'Recorded Revenue', series: [{ label: 'Successful payment volume', value: c.gmv }], format: 'currency' },
-    ],
-    integrations: [!web ? 'Website analytics events' : null, 'Meta/Instagram campaign metrics', 'Google Ads spend'].filter(Boolean),
+      metaConnected ? { type: 'bar', title: 'Social Audience', subtitle: 'Current followers reported by Meta Graph API', series: [{ label: 'Facebook', value: number(meta.facebook?.followers) }, { label: 'Instagram', value: number(meta.instagram?.followers) }] } : web ? { type: 'bar', title: 'Top Website Paths', series: web.topPaths || [] } : { type: 'bar', title: 'Recorded Revenue', series: [{ label: 'Successful payment volume', value: c.gmv }], format: 'currency' },
+      metaConnected && meta.instagram?.daily?.length ? { type: 'line', title: 'Instagram Reach', subtitle: 'Daily reach reported by Instagram Insights', series: meta.instagram.daily } : null,
+    ].filter(Boolean),
+    integrations: [!web ? 'Website analytics events' : null, !metaConnected ? 'Meta/Instagram audience metrics' : null, 'Meta Ads spend and campaign metrics', 'Google Ads spend'].filter(Boolean),
     table: { title: 'Acquisition Channels', description: 'No cost or visitor metrics are fabricated.', rows: channels, columns: [{ key: 'channel', label: 'Channel' }, { key: 'signups', label: 'Signups' }, { key: 'conversion', label: 'Conversion' }, { key: 'cac', label: 'CAC' }, { key: 'roi', label: 'ROI' }] },
   };
 };
