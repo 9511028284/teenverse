@@ -5,6 +5,7 @@ import { toPng, toBlob } from 'html-to-image';
 import { jsPDF } from "jspdf";
 import { QUIZZES, APP_STATUS } from '../utils/constants';
 import { filterSubscriptionBadgesForPlan, getCommissionRate, getEffectivePlanName, getPlanLimits, normalizeExpiredSubscription } from '../utils/subscription';
+import { createCashfreeCheckout } from '../utils/cashfreeSdk';
 import {
   getNotificationPermission,
   listenForForegroundMessages,
@@ -134,9 +135,8 @@ const uploadFilesToR2 = async (files, userId, folderPrefix, maxSizeBytes, showTo
 // 💳 CENTRALIZED PAYMENT HELPER (Used by Chat & Bidding)
 // ================================================================
 const processCashfreePayment = async (params, onSuccess, onFail) => {
-  const cashfree = new window.Cashfree({ mode: "production" }); 
-
   try {
+    const cashfree = await createCashfreeCheckout();
     const { data: orderData, error: orderError } = await supabase.functions.invoke('payment-gateway', {
       body: { 
         action: 'CREATE_ORDER', amount: params.amount, customerPhone: params.customerPhone,
@@ -379,12 +379,6 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   };
 
   // --- INITIALIZATION ---
-  useEffect(() => {
-    if (window.Cashfree) {
-      cashfree.current = new window.Cashfree({ mode: "production" });
-    }
-  }, []);
-
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
@@ -1135,9 +1129,9 @@ const handlePostJob = async (e) => {
       return;
     }
 
-    if (!cashfree.current) { showToast("Payment Gateway initializing... please wait.", "error"); return; }
     showToast(isUsingWallet ? "Opening checkout for remaining amount..." : "Securing Payment Session...", "info");
     try {
+      if (!cashfree.current) cashfree.current = await createCashfreeCheckout();
       const { paymentSessionId, orderId, error } = await api.createEscrowSession(
         app.id, isUsingWallet ? finalPayable : totalAmount, app.freelancer_id, user.phone 
       );

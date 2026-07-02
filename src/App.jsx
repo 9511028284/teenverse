@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useCallback, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -12,25 +12,23 @@ import { getPendingSignupProfileForUser, removePendingSignupProfile } from './ut
 
 // --- Pages ---
 import Auth from './pages/Auth';
-import Dashboard from './pages/Dashboard';
-import ClientDashboard from './pages/ClientDashboard';
 import TermsAgreement from './pages/TermsAgreement';
-import AdminDashboard from './pages/AdminPage';
-import PlatformAIAssistant from './components/features/PlatformAIAssistant';
-import PublicOpportunityList from './components/opportunities/PublicOpportunityList';
-import OpportunityDetailApply from './components/opportunities/OpportunityDetailApply';
-import MyOpportunityApplications from './components/opportunities/MyOpportunityApplications';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const ClientDashboard = lazy(() => import('./pages/ClientDashboard'));
+const PlatformAIAssistant = lazy(() => import('./components/features/PlatformAIAssistant'));
+const PublicOpportunityList = lazy(() => import('./components/opportunities/PublicOpportunityList'));
+const OpportunityDetailApply = lazy(() => import('./components/opportunities/OpportunityDetailApply'));
+const MyOpportunityApplications = lazy(() => import('./components/opportunities/MyOpportunityApplications'));
 import {
   ensureIndividualProfile,
-  getIndividualProfile,
-  getLegacyAccountContext,
+  getAuthBootstrap,
   getPortalMode,
   getRedirectPathForPortal,
   PORTAL_MODES,
   PORTAL_URLS,
 } from './services/phase1.api';
 import { hasCompletedAppOnboarding } from './utils/accountOnboarding';
-import { resolveSessionDashboardRole } from './utils/sessionDashboardRole';
+import { resolveProfileDashboardRole, resolveSessionDashboardRole } from './utils/sessionDashboardRole';
 import { trackAnalyticsEvent } from './services/auxiliary.api';
 import {
   DASHBOARD_ROLES,
@@ -41,6 +39,7 @@ import {
 } from './services/dashboardRole.api';
 
 const PARENT_PORTAL_URL = PORTAL_URLS.parent;
+const ADMIN_PORTAL_URL = PORTAL_URLS.admin;
 const MIN_ROLE_SWITCH_MS = 760;
 
 const isExternalTarget = (target = '') => /^https?:\/\//i.test(target);
@@ -210,6 +209,21 @@ const getRoleSwitchCopy = (targetRole) => {
     Icon: User,
   };
 };
+
+const RouteLoadingFallback = ({ label = 'Loading portal…' }) => (
+  <div className="flex h-[100dvh] w-full items-center justify-center bg-[#050505] text-indigo-500">
+    <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+      <Loader2 className="animate-spin" size={18} />
+      <span className="text-sm font-semibold text-white">{label}</span>
+    </div>
+  </div>
+);
+
+const renderLazyRoute = (element, label) => (
+  <Suspense fallback={<RouteLoadingFallback label={label} />}>
+    {element}
+  </Suspense>
+);
 
 const RoleSwitchOverlay = ({ targetRole, stage }) => {
   if (!targetRole) return null;
@@ -395,6 +409,7 @@ export default function App() {
   const userRef = useRef(null);
   const lastPageViewKeyRef = useRef(null);
   const lastSessionSyncKeyRef = useRef(null);
+  const lastSessionSyncResultRef = useRef(null);
   const inFlightSessionSyncRef = useRef(null);
   const dashboardReadyRef = useRef(false);
   const dashboardReadyResolveRef = useRef(null);
@@ -472,7 +487,7 @@ export default function App() {
         break;
 
       case 'admin':
-        navigate('/admin/dashboard');
+        window.location.href = ADMIN_PORTAL_URL;
         break;
 
       default:
@@ -590,7 +605,7 @@ export default function App() {
         }
 
         setLoading(false);
-        return;
+        return { status: 'signed_out' };
     }
 
     const u = session.user;
@@ -629,16 +644,11 @@ export default function App() {
         }
       }
 
-      const [existingProfile, existingLegacy, parentMatchResult] = await Promise.all([
-        getIndividualProfile(u),
-        getLegacyAccountContext(u),
-        supabase
-          .from('parent_consents')
-          .select('user_id')
-          .eq('parent_email', u.email)
-          .maybeSingle(),
-      ]);
-      const parentMatch = parentMatchResult.data;
+      const {
+        profile: existingProfile,
+        legacy: existingLegacy,
+        parentMatch,
+      } = await getAuthBootstrap(u);
 
       if (!hasCompletedAppOnboarding({
         profile: existingProfile,
@@ -650,7 +660,7 @@ export default function App() {
           navigate('/signup', { replace: true });
         }
         setLoading(false);
-        return;
+        return { status: 'onboarding_required', user: u };
       }
 
       let profile = existingProfile;
@@ -666,7 +676,15 @@ export default function App() {
         throw new Error('Unable to load or create profile.');
       }
 
-      const preferredDashboardRole = getDashboardRolePreference();
+      const savedDashboardRole = getDashboardRolePreference();
+      const preferredDashboardRole = savedDashboardRole || resolveProfileDashboardRole({
+        profileRole: profile.role,
+        hasClient: Boolean(legacy.client),
+        hasFreelancer: Boolean(legacy.freelancer),
+      });
+      if (!savedDashboardRole && preferredDashboardRole) {
+        setDashboardRolePreference(preferredDashboardRole);
+      }
       const baseRedirectPath = getRedirectPathForPortal({
         portalMode,
         profile,
@@ -695,7 +713,7 @@ export default function App() {
 
       if (profile.role === 'guardian' || parentMatch) {
         window.location.href = parentRedirectPath;
-        return;
+        return { status: 'redirecting', target: parentRedirectPath };
       }
 
       let sessionUser = buildSessionUser(u, profile, legacy, {
@@ -751,6 +769,7 @@ export default function App() {
       }
 
       setLoading(false);
+      return { status: 'ready', user: sessionUser };
     } catch (err) {
       console.error('Profile Error:', err);
       setUser(null);
@@ -761,6 +780,7 @@ export default function App() {
 
       showToast('Could not load your profile. Please try again.', 'error');
       setLoading(false);
+      return { status: 'error', message: 'Could not load your profile. Please try again.' };
     }
   }, [navigate, portalMode, showToast]);
 
@@ -770,26 +790,25 @@ export default function App() {
     }
 
     const preferredRole = getDashboardRolePreference() || 'default';
-    const tokenMarker = session.access_token || session.expires_at || 'active';
-    return `${portalMode}:${session.user.id}:${preferredRole}:${tokenMarker}`;
+    return `${portalMode}:${session.user.id}:${preferredRole}`;
   }, [portalMode]);
 
-  const syncSessionOnce = useCallback((session, options = {}) => {
+  const syncSessionOnce = useCallback((session) => {
     const key = getSessionSyncKey(session);
 
-    if (!options.force) {
-      if (inFlightSessionSyncRef.current?.key === key) {
-        return inFlightSessionSyncRef.current.promise;
-      }
+    if (inFlightSessionSyncRef.current?.key === key) {
+      return inFlightSessionSyncRef.current.promise;
+    }
 
-      if (lastSessionSyncKeyRef.current === key) {
-        return Promise.resolve();
-      }
+    if (lastSessionSyncKeyRef.current === key) {
+      return Promise.resolve(lastSessionSyncResultRef.current);
     }
 
     const promise = Promise.resolve(handleSession(session))
-      .then(() => {
+      .then((result) => {
         lastSessionSyncKeyRef.current = key;
+        lastSessionSyncResultRef.current = result;
+        return result;
       })
       .finally(() => {
         if (inFlightSessionSyncRef.current?.key === key) {
@@ -802,7 +821,7 @@ export default function App() {
   }, [getSessionSyncKey, handleSession]);
 
   const handleAuthSessionReady = useCallback(
-    (session) => syncSessionOnce(session, { force: true }),
+    (session) => syncSessionOnce(session),
     [syncSessionOnce],
   );
 
@@ -1010,46 +1029,34 @@ export default function App() {
 
         <Route
           path="/opportunities"
-          element={<PublicOpportunityList portalMode={portalMode} />}
+          element={renderLazyRoute(
+            <PublicOpportunityList portalMode={portalMode} />,
+            'Loading opportunities',
+          )}
         />
 
         <Route
           path="/opportunities/:id"
-          element={<OpportunityDetailApply user={user} portalMode={portalMode} />}
+          element={renderLazyRoute(
+            <OpportunityDetailApply user={user} portalMode={portalMode} />,
+            'Loading opportunity',
+          )}
         />
 
         <Route
           path="/my-applications"
           element={
             user?.id
-              ? <MyOpportunityApplications userId={user.id} />
+              ? renderLazyRoute(
+                <MyOpportunityApplications userId={user.id} />,
+                'Loading applications',
+              )
               : <Navigate to="/login" replace />
           }
         />
 
-        {/* Admin dashboard */}
-        <Route
-          path="/admin"
-          element={
-            user?.profileRole === 'admin'
-              ? <Navigate to="/admin/dashboard" replace />
-              : <Navigate to="/" replace />
-          }
-        />
-
-        <Route
-          path="/admin/dashboard/*"
-          element={
-            user?.type === 'admin' ? (
-              <AdminDashboard
-                user={user}
-                onLogout={() => logout('Logged out')}
-              />
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
-        />
+        <Route path="/admin" element={<ExternalRedirect to={ADMIN_PORTAL_URL} />} />
+        <Route path="/admin/dashboard/*" element={<ExternalRedirect to={ADMIN_PORTAL_URL} />} />
 
         {/* Client dashboard stays on the app portal. Intern users redirect externally when needed. */}
         <Route
@@ -1058,7 +1065,10 @@ export default function App() {
             isInternPortal && user?.type === 'client' ? (
               <ExternalRedirect to={`${PORTAL_URLS.app}/client-dashboard`} />
             ) : user?.type === 'client' ? (
-              <ClientDashboard {...dashboardProps} />
+              renderLazyRoute(
+                <ClientDashboard {...dashboardProps} />,
+                'Loading client dashboard',
+              )
             ) : user?.type === 'freelancer' ||
               user?.profileRole === 'student' ||
               user?.profileRole === 'intern' ? (
@@ -1080,7 +1090,10 @@ export default function App() {
             ) : user?.type === 'freelancer' ||
               user?.profileRole === 'student' ||
               user?.profileRole === 'intern' ? (
-              <Dashboard {...dashboardProps} />
+              renderLazyRoute(
+                <Dashboard {...dashboardProps} />,
+                'Loading dashboard',
+              )
             ) : (
               <Navigate to="/" replace />
             )
@@ -1091,7 +1104,9 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      <PlatformAIAssistant user={user} showToast={showToast} />
+      <Suspense fallback={null}>
+        <PlatformAIAssistant user={user} showToast={showToast} />
+      </Suspense>
     </>
   );
 }

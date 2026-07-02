@@ -21,15 +21,15 @@ import Overview from '../components/dashboard/Overview';
 import Jobs from '../components/dashboard/Jobs';
 import MyServices from '../components/dashboard/MyServices';
 import ClientPostedJobs from '../components/dashboard/ClientPostedJobs';
-import Applications from '../components/dashboard/Applications';
 import Academy from '../components/dashboard/Academy';
 import Portfolio from '../components/dashboard/Portfolio';
 import ProfileCard from '../components/dashboard/ProfileCard';
-import Records from '../components/dashboard/Records';
-import SettingsComp from '../components/dashboard/SettingsComp';
-import ResumeBuilder from '../components/dashboard/ResumeBuilder';
-import UserProfile from '../components/dashboard/UserProfile';
-import Store from '../components/dashboard/Store';
+const Applications = React.lazy(() => import('../components/dashboard/Applications'));
+const ResumeBuilder = React.lazy(() => import('../components/dashboard/ResumeBuilder'));
+const Records = React.lazy(() => import('../components/dashboard/Records'));
+const SettingsComp = React.lazy(() => import('../components/dashboard/SettingsComp'));
+const UserProfile = React.lazy(() => import('../components/dashboard/UserProfile'));
+const Store = React.lazy(() => import('../components/dashboard/Store'));
 
 const pageVariants = {
   initial: { opacity: 0, y: 12, scale: 0.99 },
@@ -37,6 +37,14 @@ const pageVariants = {
   out: { opacity: 0, y: -12, scale: 0.99 }
 };
 const pageTransition = { type: "tween", ease: "easeInOut", duration: 0.35 };
+
+const TabLoadingFallback = ({ label = 'Loading workspace…' }) => (
+  <div className="flex min-h-[45vh] items-center justify-center px-4">
+    <div className="rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-3 text-sm font-bold text-slate-500 shadow-sm dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-300">
+      {label}
+    </div>
+  </div>
+);
 
 const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme, onSwitchDashboardRole, roleSwitching, onDashboardReady }) => {
   const logic = useDashboardLogic(user, setUser, showToast);
@@ -250,14 +258,20 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme, 
                        </div>
                     )}
 
-                    {tab === 'resume' && !isClient && <ResumeBuilder user={user} showToast={showToast} />}
+                    {tab === 'resume' && !isClient && (
+                      <React.Suspense fallback={<TabLoadingFallback label="Loading resume builder…" />}>
+                        <ResumeBuilder user={user} showToast={showToast} />
+                      </React.Suspense>
+                    )}
                     
                     {tab === 'applications' && (
-                      <Applications 
-                        applications={applications} isClient={isClient} parentMode={parentMode}
-                        onAction={actions.handleAppAction} onViewTimeline={(app) => setters.setTimelineApp(app)}
-                        showToast={showToast}
-                      />
+                      <React.Suspense fallback={<TabLoadingFallback label="Loading applications…" />}>
+                        <Applications 
+                          applications={applications} isClient={isClient} parentMode={parentMode}
+                          onAction={actions.handleAppAction} onViewTimeline={(app) => setters.setTimelineApp(app)}
+                          showToast={showToast}
+                        />
+                      </React.Suspense>
                     )}
 
                     {tab === 'messages' && (
@@ -270,7 +284,11 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme, 
                        />
                     )}
 
-                    {tab === 'store' && <Store user={user} setUser={setUser} />}
+                    {tab === 'store' && (
+                      <React.Suspense fallback={<TabLoadingFallback label="Loading store…" />}>
+                        <Store user={user} setUser={setUser} />
+                      </React.Suspense>
+                    )}
 
                     {tab === 'support' && (
                         <SupportHub 
@@ -304,26 +322,32 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme, 
                     )}
 
                     {tab === 'profile' && !isClient && (
-                     <UserProfile 
-                       user={user} badges={badges} userLevel={userLevel} unlockedSkills={unlockedSkills} 
-                       isClient={isClient} onEditProfile={() => setters.setEditProfileModal(true)} 
-                       applications={applications} jobs={jobs} services={services}
-                     />
+                      <React.Suspense fallback={<TabLoadingFallback label="Loading profile…" />}>
+                        <UserProfile 
+                          user={user} badges={badges} userLevel={userLevel} unlockedSkills={unlockedSkills} 
+                          isClient={isClient} onEditProfile={() => setters.setEditProfileModal(true)} 
+                          applications={applications} jobs={jobs} services={services}
+                        />
+                      </React.Suspense>
                     )}
 
                     {tab === 'records' && (
-                      <Records applications={applications} onDownloadInvoice={actions.handleInvoiceDownload} />
+                      <React.Suspense fallback={<TabLoadingFallback label="Loading records…" />}>
+                        <Records applications={applications} onDownloadInvoice={actions.handleInvoiceDownload} />
+                      </React.Suspense>
                     )}
 
                     {tab === 'pricing' && <Pricing isClient={state.isClient} user={user} onSubscribe={actions.handleSubscribe} />}
                     
                     {tab === 'settings' && (
-                      <SettingsComp 
-                        profileForm={profileForm} setProfileForm={setters.setProfileForm} isClient={isClient} 
-                        handleUpdateProfile={actions.handleUpdateProfile} parentMode={parentMode} 
-                        setParentMode={actions.handleParentModeChange}
-                        onOpenKyc={() => setters.setModal('kyc_verification')} 
-                      />
+                      <React.Suspense fallback={<TabLoadingFallback label="Loading settings…" />}>
+                        <SettingsComp 
+                          profileForm={profileForm} setProfileForm={setters.setProfileForm} isClient={isClient} 
+                          handleUpdateProfile={actions.handleUpdateProfile} parentMode={parentMode} 
+                          setParentMode={actions.handleParentModeChange}
+                          onOpenKyc={() => setters.setModal('kyc_verification')} 
+                        />
+                      </React.Suspense>
                     )}
 
                     {/* Editorial Platform Footer */}

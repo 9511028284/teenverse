@@ -59,11 +59,12 @@ Deno.serve(async (req: Request) => {
     }
 
     const supabaseAdmin = getSupabaseAdmin();
-    const [profile, usersRow, client, freelancer] = await Promise.all([
+    const [profile, usersRow, client, freelancer, wallet] = await Promise.all([
       safeMaybeSingle(supabaseAdmin.from("profiles").select("*").eq("id", user.id).maybeSingle()),
       safeMaybeSingle(supabaseAdmin.from("users").select("*").eq("id", user.id).maybeSingle()),
       safeMaybeSingle(supabaseAdmin.from("clients").select("*").eq("id", user.id).maybeSingle()),
       safeMaybeSingle(supabaseAdmin.from("freelancers").select("*").eq("id", user.id).maybeSingle()),
+      safeMaybeSingle(supabaseAdmin.from("wallet_accounts").select("wallet_balance").eq("user_id", user.id).maybeSingle()),
     ]);
 
     const email = firstValue(profile?.email, usersRow?.email, client?.email, freelancer?.email, user.email);
@@ -71,6 +72,15 @@ Deno.serve(async (req: Request) => {
     const phone = firstValue(client?.phone, freelancer?.phone);
     const nationality = firstValue(freelancer?.nationality, client?.nationality, "India");
     const source = firstValue(freelancer?.source, client?.source, "dashboard-role-switch");
+
+    const persistActiveRole = async () => {
+      const { error } = await supabaseAdmin
+        .from("profiles")
+        .update({ role: targetRole === "client" ? "business" : "student" })
+        .eq("id", user.id);
+
+      if (error) throw error;
+    };
 
     if (!email) throw new Error("Email is required before switching dashboards.");
     if (!name) throw new Error("Name is required before switching dashboards.");
@@ -87,6 +97,7 @@ Deno.serve(async (req: Request) => {
         bio: firstValue(client?.bio, freelancer?.bio, freelancer?.tag_line) || null,
         is_organisation: firstValue(client?.is_organisation, "individual"),
         status: firstValue(client?.status, "active"),
+        wallet_balance: Number(wallet?.wallet_balance ?? client?.wallet_balance ?? freelancer?.wallet_balance ?? 0),
       };
 
       const { data, error } = await supabaseAdmin
@@ -96,6 +107,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (error) throw error;
+      await persistActiveRole();
 
       return json({
         success: true,
@@ -121,7 +133,7 @@ Deno.serve(async (req: Request) => {
       bids_remaining: Number(freelancer?.bids_remaining ?? 5),
       resumes_remaining: Number(freelancer?.resumes_remaining ?? 1),
       energy_points: Number(freelancer?.energy_points ?? 0),
-      wallet_balance: Number(freelancer?.wallet_balance ?? client?.wallet_balance ?? 0),
+      wallet_balance: Number(wallet?.wallet_balance ?? freelancer?.wallet_balance ?? client?.wallet_balance ?? 0),
     };
 
     const { data, error } = await supabaseAdmin
@@ -131,6 +143,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (error) throw error;
+    await persistActiveRole();
 
     return json({
       success: true,

@@ -36,14 +36,14 @@ import DashboardModals from '../components/dashboard/DashboardModals';
 import DashboardSidebar from '../components/dashboard/DashboardSidebar';
 import Jobs from '../components/dashboard/Jobs';
 import ClientPostedJobs from '../components/dashboard/ClientPostedJobs';
-import Applications from '../components/dashboard/Applications';
 import ChatSystem from '../components/features/ChatSystem';
 import Portfolio from '../components/dashboard/Portfolio';
 import Pricing from '../components/dashboard/Pricing';
-import Store from '../components/dashboard/Store';
 import SupportHub from '../components/dashboard/SupportHub';
-import Records from '../components/dashboard/Records';
-import SettingsComp from '../components/dashboard/SettingsComp';
+const Applications = React.lazy(() => import('../components/dashboard/Applications'));
+const Records = React.lazy(() => import('../components/dashboard/Records'));
+const SettingsComp = React.lazy(() => import('../components/dashboard/SettingsComp'));
+const Store = React.lazy(() => import('../components/dashboard/Store'));
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
@@ -66,6 +66,14 @@ const pageVariants = {
   in: { opacity: 1, y: 0, scale: 1 },
   out: { opacity: 0, y: -12, scale: 0.99 },
 };
+
+const TabLoadingFallback = ({ label = 'Loading workspace…' }) => (
+  <div className="flex min-h-[45vh] items-center justify-center px-4">
+    <div className="rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-3 text-sm font-bold text-slate-500 shadow-sm dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-300">
+      {label}
+    </div>
+  </div>
+);
 
 const getFirstName = (user) => user?.name?.split(' ')?.[0] || 'Client';
 
@@ -804,15 +812,17 @@ const ClientContent = ({ user, setUser, showToast, logic }) => {
 
   if (state.tab === 'applications') {
     return (
-      <Applications
-        user={user}
-        applications={state.applications}
-        isClient
-        parentMode={state.parentMode}
-        onAction={actions.handleAppAction}
-        onViewTimeline={(app) => setters.setTimelineApp(app)}
-        showToast={showToast}
-      />
+      <React.Suspense fallback={<TabLoadingFallback label="Loading applications…" />}>
+        <Applications
+          user={user}
+          applications={state.applications}
+          isClient
+          parentMode={state.parentMode}
+          onAction={actions.handleAppAction}
+          onViewTimeline={(app) => setters.setTimelineApp(app)}
+          showToast={showToast}
+        />
+      </React.Suspense>
     );
   }
 
@@ -833,7 +843,11 @@ const ClientContent = ({ user, setUser, showToast, logic }) => {
   }
 
   if (state.tab === 'store') {
-    return <Store user={user} setUser={setUser} />;
+    return (
+      <React.Suspense fallback={<TabLoadingFallback label="Loading store…" />}>
+        <Store user={user} setUser={setUser} />
+      </React.Suspense>
+    );
   }
 
   if (state.tab === 'pricing') {
@@ -841,7 +855,11 @@ const ClientContent = ({ user, setUser, showToast, logic }) => {
   }
 
   if (state.tab === 'records') {
-    return <Records applications={state.applications} onDownloadInvoice={actions.handleInvoiceDownload} />;
+    return (
+      <React.Suspense fallback={<TabLoadingFallback label="Loading records…" />}>
+        <Records applications={state.applications} onDownloadInvoice={actions.handleInvoiceDownload} />
+      </React.Suspense>
+    );
   }
 
   if (state.tab === 'support') {
@@ -850,15 +868,17 @@ const ClientContent = ({ user, setUser, showToast, logic }) => {
 
   if (state.tab === 'settings') {
     return (
-      <SettingsComp
-        profileForm={state.profileForm}
-        setProfileForm={setters.setProfileForm}
-        isClient
-        handleUpdateProfile={actions.handleUpdateProfile}
-        parentMode={state.parentMode}
-        setParentMode={actions.handleParentModeChange}
-        onOpenKyc={() => setters.setModal('kyc_verification')}
-      />
+      <React.Suspense fallback={<TabLoadingFallback label="Loading settings…" />}>
+        <SettingsComp
+          profileForm={state.profileForm}
+          setProfileForm={setters.setProfileForm}
+          isClient
+          handleUpdateProfile={actions.handleUpdateProfile}
+          parentMode={state.parentMode}
+          setParentMode={actions.handleParentModeChange}
+          onOpenKyc={() => setters.setModal('kyc_verification')}
+        />
+      </React.Suspense>
     );
   }
 

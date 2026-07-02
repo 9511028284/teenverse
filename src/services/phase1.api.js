@@ -14,7 +14,6 @@ export const APPLICATION_STATUSES = ['applied', 'shortlisted', 'selected', 'reje
 export const PUBLISH_TARGETS = ['intern', 'app'];
 
 const PROFILE_SELECT = 'id,email,full_name,avatar_url,role,onboarding_completed,age_verified,status,created_at,updated_at';
-const BUSINESS_PROFILE_SELECT = 'user_id,business_name,business_type,website,contact_email,contact_phone,verification_status,can_post';
 export const PORTAL_MODES = {
   APP: 'APP_PORTAL',
   INTERN: 'INTERN_PORTAL',
@@ -26,6 +25,7 @@ export const PORTAL_URLS = {
   intern: 'https://intern.teenversehub.in',
   business: 'https://business.teenversehub.in',
   parent: 'https://parent.teenversehub.in',
+  admin: import.meta.env.VITE_ADMIN_PORTAL_URL || 'https://teenverse-admin-panel.vercel.app',
 };
 
 const PORTAL_MODE_ALIASES = {
@@ -94,15 +94,6 @@ const isIndividualIdentity = (profile, legacy = {}) => (
   !isClientIdentity(profile, legacy)
 );
 
-export const getStudentDashboardPath = () => '/dashboard';
-
-export const getDashboardPathForRole = (role) => {
-  if (role === 'admin') return '/admin/dashboard';
-  if (role === 'guardian') return '/';
-  if (role === 'student' || role === 'intern') return getStudentDashboardPath();
-  return '/dashboard';
-};
-
 export const getLegacyAccountContext = async (authUser) => {
   const email = String(authUser?.email || '').trim().toLowerCase();
 
@@ -117,6 +108,40 @@ export const getLegacyAccountContext = async (authUser) => {
     admin: adminById || adminByEmail,
     client,
     freelancer,
+  };
+};
+
+export const getAuthBootstrap = async (authUser) => {
+  if (!authUser?.id) throw new Error('Missing authenticated user.');
+
+  const { data, error } = await supabase.rpc('get_auth_bootstrap');
+  if (error) {
+    console.warn('Auth bootstrap RPC unavailable; using compatibility lookups.', error);
+    const [profile, legacy, parentResult] = await Promise.all([
+      getIndividualProfile(authUser),
+      getLegacyAccountContext(authUser),
+      supabase
+        .from('parent_consents')
+        .select('user_id')
+        .eq('parent_email', authUser.email)
+        .maybeSingle(),
+    ]);
+
+    return {
+      profile,
+      legacy,
+      parentMatch: parentResult.data || null,
+    };
+  }
+
+  return {
+    profile: data?.profile || null,
+    legacy: {
+      admin: data?.admin || null,
+      client: data?.client || null,
+      freelancer: data?.freelancer || null,
+    },
+    parentMatch: data?.parentMatch || null,
   };
 };
 
@@ -198,25 +223,21 @@ export const getRedirectPathForPortal = ({
   if (isGuardianIdentity(profile)) return PORTAL_URLS.parent;
 
   if (portalMode === PORTAL_MODES.BUSINESS) {
-    if (isAdminIdentity(profile, legacy)) return '/admin/dashboard';
+    if (isAdminIdentity(profile, legacy)) return PORTAL_URLS.admin;
     return businessProfile ? '/dashboard' : '/onboarding';
   }
 
   if (portalMode === PORTAL_MODES.INTERN) {
-    if (isAdminIdentity(profile, legacy)) return '/admin/dashboard';
+    if (isAdminIdentity(profile, legacy)) return PORTAL_URLS.admin;
     if (isClientIdentity(profile, legacy)) return `${PORTAL_URLS.app}/client-dashboard`;
     if (isIndividualIdentity(profile, legacy)) return '/dashboard';
     return '/dashboard';
   }
 
-  if (isAdminIdentity(profile, legacy)) return '/admin/dashboard';
+  if (isAdminIdentity(profile, legacy)) return PORTAL_URLS.admin;
   if (isClientIdentity(profile, legacy)) return '/client-dashboard';
   return '/dashboard';
 };
-
-export const getPortalHomePath = (portalMode, profile, businessProfile, legacy = {}) => (
-  getRedirectPathForPortal({ portalMode, profile, businessProfile, legacy })
-);
 
 const normalizeOpportunityType = (type) => (
   OPPORTUNITY_TYPES.includes(type) ? type : 'internship'
@@ -234,140 +255,6 @@ const normalizePublishTo = (publishTo, type) => {
 
   return cleanTargets.length ? cleanTargets : fallbackTargets;
 };
-
-const buildBusinessProfileMap = async (opportunities) => {
-  const businessIds = [
-    ...new Set((opportunities || [])
-      .map((opportunity) => opportunity.business_id)
-      .filter(Boolean)),
-  ];
-
-  if (!businessIds.length) return new Map();
-
-  const { data, error } = await supabase
-    .from('business_profiles')
-    .select(BUSINESS_PROFILE_SELECT)
-    .in('user_id', businessIds);
-
-  if (error) throw error;
-
-  return new Map((data || []).map((profile) => [profile.user_id, profile]));
-};
-
-const normalizeAdminOpportunity = (opportunity, businessProfilesById = new Map()) => {
-  const businessProfile = businessProfilesById.get(opportunity.business_id) || {};
-
-  return {
-    ...opportunity,
-    type: normalizeOpportunityType(opportunity.type),
-    publish_to: normalizePublishTo(opportunity.publish_to, opportunity.type),
-    business_name: businessProfile.business_name || opportunity.business_name || 'Unknown business',
-    business_type: businessProfile.business_type || opportunity.business_type || 'Business',
-    website: businessProfile.website || opportunity.website || null,
-    contact_email: businessProfile.contact_email || opportunity.contact_email || null,
-    contact_phone: businessProfile.contact_phone || opportunity.contact_phone || null,
-    verification_status: businessProfile.verification_status || opportunity.verification_status || 'not_started',
-    can_post: businessProfile.can_post ?? opportunity.can_post ?? false,
-  };
-};
-
-const invokeAdminFunction = async (body) => {
-  const { data, error } = await supabase.functions.invoke('admin-review-actions', { body });
-  if (error) throw new Error(error.message || 'Admin review action failed.');
-  if (data?.success === false) throw new Error(data.error || 'Admin review action failed.');
-  return data;
-};
-
-export const getOpportunityPublishLabel = (publishTo = []) => {
-  const targets = normalizePublishTo(publishTo);
-  if (targets.includes('intern') && targets.includes('app')) return 'Intern + App';
-  if (targets.includes('app')) return 'App Portal';
-  return 'Intern Portal';
-};
-
-export const getAdminOpportunities = async (status = 'pending_review') => {
-  let query = supabase
-    .from('opportunities')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  if (status && status !== 'all') {
-    query = query.eq('status', status);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  const businessProfilesById = await buildBusinessProfileMap(data || []);
-  return (data || []).map((opportunity) => normalizeAdminOpportunity(opportunity, businessProfilesById));
-};
-
-export const getAdminBusinessProfiles = async (status = 'pending') => {
-  let query = supabase
-    .from('business_profiles')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  if (status && status !== 'all') query = query.eq('verification_status', status);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
-};
-
-export const reviewBusinessAsAdmin = async (businessId, action, reason = '') => {
-  if (!businessId) throw new Error('Missing business id.');
-  if (!['verify', 'reject', 'suspend'].includes(action)) throw new Error('Choose a valid business review action.');
-  if (['reject', 'suspend'].includes(action) && !String(reason || '').trim()) {
-    throw new Error('A reason is required for this action.');
-  }
-
-  const result = await invokeAdminFunction({ resource: 'business', resourceId: businessId, action, reason });
-  return result.business;
-};
-
-export const getRecentAdminAuditLogs = async (limit = 50) => {
-  const safeLimit = Math.max(1, Math.min(50, Number(limit) || 50));
-  const { data, error } = await supabase
-    .from('admin_audit_logs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(safeLimit);
-  if (error) throw error;
-  return data || [];
-};
-
-export const syncOpportunityCacheFromAdmin = async (opportunityId, mode = 'upsert') => {
-  if (!opportunityId) throw new Error('Missing opportunity id.');
-  if (!['upsert', 'delete'].includes(mode)) throw new Error('Choose a valid cache action.');
-
-  const { data, error } = await supabase.functions.invoke('sync-opportunity-cache', {
-    body: { opportunityId, action: mode },
-  });
-  if (error) throw new Error(error.message || 'Cloudflare cache sync failed.');
-  if (data?.success === false) throw new Error(data.error || 'Cloudflare cache sync failed.');
-  return data || { success: true };
-};
-
-const reviewOpportunityAsAdmin = async (opportunityId, action, reason = '') => {
-  if (!opportunityId) throw new Error('Missing opportunity id.');
-  const result = await invokeAdminFunction({ resource: 'opportunity', resourceId: opportunityId, action, reason });
-  const cacheAction = action === 'approve' ? 'upsert' : 'delete';
-
-  try {
-    await syncOpportunityCacheFromAdmin(opportunityId, cacheAction);
-    return result.opportunity;
-  } catch (_cacheError) {
-    return {
-      ...result.opportunity,
-      cache_sync_warning: `${action === 'approve' ? 'Opportunity approved' : 'Opportunity updated'}, but Cloudflare cache sync failed. Retry from the admin panel.`,
-    };
-  }
-};
-
-export const approveOpportunityAsAdmin = (opportunityId) => reviewOpportunityAsAdmin(opportunityId, 'approve');
-export const rejectOpportunityAsAdmin = (opportunityId, reason = '') => reviewOpportunityAsAdmin(opportunityId, 'reject', reason);
-export const pauseOpportunityAsAdmin = (opportunityId) => reviewOpportunityAsAdmin(opportunityId, 'pause');
-export const closeOpportunityAsAdmin = (opportunityId) => reviewOpportunityAsAdmin(opportunityId, 'close');
 
 const getPortalPublishTarget = (portalMode) => {
   if (portalMode === PORTAL_MODES.APP) return 'app';

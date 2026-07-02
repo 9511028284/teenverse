@@ -3,6 +3,16 @@ export const SESSION_DASHBOARD_ROLES = {
   FREELANCER: 'freelancer',
 };
 
+export const resolveProfileDashboardRole = ({
+  profileRole = null,
+  hasClient = false,
+  hasFreelancer = false,
+} = {}) => {
+  if (profileRole === 'business' && hasClient) return SESSION_DASHBOARD_ROLES.CLIENT;
+  if (profileRole === 'student' && hasFreelancer) return SESSION_DASHBOARD_ROLES.FREELANCER;
+  return null;
+};
+
 export const resolveSessionDashboardRole = ({
   preferredRole = null,
   hasClient = false,
@@ -22,4 +32,3 @@ export const resolveSessionDashboardRole = ({
 
   return SESSION_DASHBOARD_ROLES.FREELANCER;
 };
-

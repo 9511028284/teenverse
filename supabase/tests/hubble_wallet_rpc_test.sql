@@ -4,7 +4,7 @@ set search_path = public, extensions;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(8);
+select plan(12);
 
 insert into auth.users (
   id,
@@ -30,16 +30,37 @@ values (
 )
 on conflict (id) do nothing;
 
-insert into public.clients (id, name, email, phone, wallet_balance)
+insert into public.clients (id, name, email, wallet_balance)
 values (
   '11111111-1111-4111-8111-111111111111',
   'Hubble Wallet Test',
   'hubble-wallet-test@example.com',
-  '+919899460415',
   1000
 )
 on conflict (id) do update
 set wallet_balance = excluded.wallet_balance;
+
+select is(
+  (select wallet_balance from public.wallet_accounts where user_id = '11111111-1111-4111-8111-111111111111'),
+  1000.00,
+  'Profile wallet initializes the canonical wallet account'
+);
+
+insert into public.freelancers (id, name, email, wallet_balance)
+values (
+  '11111111-1111-4111-8111-111111111111',
+  'Hubble Wallet Test',
+  'hubble-wallet-test@example.com',
+  0
+)
+on conflict (id) do update
+set wallet_balance = excluded.wallet_balance;
+
+select is(
+  (select wallet_balance from public.freelancers where id = '11111111-1111-4111-8111-111111111111'),
+  1000.00,
+  'Creating the second role preserves the canonical wallet balance'
+);
 
 create temp table hubble_test_results (
   name text primary key,
@@ -74,6 +95,12 @@ select is(
   (select wallet_balance from public.clients where id = '11111111-1111-4111-8111-111111111111'),
   900.00,
   'POST /debit deducts wallet amount'
+);
+
+select is(
+  (select wallet_balance from public.wallet_accounts where user_id = '11111111-1111-4111-8111-111111111111'),
+  900.00,
+  'POST /debit deducts the canonical wallet amount'
 );
 
 insert into hubble_test_results
@@ -123,6 +150,12 @@ select is(
   (select wallet_balance from public.clients where id = '11111111-1111-4111-8111-111111111111'),
   1000.00,
   'POST /reverse credits wallet back'
+);
+
+select is(
+  (select wallet_balance from public.wallet_accounts where user_id = '11111111-1111-4111-8111-111111111111'),
+  1000.00,
+  'POST /reverse credits the canonical wallet back'
 );
 
 insert into hubble_test_results

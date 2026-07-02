@@ -57,7 +57,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
   const [captchaToken, setCaptchaToken] = useState(null);
   const [rememberMe, setRememberMe] = useState(true);
   const turnstileRef = useRef(null);
-  const completingPendingSignupRef = useRef(false);
+  const handledSessionKeyRef = useRef(null);
 
   // Social Connections & Phone OTP State
   const [socialUser, setSocialUser] = useState(null);
@@ -222,122 +222,88 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
 
   const handleAuthRedirect = useCallback(async (user, session = null) => {
     try {
-      const normalizedEmail = String(user?.email || '').trim().toLowerCase();
-      const [
-        { data: adminData },
-        { data: freelancerData },
-        { data: clientData },
-      ] = await Promise.all([
-        normalizedEmail
-          ? supabase.from('admins').select('email').ilike('email', normalizedEmail).maybeSingle()
-          : Promise.resolve({ data: null }),
-        supabase.from('freelancers').select('phone').eq('id', user.id).maybeSingle(),
-        supabase.from('clients').select('phone').eq('id', user.id).maybeSingle(),
-      ]);
+      const syncResult = session && onSessionReady
+        ? await onSessionReady(session)
+        : null;
 
-      if (adminData) {
-         if (session && onSessionReady) {
-           await onSessionReady(session);
-         } else {
-           onLogin('Welcome back!');
-         }
-      } else if (freelancerData?.phone?.length > 5 || clientData?.phone?.length > 5) {
-         if (session && onSessionReady) {
-           await onSessionReady(session);
-         } else {
-           onLogin(`Welcome back!`);
-         }
-      } else {
-         const pendingProfile = getPendingSignupProfileForUser(user);
-
-         const pendingMatchesUser = pendingProfile?.email?.toLowerCase?.() === user.email?.toLowerCase?.();
-
-         if (pendingMatchesUser && pendingProfile?.phone && !completingPendingSignupRef.current) {
-           completingPendingSignupRef.current = true;
-           setLoading(true);
-
-           try {
-             const { data, error } = await supabase.functions.invoke('complete-signup', {
-               body: buildSignupPayload(pendingProfile),
-             });
-             if (error || !data?.success) throw new Error(data?.error || AUTH_GENERIC_ERROR);
-             removePendingSignupProfile();
-             window.location.href = '/termsagreement';
-             return;
-           } catch (error) {
-             const message = error?.message || AUTH_GENERIC_ERROR;
-             const needsPhoneVerification = /phone verification/i.test(message);
-             showToast(needsPhoneVerification ? "Phone verification expired. Please verify your mobile number again." : message);
-             if (needsPhoneVerification) {
-               setSocialUser(user);
-               setFormData(prev => ({
-                 ...prev,
-                 ...pendingProfile,
-                 email: user.email || pendingProfile.email || '',
-                 role: lockedSignupRole || pendingProfile.role || prev.role,
-               }));
-               setIsPhoneVerified(false);
-               if (pendingProfile?.dob) {
-                 const birthDate = new Date(pendingProfile.dob);
-                 const today = new Date();
-                 let calculatedAge = today.getFullYear() - birthDate.getFullYear();
-                 const monthDifference = today.getMonth() - birthDate.getMonth();
-                 if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) calculatedAge--;
-                 setAge(calculatedAge);
-               }
-               setViewMode('signup');
-               setStep(3);
-               return;
-             }
-           } finally {
-             setLoading(false);
-             completingPendingSignupRef.current = false;
-           }
-         }
-
-         setSocialUser(user);
-         setFormData(prev => ({
-           ...prev, 
-           ...(pendingMatchesUser ? pendingProfile : {}),
-           email: user.email || pendingProfile?.email || '', 
-           name: pendingProfile?.name || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || '', 
-           role: lockedSignupRole || pendingProfile?.role || 'freelancer'
-         }));
-         if (pendingMatchesUser && pendingProfile?.phone) {
-           setIsPhoneVerified(await checkPhoneVerification(pendingProfile.phone));
-         }
-         if (pendingMatchesUser && pendingProfile?.dob) {
-           const birthDate = new Date(pendingProfile.dob);
-           const today = new Date();
-           let calculatedAge = today.getFullYear() - birthDate.getFullYear();
-           const monthDifference = today.getMonth() - birthDate.getMonth();
-           if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) calculatedAge--;
-           setAge(calculatedAge);
-         }
-         setViewMode('signup');
-         setStep(pendingMatchesUser ? 4 : lockedSignupRole ? 3 : 1);
+      if (syncResult?.status === 'ready' || syncResult?.status === 'redirecting') {
+        return syncResult;
       }
-    } catch {
-      showToast("Session redirection fault encountered.");
+
+      if (!onSessionReady && onLogin) {
+        onLogin('Welcome back!');
+        return { status: 'ready' };
+      }
+
+      if (syncResult?.status === 'error') {
+        throw new Error(syncResult.message || AUTH_GENERIC_ERROR);
+      }
+
+      const pendingProfile = getPendingSignupProfileForUser(user);
+      const pendingMatchesUser = pendingProfile?.email?.toLowerCase?.() === user.email?.toLowerCase?.();
+
+      setSocialUser(user);
+      setFormData(prev => ({
+        ...prev,
+        ...(pendingMatchesUser ? pendingProfile : {}),
+        email: user.email || pendingProfile?.email || '',
+        name: pendingProfile?.name || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || '',
+        role: lockedSignupRole || pendingProfile?.role || prev.role || 'freelancer',
+      }));
+
+      if (pendingMatchesUser && pendingProfile?.phone) {
+        setIsPhoneVerified(await checkPhoneVerification(pendingProfile.phone));
+      }
+
+      if (pendingMatchesUser && pendingProfile?.dob) {
+        const birthDate = new Date(pendingProfile.dob);
+        const today = new Date();
+        let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+        const monthDifference = today.getMonth() - birthDate.getMonth();
+        if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) calculatedAge--;
+        setAge(calculatedAge);
+      }
+
+      setViewMode('signup');
+      setStep(pendingMatchesUser ? 4 : lockedSignupRole ? 3 : 1);
+      return { status: 'onboarding_required' };
+    } catch (error) {
+      showToast(error?.message || "We couldn't finish signing you in. Please try again.");
+      return { status: 'error' };
     }
   }, [checkPhoneVerification, lockedSignupRole, onLogin, onSessionReady, showToast]);
 
   // ─── AUTH INTERLOCK EVENTS ──────────────────────────────────────────────────
   useEffect(() => {
+    let active = true;
+
+    const processSession = async (session) => {
+      if (!active || !session || viewMode === 'update_password') return;
+
+      const sessionKey = `${session.user.id}:${session.access_token || session.expires_at || 'active'}`;
+      if (handledSessionKeyRef.current === sessionKey) return;
+      handledSessionKeyRef.current = sessionKey;
+
+      await handleAuthRedirect(session.user, session);
+    };
+
     const checkActiveSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) handleAuthRedirect(session.user, session);
+      await processSession(session);
     };
-    checkActiveSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session && viewMode !== 'update_password') {
-        window.setTimeout(() => {
-          void handleAuthRedirect(session.user, session);
-        }, 0);
+    void checkActiveSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        window.setTimeout(() => void processSession(session), 0);
       }
     });
-    return () => subscription.unsubscribe();
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, [handleAuthRedirect, viewMode]);
 
   // Clear toast memory cleanly
@@ -417,9 +383,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
             options: { captchaToken: loginCaptchaToken },
         });
         if (error) throw new Error(LOGIN_ERROR);
-        if (data?.session && onSessionReady) {
-          await onSessionReady(data.session);
-        }
+        if (!data?.session) throw new Error(LOGIN_ERROR);
       } else {
         await completeSignup();
       }
@@ -633,48 +597,28 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     }
   };
 
-  const handleGoogleCredentialResponse = useCallback(async (response) => {
-    const credential = response?.credential;
-    if (!credential) {
-      showToast("Google did not return a valid sign-in token.");
-      return;
-    }
-
+  const handleGoogleLogin = useCallback(async () => {
     setGoogleLoading(true);
     try {
       setRememberedSessionPreference(rememberMe);
 
-      const { error } = await supabase.auth.signInWithIdToken({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        token: credential,
-        nonce: response.nonce,
+        options: {
+          redirectTo: `${window.location.origin}${window.location.pathname}`,
+        },
       });
 
       if (error) {
         console.error("Google login error:", error.message);
         throw new Error("Google sign-in failed. Please try again.");
       }
-
-      const [
-        { data: { session }, error: sessionError },
-        { data: { user }, error: userError },
-      ] = await Promise.all([
-        supabase.auth.getSession(),
-        supabase.auth.getUser(),
-      ]);
-
-      if (sessionError) throw sessionError;
-      if (userError) throw userError;
-      if (!session?.user && !user) throw new Error("Google sign-in did not create a session.");
-
-      await handleAuthRedirect(session?.user || user, session);
     } catch (error) {
       console.error("Google login error:", error);
       showToast(error?.message || AUTH_GENERIC_ERROR);
-    } finally {
       setGoogleLoading(false);
     }
-  }, [handleAuthRedirect, rememberMe, showToast]);
+  }, [rememberMe, showToast]);
 
   const handleGithubLogin = useCallback(async () => {
     setLoading(true);
@@ -705,7 +649,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
       handleNext, handleBack, goToSignup, goToLogin,
       handleFinalSubmit, handleSendPhoneOtp, handleRetryPhoneOtp, handleVerifyPhoneOtp, 
       handleForgotPassword, handleVerifyResetOTP, handleUpdatePassword,
-      handleGoogleCredentialResponse, handleGithubLogin,
+      handleGoogleLogin, handleGithubLogin,
     }
   };
 };

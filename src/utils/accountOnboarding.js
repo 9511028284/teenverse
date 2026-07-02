@@ -8,9 +8,9 @@ export const hasCompletedAppOnboarding = ({ profile, legacy = {}, parentMatch = 
   if (role === 'admin' || role === 'guardian' || role === 'parent') return true;
   if (legacy.admin || parentMatch) return true;
 
-  return profile?.onboarding_completed === true && (
-    hasVerifiedApplicationPhone(legacy.freelancer) ||
-    hasVerifiedApplicationPhone(legacy.client)
-  );
+  // A verified legacy role profile is authoritative for accounts created
+  // before profiles.onboarding_completed was introduced. New social accounts
+  // have no role row yet, so they still continue through onboarding.
+  return hasVerifiedApplicationPhone(legacy.freelancer) ||
+    hasVerifiedApplicationPhone(legacy.client);
 };
-

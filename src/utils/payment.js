@@ -1,9 +1,9 @@
 import { supabase } from '../supabase';
+import { createCashfreeCheckout } from './cashfreeSdk';
 
 export const processCashfreePayment = async (params, onSuccess, onFail) => {
-  const cashfree = new window.Cashfree({ mode: "production" }); // Use "production" for live
-
   try {
+    const cashfree = await createCashfreeCheckout();
     // 1. Call Edge Function to CREATE ORDER
     const { data: orderData, error: orderError } = await supabase.functions.invoke('payment-gateway', {
       body: { 

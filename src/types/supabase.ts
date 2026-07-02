@@ -2296,6 +2296,27 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_accounts: {
+        Row: {
+          created_at: string
+          updated_at: string
+          user_id: string
+          wallet_balance: number
+        }
+        Insert: {
+          created_at?: string
+          updated_at?: string
+          user_id: string
+          wallet_balance?: number
+        }
+        Update: {
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+          wallet_balance?: number
+        }
+        Relationships: []
+      }
       wallet_transactions: {
         Row: {
           amount: number
@@ -2489,6 +2510,7 @@ export type Database = {
         }
         Returns: Json
       }
+      get_auth_bootstrap: { Args: never; Returns: Json }
       grant_subscription_access: {
         Args: {
           p_duration_months: number

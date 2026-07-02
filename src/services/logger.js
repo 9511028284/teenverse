@@ -1,28 +1,23 @@
 // src/services/logger.js
 import { supabase } from '../supabase';
 
-export const logAction = async (role, action, details) => {
+export const logAction = async (...args) => {
   try {
-    // 1. Decide which table to use based on the Role
-    const table = role === 'ADMIN' ? 'admin_audit_logs' : 'audit_logs';
-    
-    // 2. Prepare the data payload (Schema keys match your SQL)
-    const payload = role === 'ADMIN' 
-      ? { 
-          // For admin_audit_logs
-          action_type: action,
-          metadata: details,
-          admin_id: (await supabase.auth.getUser()).data.user?.id 
-        }
-      : { 
-          // For standard audit_logs
-          action: action,
-          details: details,
-          actor_id: (await supabase.auth.getUser()).data.user?.id 
-        };
+    const [firstArg, secondArg, thirdArg] = args;
+    const legacyRole = firstArg === 'ADMIN' ? firstArg : null;
+    const action = legacyRole ? secondArg : firstArg;
+    const details = legacyRole ? thirdArg : secondArg;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    // 3. Write to Supabase
-    const { error } = await supabase.from(table).insert([payload]);
+    const payload = {
+      action,
+      details,
+      actor_id: user?.id || null,
+    };
+
+    const { error } = await supabase.from('audit_logs').insert([payload]);
     
     if (error) console.error("Logger Error:", error);
     

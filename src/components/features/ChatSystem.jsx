@@ -7,6 +7,7 @@ import {
 import { supabase } from '../../supabase';
 import { useChat } from '../../hooks/useChat'; 
 import { fundEscrowWithWallet } from '../../services/dashboard.api';
+import { createCashfreeCheckout } from '../../utils/cashfreeSdk';
 import Button from '../ui/Button'; 
 import Modal from '../ui/Modal';     
 import Input from '../ui/Input'; 
@@ -29,9 +30,8 @@ const containsContactDetails = (text) => {
 // 💳 CASHFREE PAYMENT HELPER
 // ==========================================
 const processCashfreePayment = async (params, onSuccess, onFail) => {
-  const cashfree = new window.Cashfree({ mode: "production" }); 
-
   try {
+    const cashfree = await createCashfreeCheckout();
     const { data: orderData, error: orderError } = await supabase.functions.invoke('payment-gateway', {
       body: { 
         action: 'CREATE_ORDER',
