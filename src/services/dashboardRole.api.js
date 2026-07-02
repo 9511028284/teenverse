@@ -1,28 +1,37 @@
 import { supabase } from '../supabase';
+import { getDashboardRolePreferenceKey } from '../utils/sessionDashboardRole';
 
 export const DASHBOARD_ROLES = {
   CLIENT: 'client',
   FREELANCER: 'freelancer',
 };
 
-const DASHBOARD_ROLE_KEY = 'teenverse_active_dashboard_role_v1';
+const LEGACY_DASHBOARD_ROLE_KEY = 'teenverse_active_dashboard_role_v1';
 
-export const getDashboardRolePreference = () => {
+export const getDashboardRolePreference = (userId) => {
   if (typeof window === 'undefined') return null;
 
-  const value = window.localStorage.getItem(DASHBOARD_ROLE_KEY);
+  const key = getDashboardRolePreferenceKey(userId);
+  if (!key) return null;
+
+  window.localStorage.removeItem(LEGACY_DASHBOARD_ROLE_KEY);
+  const value = window.localStorage.getItem(key);
   return value === DASHBOARD_ROLES.CLIENT || value === DASHBOARD_ROLES.FREELANCER ? value : null;
 };
 
-export const setDashboardRolePreference = (role) => {
+export const setDashboardRolePreference = (role, userId) => {
   if (typeof window === 'undefined') return;
 
+  const key = getDashboardRolePreferenceKey(userId);
+  if (!key) return;
+
+  window.localStorage.removeItem(LEGACY_DASHBOARD_ROLE_KEY);
   if (role === DASHBOARD_ROLES.CLIENT || role === DASHBOARD_ROLES.FREELANCER) {
-    window.localStorage.setItem(DASHBOARD_ROLE_KEY, role);
+    window.localStorage.setItem(key, role);
     return;
   }
 
-  window.localStorage.removeItem(DASHBOARD_ROLE_KEY);
+  window.localStorage.removeItem(key);
 };
 
 export const getOppositeDashboardRole = (role) => (
@@ -42,6 +51,5 @@ export const ensureDashboardRole = async (targetRole) => {
     throw new Error(data?.error || error?.message || 'Could not switch dashboard right now.');
   }
 
-  setDashboardRolePreference(targetRole);
   return data;
 };

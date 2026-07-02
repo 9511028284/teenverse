@@ -273,18 +273,25 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     }
   }, [checkPhoneVerification, lockedSignupRole, onLogin, onSessionReady, showToast]);
 
+  const processAuthenticatedSession = useCallback(async (session) => {
+    if (!session || viewMode === 'update_password') return null;
+
+    const sessionKey = `${session.user.id}:${session.access_token || session.expires_at || 'active'}`;
+    if (handledSessionKeyRef.current === sessionKey) return { status: 'already_handled' };
+    handledSessionKeyRef.current = sessionKey;
+
+    const result = await handleAuthRedirect(session.user, session);
+    if (result?.status === 'error') handledSessionKeyRef.current = null;
+    return result;
+  }, [handleAuthRedirect, viewMode]);
+
   // ─── AUTH INTERLOCK EVENTS ──────────────────────────────────────────────────
   useEffect(() => {
     let active = true;
 
     const processSession = async (session) => {
-      if (!active || !session || viewMode === 'update_password') return;
-
-      const sessionKey = `${session.user.id}:${session.access_token || session.expires_at || 'active'}`;
-      if (handledSessionKeyRef.current === sessionKey) return;
-      handledSessionKeyRef.current = sessionKey;
-
-      await handleAuthRedirect(session.user, session);
+      if (!active) return;
+      await processAuthenticatedSession(session);
     };
 
     const checkActiveSession = async () => {
@@ -304,7 +311,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
       active = false;
       subscription.unsubscribe();
     };
-  }, [handleAuthRedirect, viewMode]);
+  }, [processAuthenticatedSession]);
 
   // Clear toast memory cleanly
   useEffect(() => {
@@ -630,13 +637,17 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
         throw new Error("Google sign-in failed. Please try again.");
       }
       if (!data?.session) throw new Error('Google sign-in did not create a session.');
+      const syncResult = await processAuthenticatedSession(data.session);
+      if (syncResult?.status === 'error') {
+        throw new Error(syncResult.message || 'Google sign-in could not open your dashboard.');
+      }
     } catch (error) {
       console.error("Google login error:", error);
       showToast(error?.message || AUTH_GENERIC_ERROR);
     } finally {
       setGoogleLoading(false);
     }
-  }, [rememberMe, showToast]);
+  }, [processAuthenticatedSession, rememberMe, showToast]);
 
   const handleGithubLogin = useCallback(async () => {
     setLoading(true);

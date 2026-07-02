@@ -28,7 +28,7 @@ import {
   PORTAL_URLS,
 } from './services/phase1.api';
 import { hasCompletedAppOnboarding } from './utils/accountOnboarding';
-import { resolveProfileDashboardRole, resolveSessionDashboardRole } from './utils/sessionDashboardRole';
+import { resolvePreferredDashboardRole, resolveSessionDashboardRole } from './utils/sessionDashboardRole';
 import { trackAnalyticsEvent } from './services/auxiliary.api';
 import {
   DASHBOARD_ROLES,
@@ -676,14 +676,15 @@ export default function App() {
         throw new Error('Unable to load or create profile.');
       }
 
-      const savedDashboardRole = getDashboardRolePreference();
-      const preferredDashboardRole = savedDashboardRole || resolveProfileDashboardRole({
+      const savedDashboardRole = getDashboardRolePreference(u.id);
+      const preferredDashboardRole = resolvePreferredDashboardRole({
         profileRole: profile.role,
+        savedRole: savedDashboardRole,
         hasClient: Boolean(legacy.client),
         hasFreelancer: Boolean(legacy.freelancer),
       });
-      if (!savedDashboardRole && preferredDashboardRole) {
-        setDashboardRolePreference(preferredDashboardRole);
+      if (preferredDashboardRole) {
+        setDashboardRolePreference(preferredDashboardRole, u.id);
       }
       const baseRedirectPath = getRedirectPathForPortal({
         portalMode,
@@ -789,7 +790,7 @@ export default function App() {
       return `signed-out:${portalMode}`;
     }
 
-    const preferredRole = getDashboardRolePreference() || 'default';
+    const preferredRole = getDashboardRolePreference(session.user.id) || 'default';
     return `${portalMode}:${session.user.id}:${preferredRole}`;
   }, [portalMode]);
 
@@ -906,7 +907,7 @@ export default function App() {
         activeDashboardRole: safeTargetRole,
       });
 
-      setDashboardRolePreference(safeTargetRole);
+      setDashboardRolePreference(safeTargetRole, user.id);
       lastSessionSyncKeyRef.current = null;
       flushSync(() => {
         setUser(nextUser);
