@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useState, memo } from 'react';
+import React, { useEffect, useRef, useState, memo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { 
   Eye, EyeOff, Loader2, Check, ShieldCheck, ArrowLeft
 } from 'lucide-react';
 import { Turnstile } from '@marsidev/react-turnstile';
 import { getPasswordSecurityStatus } from '../../utils/passwordSecurity';
+import { generateGoogleNonce, loadGoogleIdentitySdk } from '../../utils/googleIdentitySdk';
 
 // ─── STYLING SYSTEM PARAMETERS ───────────────────────────────────────────────
 const serif = { fontFamily: 'var(--font-kibitz, "Cormorant Garamond", "EB Garamond", Georgia, serif)', fontWeight: 300 };
@@ -124,6 +125,98 @@ const SocialBtn = ({ onClick, icon, label, loading = false, disabled = false }) 
     <span>{loading ? `Connecting to ${label}…` : `Continue with ${label}`}</span>
   </button>
 );
+
+let googleIdentityClientId = null;
+let googleIdentityRawNonce = null;
+let googleCredentialHandler = null;
+let googleIdentityInitPromise = null;
+
+const GoogleIdentityButton = memo(({ loading, onCredentialResponse, showToast }) => {
+  const containerRef = useRef(null);
+  const buttonRef = useRef(null);
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+  useEffect(() => {
+    if (!clientId) return undefined;
+
+    googleCredentialHandler = onCredentialResponse;
+    let cancelled = false;
+    let resizeObserver = null;
+
+    const initialize = async () => {
+      const googleIdentity = await loadGoogleIdentitySdk();
+
+      if (googleIdentityClientId !== clientId) {
+        if (!googleIdentityInitPromise) {
+          googleIdentityInitPromise = (async () => {
+            const { rawNonce, hashedNonce } = await generateGoogleNonce();
+            googleIdentityRawNonce = rawNonce;
+            googleIdentity.initialize({
+              client_id: clientId,
+              callback: (response) => googleCredentialHandler?.({
+                ...response,
+                nonce: googleIdentityRawNonce,
+              }),
+              ux_mode: 'popup',
+              nonce: hashedNonce,
+              use_fedcm_for_button: true,
+            });
+            googleIdentityClientId = clientId;
+          })().finally(() => {
+            googleIdentityInitPromise = null;
+          });
+        }
+
+        await googleIdentityInitPromise;
+      }
+
+      if (cancelled || !buttonRef.current) return;
+      const width = Math.min(400, Math.max(220, Math.floor(containerRef.current?.clientWidth || 320)));
+      buttonRef.current.innerHTML = '';
+      googleIdentity.renderButton(buttonRef.current, {
+        theme: 'outline',
+        size: 'large',
+        type: 'standard',
+        text: 'continue_with',
+        shape: 'rectangular',
+        logo_alignment: 'left',
+        width,
+      });
+    };
+
+    void initialize().catch((error) => {
+      if (!cancelled) showToast(error?.message || 'Google sign-in could not be initialized.');
+    });
+
+    if (containerRef.current && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        void initialize().catch(() => undefined);
+      });
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => {
+      cancelled = true;
+      resizeObserver?.disconnect();
+      if (googleCredentialHandler === onCredentialResponse) googleCredentialHandler = null;
+    };
+  }, [clientId, onCredentialResponse, showToast]);
+
+  if (!clientId) {
+    return <SocialBtn icon={<GoogleIcon />} label="Google" onClick={() => showToast('Google sign-in is not configured.')} />;
+  }
+
+  return (
+    <div ref={containerRef} className="relative h-10 w-full min-w-0 overflow-hidden rounded-md">
+      <div ref={buttonRef} className={loading ? 'pointer-events-none opacity-50' : ''} />
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/75 dark:bg-zinc-900/75">
+          <Loader2 className="animate-spin" size={16} />
+        </div>
+      )}
+    </div>
+  );
+});
 
 const StepBar = ({ step, total = 4 }) => (
   <div className="flex gap-1.5 mb-6 select-none box-border">
@@ -269,7 +362,7 @@ export const LoginView = memo(({ state, actions, turnstileRef }) => {
           </motion.div>
 
           <motion.div variants={itemVariants} className="flex flex-col gap-3 mb-4 box-border w-full">
-             <SocialBtn icon={<GoogleIcon />} onClick={actions.handleGoogleLogin} label="Google" loading={state.googleLoading} disabled={state.loading} />
+             <GoogleIdentityButton loading={state.googleLoading} onCredentialResponse={actions.handleGoogleCredentialResponse} showToast={actions.showToast} />
              <SocialBtn icon={<GithubIcon />} onClick={actions.handleGithubLogin} label="GitHub" loading={state.loading} disabled={state.googleLoading} />
           </motion.div>
            

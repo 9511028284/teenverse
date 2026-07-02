@@ -313,6 +313,18 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+    const authError = url.searchParams.get('error_description') || hashParams.get('error_description');
+    if (!authError) return;
+
+    showToast('Google sign-in could not be completed. Please try again.');
+    ['error', 'error_code', 'error_description', 'sb'].forEach((key) => url.searchParams.delete(key));
+    url.hash = '';
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+  }, [showToast]);
+
   const handleNext = async () => {
     if (step === 1) return socialUser ? setStep(3) : setStep(2);
     if (step === 2) {
@@ -597,25 +609,31 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     }
   };
 
-  const handleGoogleLogin = useCallback(async () => {
+  const handleGoogleCredentialResponse = useCallback(async (response) => {
+    if (!response?.credential) {
+      showToast('Google did not return a valid sign-in token.');
+      return;
+    }
+
     setGoogleLoading(true);
     try {
       setRememberedSessionPreference(rememberMe);
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithIdToken({
         provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}${window.location.pathname}`,
-        },
+        token: response.credential,
+        nonce: response.nonce,
       });
 
       if (error) {
         console.error("Google login error:", error.message);
         throw new Error("Google sign-in failed. Please try again.");
       }
+      if (!data?.session) throw new Error('Google sign-in did not create a session.');
     } catch (error) {
       console.error("Google login error:", error);
       showToast(error?.message || AUTH_GENERIC_ERROR);
+    } finally {
       setGoogleLoading(false);
     }
   }, [rememberMe, showToast]);
@@ -649,7 +667,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
       handleNext, handleBack, goToSignup, goToLogin,
       handleFinalSubmit, handleSendPhoneOtp, handleRetryPhoneOtp, handleVerifyPhoneOtp, 
       handleForgotPassword, handleVerifyResetOTP, handleUpdatePassword,
-      handleGoogleLogin, handleGithubLogin,
+      handleGoogleCredentialResponse, handleGithubLogin,
     }
   };
 };
