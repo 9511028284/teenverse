@@ -29,6 +29,13 @@ test('allows completed and pre-marker freelancer and client profiles', () => {
   }), true);
 });
 
+test('allows the official TeenVerseHub client account without a phone profile', () => {
+  assert.equal(hasCompletedAppOnboarding({
+    profile: { role: 'business', onboarding_completed: true },
+    legacy: { client: { badges: ['official_teenversehub'] } },
+  }), true);
+});
+
 test('does not block admin and parent identities', () => {
   assert.equal(hasCompletedAppOnboarding({ legacy: { admin: { id: 'admin-1' } } }), true);
   assert.equal(hasCompletedAppOnboarding({ profile: { role: 'guardian' } }), true);

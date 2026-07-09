@@ -140,9 +140,11 @@ const buildSessionUser = (authUser, profile, legacy = {}, context = {}) => {
     },
   };
 
-  if (profile?.role === 'admin') {
-    return { ...base, ...legacy.admin, id: authUser.id, type: 'admin' };
-  }
+  const resolvedDashboardRole = resolveSessionDashboardRole({
+    preferredRole: activeDashboardRole,
+    hasClient: Boolean(legacy.client),
+    hasFreelancer: Boolean(legacy.freelancer),
+  });
 
   const freelancer = legacy.freelancer || {};
   const buildFreelancerSession = () => ({
@@ -167,11 +169,9 @@ const buildSessionUser = (authUser, profile, legacy = {}, context = {}) => {
     activeDashboardRole: DASHBOARD_ROLES.CLIENT,
   });
 
-  const resolvedDashboardRole = resolveSessionDashboardRole({
-    preferredRole: activeDashboardRole,
-    hasClient: Boolean(legacy.client),
-    hasFreelancer: Boolean(legacy.freelancer),
-  });
+  if (profile?.role === 'admin' && resolvedDashboardRole !== DASHBOARD_ROLES.CLIENT) {
+    return { ...base, ...legacy.admin, id: authUser.id, type: 'admin' };
+  }
 
   if (resolvedDashboardRole === DASHBOARD_ROLES.CLIENT) {
     return buildClientSession();

@@ -1,4 +1,5 @@
-import React, { forwardRef, useMemo } from 'react';
+import React, { forwardRef, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 import {
   Share2,
   Download,
@@ -29,7 +30,6 @@ const buildStoryJoinUrl = (user) => {
   } else if (user?.id) {
     url.searchParams.set('creator', user.id);
   }
-
   return url.toString();
 };
 
@@ -41,13 +41,13 @@ const normalizeSkill = (skill) => {
 
 const getPriceLabel = (user, services = []) => {
   const directRate = Number(user?.hourly_rate || 0);
-  if (directRate > 0) return `Rs ${directRate.toLocaleString('en-IN')}/hr`;
+  if (directRate > 0) return `₹${directRate.toLocaleString('en-IN')}/hr`;
 
   const servicePrice = services
     .map((service) => Number(service.price || service.starting_price || service.rate || 0))
     .find((price) => price > 0);
 
-  return servicePrice ? `From Rs ${servicePrice.toLocaleString('en-IN')}` : 'Open to collabs';
+  return servicePrice ? `From ₹${servicePrice.toLocaleString('en-IN')}` : 'Collabs Open';
 };
 
 const ProfileCard = forwardRef(({
@@ -62,6 +62,8 @@ const ProfileCard = forwardRef(({
   shareUrl,
   showToast,
 }, ref) => {
+  const [copied, setCopied] = useState(false);
+
   const stats = useMemo(() => {
     const isVerified = badges.some((badge) => ['Verified Teen', 'Verified'].includes(badge.name));
     const paidOrCompleted = applications.filter((app) => ['Paid', 'Completed', 'Submitted'].includes(app.status));
@@ -88,7 +90,7 @@ const ProfileCard = forwardRef(({
       projectCount,
       averageRating,
       skills,
-      topService: topService?.title || topService?.name || user?.specialty || 'Creative services',
+      topService: topService?.title || topService?.name || user?.specialty || 'Digital Art & Dev',
       plan,
       priceLabel: getPriceLabel(user, services),
     };
@@ -96,208 +98,200 @@ const ProfileCard = forwardRef(({
 
   const displayName = user?.name || 'TeenVerse Creator';
   const storyJoinUrl = shareUrl || buildStoryJoinUrl(user);
-  const specialty = user?.specialty || user?.tag_line || 'Digital Creator';
-  const profileLine = user?.tag_line || user?.bio || user?.qualification || 'Building verified work on TeenVerseHub.';
+  const specialty = user?.specialty || user?.tag_line || 'Creative Identity';
+  const profileLine = user?.tag_line || user?.bio || user?.qualification || 'Building cross-chain proof of work protocols.';
   const joinedYear = user?.created_at ? new Date(user.created_at).getFullYear() : new Date().getFullYear();
   const instagramHandle = user?.social_links?.instagram
     ? user.social_links.instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '@').replace(/\/$/, '')
     : null;
 
-  const openTeenVerse = () => {
-    window.location.href = storyJoinUrl;
-  };
-
-  const stopActionClick = (event, action) => {
-    event.stopPropagation();
-    action?.();
-  };
+  const openTeenVerse = () => { window.location.href = storyJoinUrl; };
+  const stopActionClick = (event, action) => { event.stopPropagation(); action?.(); };
 
   const copyStoryLink = async () => {
     try {
       await navigator.clipboard.writeText(storyJoinUrl);
-      showToast?.('Story link copied. Add it as the Instagram link sticker.', 'success');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      showToast?.('Sticker link copied! Add it to your Instagram Story.', 'success');
     } catch (_err) {
-      showToast?.('Could not copy link automatically.', 'error');
-    }
-  };
-
-  const onKeyDown = (event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      openTeenVerse();
+      showToast?.('Failed to capture framework links.', 'error');
     }
   };
 
   return (
-    <div className="flex flex-col items-center py-6 animate-fade-in max-w-xl mx-auto">
+    <div className="flex flex-col items-center py-4 max-w-xl mx-auto select-none font-sans">
       
-      {/* Top Banner Guide - Glass Pill */}
-      <div className="mb-6 flex w-full max-w-[380px] items-center justify-between rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-3 text-slate-700 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_4px_16px_rgba(0,0,0,0.02)] backdrop-blur-md dark:border-white/[0.05] dark:bg-slate-900/40 dark:text-slate-200">
+      {/* Dynamic Upper Tip Capsule */}
+      <div className="mb-6 flex w-full max-w-[360px] items-center justify-between rounded-2xl border border-slate-200/60 bg-white/70 px-4 py-2.5 shadow-sm backdrop-blur-xl dark:border-white/[0.03] dark:bg-slate-900/40">
         <div className="text-left">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">Instagram Ready</p>
-          <p className="mt-1 text-xs font-bold leading-normal">Story viewers join directly through your sticker link</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Instagram optimized</p>
+          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Viewers hit the link sticker to tap in.</p>
         </div>
-        <ExternalLink size={16} strokeWidth={2.5} className="text-rose-500 shrink-0 ml-3" />
+        <ExternalLink size={14} className="text-indigo-500 shrink-0 ml-3" />
       </div>
 
-      {/* --- RE-ENGINEERED INSTAGRAM FRAME CARD --- */}
+      {/* ── HIGH-FIDELITY SMART INSTAGRAM FRAME CARD ── */}
       <div
         ref={ref}
         role="link"
         tabIndex={0}
-        aria-label="Open TeenVerseHub"
         onClick={openTeenVerse}
-        onKeyDown={onKeyDown}
-        className="group relative aspect-[9/16] w-[380px] max-w-[calc(100vw-2rem)] cursor-pointer overflow-hidden rounded-[36px] bg-[#070913] text-white shadow-[0_24px_60px_rgba(0,0,0,0.4)] outline-none ring-offset-4 ring-offset-slate-950 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_32px_64px_rgba(244,63,94,0.3)] focus-visible:ring-2 focus-visible:ring-rose-400"
+        className="group relative aspect-[9/16] w-[360px] max-w-[calc(100vw-2rem)] cursor-pointer overflow-hidden rounded-[32px] bg-slate-950 text-white shadow-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-indigo-500/10 border border-slate-900 dark:border-white/10"
       >
-        {/* Background Medias */}
+        {/* Generative Visual Layers & Radial Scrims */}
         <div className="absolute inset-0 z-0">
           <img
-            src={user?.cover_image || "https://images.unsplash.com/photo-1516321497487-e288fb19713f?q=80&w=1200&auto=format&fit=crop"}
+            src={user?.cover_image || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&auto=format&fit=crop"}
             alt=""
             crossOrigin="anonymous"
-            className="h-full w-full object-cover opacity-30 saturate-125 transition-transform duration-700 group-hover:scale-102"
+            className="h-full w-full object-cover opacity-25 saturate-150 transition-transform duration-700 group-hover:scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/20 via-slate-950/70 to-[#070913]" />
-          <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-br from-rose-500/50 via-purple-500/20 to-transparent opacity-80 mix-blend-screen" />
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.12] mix-blend-overlay" />
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-slate-950/80 to-slate-950" />
+          <div className="absolute -top-20 -left-20 w-64 h-64 bg-indigo-500/20 rounded-full blur-[80px] pointer-events-none" />
+          <div className="absolute top-1/3 -right-20 w-64 h-64 bg-fuchsia-500/10 rounded-full blur-[100px] pointer-events-none" />
         </div>
-
-        {/* Intrinsic Inner Framing Ring */}
-        <div className="absolute inset-4 rounded-[28px] border border-white/5 pointer-events-none z-10" />
         
-        {/* Card Body Components */}
-        <div className="relative z-10 flex h-full flex-col justify-between p-6 pt-7 text-left">
+        {/* Core Layout Content */}
+        <div className="relative z-10 flex h-full flex-col justify-between p-6">
           
-          {/* Header Row */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 backdrop-blur-md shadow-[inset_0_1px_2px_rgba(255,255,255,0.1)]">
-              <Rocket size={13} strokeWidth={2.5} className="text-cyan-400" />
-              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/90">TeenVerseHub</span>
+          {/* Header Data Track */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.06] bg-white/5 px-3 py-1.5 backdrop-blur-md">
+              <Rocket size={12} className="text-indigo-400" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">TeenVerse</span>
             </div>
             
-            <div className="flex items-center gap-1.5 rounded-xl border border-amber-500/20 bg-amber-400/10 px-3 py-1.5 text-amber-300 backdrop-blur-md shadow-[inset_0_1px_2px_rgba(255,255,255,0.1)]">
-              <Crown size={12} strokeWidth={2.5} className="fill-amber-400/20" />
-              <span className="text-[9px] font-black uppercase tracking-[0.18em]">{stats.plan || `Level ${userLevel}`}</span>
+            <div className="flex items-center gap-1.5 rounded-xl border border-amber-500/20 bg-amber-400/5 px-3 py-1.5 text-amber-400 backdrop-blur-md">
+              <Crown size={12} className="fill-amber-400/10" />
+              <span className="text-[10px] font-bold uppercase tracking-wider">{stats.plan || `Tier ${userLevel}`}</span>
             </div>
           </div>
 
-          {/* Central Body Profiling Nodes */}
-          <div className="space-y-5 my-auto">
-            <div className="space-y-3.5">
+          {/* Identity Hub Zone */}
+          <div className="space-y-6 my-auto pt-4">
+            <div className="space-y-3 text-center">
               <div className="flex justify-center">
-                {/* Claymorphic Central Initials Ring */}
-                <div className="grid h-20 w-20 place-items-center rounded-[24px] border border-white/10 bg-white/5 text-3xl font-black uppercase shadow-[inset_0_2px_4px_rgba(255,255,255,0.2),_0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+                {/* Micro Silhouette Profile Ring */}
+                <div className="grid h-16 w-16 place-items-center rounded-2xl border border-white/10 bg-gradient-to-br from-indigo-600 to-purple-600 text-xl font-extrabold uppercase shadow-md shadow-indigo-500/20">
                   {displayName.charAt(0)}
                 </div>
               </div>
 
-              <div className="text-center space-y-1">
-                <h2 className="mx-auto flex max-w-[280px] items-center justify-center gap-1.5 text-balance text-2xl sm:text-3xl font-black tracking-tight leading-none">
+              <div className="space-y-1">
+                <h2 className="mx-auto flex items-center justify-center gap-1.5 text-2xl font-extrabold tracking-tight text-white leading-tight">
                   {displayName}
-                  {stats.isVerified && <CheckCircle size={20} strokeWidth={2.5} className="shrink-0 text-cyan-400" />}
+                  {stats.isVerified && <CheckCircle size={18} className="shrink-0 text-indigo-400 fill-indigo-400/10" />}
                 </h2>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 pt-0.5">{specialty}</p>
-                <p className="mx-auto max-w-[280px] text-xs font-medium leading-relaxed text-slate-400 line-clamp-2 pt-1">{profileLine}</p>
+                <p className="text-[11px] font-bold uppercase tracking-wider bg-gradient-to-r from-indigo-400 to-fuchsia-400 bg-clip-text text-transparent">{specialty}</p>
+                <p className="mx-auto max-w-[260px] text-xs font-medium leading-relaxed text-slate-400 line-clamp-2 pt-1">{profileLine}</p>
               </div>
             </div>
 
-            {/* Micro Stats Grid Box */}
-            <div className="grid grid-cols-3 overflow-hidden rounded-[20px] border border-white/[0.04] bg-slate-950/40 backdrop-blur-md shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)]">
-              <div className="p-3.5 text-center">
-                <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Projects</p>
-                <p className="mt-0.5 text-xl font-black font-mono">{stats.projectCount}</p>
+            {/* Micro Parameter Matrix Display */}
+            <div className="grid grid-cols-3 rounded-2xl border border-white/[0.04] bg-slate-900/50 backdrop-blur-md divide-x divide-white/[0.04] p-1 shadow-sm">
+              <div className="py-2.5 text-center">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Missions</p>
+                <p className="text-base font-extrabold font-mono text-white mt-0.5">{stats.projectCount}</p>
               </div>
-              <div className="border-x border-white/[0.04] p-3.5 text-center">
-                <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Rating</p>
-                <p className="mt-0.5 flex items-center justify-center gap-0.5 text-xl font-black font-mono">
-                  {stats.averageRating || '--'} <Star size={11} className="fill-amber-400 text-amber-400 mb-0.5" />
+              <div className="py-2.5 text-center">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Rating</p>
+                <p className="text-base font-extrabold font-mono text-white mt-0.5 flex items-center justify-center gap-0.5">
+                  {stats.averageRating || '--'} <Star size={10} className="fill-amber-400 text-amber-400 mb-0.5" />
                 </p>
               </div>
-              <div className="p-3.5 text-center">
-                <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Gigs</p>
-                <p className="mt-0.5 text-xl font-black font-mono">{stats.completedJobs}</p>
+              <div className="py-2.5 text-center">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Guild Gigs</p>
+                <p className="text-base font-extrabold font-mono text-white mt-0.5">{stats.completedJobs}</p>
               </div>
             </div>
 
-            {/* Specialty Field Capsules */}
-            <div className="space-y-2.5 rounded-[20px] border border-white/[0.04] bg-white/[0.02] p-4 backdrop-blur-md shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]">
+            {/* Core Capability Specifications */}
+            <div className="rounded-2xl border border-white/[0.03] bg-white/[0.01] p-4 space-y-3 shadow-inner">
               <div className="flex items-center gap-3">
-                <Briefcase size={16} strokeWidth={2.5} className="text-teal-400 shrink-0" />
+                <div className="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shrink-0">
+                  <Briefcase size={12} />
+                </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Featured Service</p>
-                  <p className="truncate text-xs font-bold text-white mt-0.5">{stats.topService}</p>
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Primary Allocation</p>
+                  <p className="truncate text-xs font-semibold text-slate-200 mt-0.5">{stats.topService}</p>
                 </div>
               </div>
+              
               <div className="flex items-center gap-3">
-                <GraduationCap size={16} strokeWidth={2.5} className="text-amber-400 shrink-0" />
+                <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shrink-0">
+                  <GraduationCap size={12} />
+                </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Rate Scale</p>
-                  <p className="truncate text-xs font-bold text-white mt-0.5">{user?.qualification || stats.priceLabel}</p>
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Rate Parameter</p>
+                  <p className="truncate text-xs font-semibold text-slate-200 mt-0.5">{user?.qualification || stats.priceLabel}</p>
                 </div>
               </div>
             </div>
 
-            {/* Skills Pills Row */}
-            <div className="flex flex-wrap justify-center gap-1.5">
-              {(stats.skills.length ? stats.skills : ['Creative', 'Reliable', 'Verified']).slice(0, 4).map((skill, idx) => (
-                <span key={`${skill}-${idx}`} className="rounded-lg border border-white/5 bg-white/[0.04] px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-slate-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]">
+            {/* Horizontal Pill Stream */}
+            <div className="flex flex-wrap justify-center gap-1.5 pt-1">
+              {(stats.skills.length ? stats.skills : ['Creative Design', 'Verification Loops', 'Ecosystem Active']).slice(0, 3).map((skill, idx) => (
+                <span key={`${skill}-${idx}`} className="rounded-lg border border-white/[0.04] bg-white/[0.03] px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400 shadow-sm">
                   {skill}
                 </span>
               ))}
             </div>
           </div>
 
-          {/* Bottom Interactive Sticker Target Row */}
-          <div className="space-y-3.5 mt-auto">
-            {/* Simulated Instagram Link Sticker */}
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white bg-white px-4 py-2.5 text-slate-950 shadow-[0_12px_24px_rgba(0,0,0,0.15)] transition-transform group-hover:scale-[1.01]">
+          {/* Bottom Action Sticker Base */}
+          <div className="space-y-3 mt-auto">
+            
+            {/* Ultra-Modern Simulated Instagram Link Sticker */}
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white p-3 text-slate-950 shadow-lg">
               <div className="flex items-center gap-2.5">
-                <div className="grid h-8 w-8 place-items-center rounded-xl bg-slate-950 text-white shadow-sm">
-                  <Link2 size={14} strokeWidth={2.5} />
+                <div className="grid h-7 w-7 place-items-center rounded-lg bg-slate-950 text-white shadow-sm">
+                  <Link2 size={12} strokeWidth={2.5} />
                 </div>
                 <div className="leading-none">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Link Sticker</p>
-                  <p className="text-xs font-black tracking-tight mt-0.5">Join TeenVerseHub</p>
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Instagram Sticker</p>
+                  <p className="text-xs font-extrabold tracking-tight mt-0.5">Explore TeenVerseHub</p>
                 </div>
               </div>
-              <Sparkles size={16} className="text-rose-500 animate-pulse" />
+              <Sparkles size={14} className="text-indigo-600 animate-pulse" />
             </div>
 
-            <div className="rounded-xl bg-white/[0.02] border border-white/[0.04] px-3 py-1.5 text-center shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)]">
-              <p className="truncate text-[10px] font-bold font-mono tracking-wider text-slate-400">
+            <div className="rounded-xl bg-white/[0.02] border border-white/[0.04] py-1.5 text-center shadow-inner">
+              <p className="truncate text-[10px] font-mono font-medium tracking-wider text-slate-500">
                 teenversehub.in
               </p>
             </div>
 
-            <div className="flex items-center justify-between pt-1 text-[9px] font-black uppercase tracking-wider text-slate-500">
-              <span className="flex items-center gap-1"><BadgeCheck size={12} strokeWidth={2.5} /> {joinedYear} Profile</span>
-              <span>{instagramHandle || 'Share-Ready Template'}</span>
+            <div className="flex items-center justify-between pt-1 text-[9px] font-bold uppercase tracking-wider text-slate-500 font-mono">
+              <span className="flex items-center gap-1"><BadgeCheck size={11} /> {joinedYear} Ledger Matrix</span>
+              <span className="truncate max-w-[140px] text-right">{instagramHandle || 'Share Blueprint Active'}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Footer Interface Actions Panel */}
-      <div className="mt-6 flex w-full max-w-[380px] gap-2.5">
+      {/* ── INTERACTIVE CONTROLS INTERFACE PANEL ── */}
+      <div className="mt-6 flex w-full max-w-[360px] gap-2">
         <Button
-          className="flex-1 border-none bg-gradient-to-r from-rose-500 via-fuchsia-600 to-indigo-600 text-white font-black text-xs uppercase tracking-wider py-3 rounded-xl shadow-[inset_0_2px_4px_rgba(255,255,255,0.35),_0_10px_24px_rgba(236,72,153,0.3)] transition-transform hover:scale-[1.02]"
+          className="flex-1 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-bold text-xs uppercase tracking-wider py-3 rounded-xl shadow-md transition-all hover:opacity-95"
           icon={Share2}
           onClick={(event) => stopActionClick(event, handleShareToInstagram)}
         >
-          Share
+          Share Deck
         </Button>
 
         <Button
-          className="border-slate-200/80 bg-white text-xs font-black uppercase tracking-wider text-slate-700 rounded-xl px-4 shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.6),_0_2px_6px_rgba(0,0,0,0.02)] hover:bg-slate-50 dark:border-white/[0.05] dark:bg-slate-900 dark:text-white dark:hover:bg-slate-800"
+          className="border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-600 rounded-xl px-4 hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 transition-all shadow-sm"
           variant="outline"
           icon={Link2}
-          aria-label="Copy Instagram story link sticker"
+          aria-label="Copy access link"
           onClick={(event) => stopActionClick(event, copyStoryLink)}
-        />
+        >
+          {copied ? 'Copied' : ''}
+        </Button>
 
         <Button
-          className="flex-1 border-slate-200/80 bg-white text-xs font-black uppercase tracking-wider text-slate-700 rounded-xl shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.6),_0_2px_6px_rgba(0,0,0,0.02)] hover:bg-slate-50 dark:border-white/[0.05] dark:bg-slate-900 dark:text-white dark:hover:bg-slate-800"
+          className="flex-1 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-600 rounded-xl hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 transition-all shadow-sm"
           variant="outline"
           icon={Download}
           onClick={(event) => stopActionClick(event, handleDownloadCard)}

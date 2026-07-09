@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import {
   Search, MapPin, ArrowUpRight, Sparkles, Filter, Briefcase,
   ChevronDown, ChevronUp, Clock, Calendar, DollarSign, Flag, AlertTriangle,
-  Loader2, Flame, Zap, Crown, User, Star, Paperclip, ShieldCheck, Cpu, Award
+  Loader2, Flame, Zap, Crown, User, Star, Paperclip, ShieldCheck, Cpu, Award,
+  BadgeCheck
 } from 'lucide-react';
 import { supabase } from '../../supabase';
 import Button from '../ui/Button';
@@ -190,6 +191,8 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
     const description = data?.description || "No description provided.";
     const isLongText = description.length > 120;
     const displayName = data.client_name || 'Client';
+    const isOfficialClient = data.client_is_official === true;
+    const verifiedLabel = data.client_verified_label || 'Official TeenVerseHub account';
     const isElite = checkIsElite(data.is_elite);
 
     const hasAttachments = data.attachments && data.attachments.length > 0;
@@ -247,6 +250,15 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
                     {displayName.charAt(0)}
                   </span>
                   <span className="truncate">Client: {displayName}</span>
+                  {isOfficialClient && (
+                    <BadgeCheck
+                      size={15}
+                      strokeWidth={2.8}
+                      className="shrink-0 fill-sky-500 text-white drop-shadow-sm"
+                      aria-label={verifiedLabel}
+                      title={verifiedLabel}
+                    />
+                  )}
               </div>
             </div>
 

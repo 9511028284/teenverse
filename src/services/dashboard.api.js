@@ -5,6 +5,7 @@ const PUBLIC_PROFILE_TIMEOUT_MS = 12_000;
 const PUBLIC_PROFILE_RATE_WINDOW_MS = 60_000;
 const PUBLIC_PROFILE_RATE_LIMIT = 24;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const OFFICIAL_CLIENT_SELECT = 'client_id, display_name, badge_label, verified_at';
 
 const publicProfileCache = new Map();
 const publicProfileInflight = new Map();
@@ -47,6 +48,48 @@ const safeProfileBundle = (bundle = {}) => ({
   services: Array.isArray(bundle.services) ? bundle.services : [],
   resume: bundle.resume || null,
 });
+
+const decorateJobsWithOfficialAccounts = async (jobs = []) => {
+  const safeJobs = Array.isArray(jobs) ? jobs : [];
+  const clientIds = [
+    ...new Set(
+      safeJobs
+        .map((job) => job?.client_id)
+        .filter((id) => UUID_RE.test(String(id || '')))
+    ),
+  ];
+
+  if (clientIds.length === 0) return safeJobs;
+
+  try {
+    const { data, error } = await supabase
+      .from('official_client_accounts')
+      .select(OFFICIAL_CLIENT_SELECT)
+      .in('client_id', clientIds);
+
+    if (error) throw error;
+
+    const officialByClientId = new Map(
+      (data || []).map((account) => [account.client_id, account])
+    );
+
+    return safeJobs.map((job) => {
+      const officialAccount = officialByClientId.get(job.client_id);
+      if (!officialAccount) return job;
+
+      return {
+        ...job,
+        client_name: officialAccount.display_name || job.client_name,
+        client_is_official: true,
+        client_verified_label: officialAccount.badge_label || 'Official TeenVerseHub account',
+        client_verified_at: officialAccount.verified_at || null,
+      };
+    });
+  } catch (error) {
+    console.warn('Official client account lookup failed:', error);
+    return safeJobs;
+  }
+};
 
 // ==========================================
 // 1. DATA FETCHING (OPTIMIZED)
@@ -146,9 +189,11 @@ export const fetchDashboardData = async (user) => {
       }
     }
 
+    const decoratedJobs = await decorateJobsWithOfficialAccounts(jobsRes.data || []);
+
     return { 
       services: servicesRes.data || [], 
-      jobs: jobsRes.data || [], 
+      jobs: decoratedJobs,
       applications,
       notifications: notifRes.data || [],
       referralCount: 0 
@@ -166,7 +211,7 @@ export const searchJobsAPI = async (searchTerm) => {
       console.error(error);
       return [];
   }
-  return data;
+  return decorateJobsWithOfficialAccounts(data || []);
 };
 
 export const sendPushNotification = async ({
@@ -209,14 +254,16 @@ export const createJob = async (jobData) => {
     return { error };
   }
 
+  const [decoratedData] = await decorateJobsWithOfficialAccounts(data ? [data] : []);
+
   await sendPushNotification({
     audience: 'freelancers',
     title: 'New job available',
-    body: data?.title ? `New job available: ${data.title}` : 'A new job is available on TeenVerse.',
+    body: decoratedData?.title ? `New job available: ${decoratedData.title}` : 'A new job is available on TeenVerse.',
     url: '/dashboard',
   });
 
-  return { data };
+  return { data: decoratedData || data };
 };
 
 export const deleteJob = async (jobId) => {
