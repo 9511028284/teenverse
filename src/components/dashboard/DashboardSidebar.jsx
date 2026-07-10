@@ -382,30 +382,7 @@ const DashboardSidebar = ({
               </div>
             )}
 
-            {/* Matrix Role Switcher Action */}
-            {onSwitchDashboardRole && (
-              <button
-                type="button"
-                onClick={() => onSwitchDashboardRole(switchTargetRole)}
-                disabled={Boolean(roleSwitching)}
-                className={cx(
-                  'mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-100/80 bg-indigo-50/60 dark:bg-indigo-950/20 dark:border-indigo-500/10 py-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 transition-all disabled:cursor-not-allowed disabled:opacity-50 hover:bg-indigo-100/80 dark:hover:bg-indigo-900/30',
-                  zenMode ? 'h-9 px-0' : 'px-3'
-                )}
-                title={zenMode ? `Switch to ${switchTargetRole}` : undefined}
-              >
-                <ArrowLeftRight size={13} className={isSwitchingThisRole ? 'animate-spin' : ''} />
-                {!zenMode && (
-                  <span>
-                    {isSwitchingThisRole
-                      ? 'Reconfiguring...'
-                      : isClient
-                        ? 'Switch to Freelancer'
-                        : 'Switch to Client Space'}
-                  </span>
-                )}
-              </button>
-            )}
+          
 
             {/* Disconnect System Trigger */}
             <button

@@ -40,7 +40,7 @@ const checkIsElite = (val) => {
     return val === true || String(val).toLowerCase() === 'true' || val === 1 || val === '1';
 };
 
-// --- HELPER: SAFE INT STRING HASH (PREVENTS MODULO CRASHES ON UUIDs) ---
+// --- HELPER: SAFE INT STRING HASH ---
 const getStableIndex = (idString, modLimit) => {
     if (!idString) return 0;
     const str = String(idString);
@@ -56,7 +56,7 @@ const AiResultCard = ({ title, icon, freelancer, colorClass, setActiveChat, setT
     if (!freelancer) return null;
     return (
       <div className={cn(
-        "p-5 rounded-[24px] border bg-white relative overflow-hidden group transition-all duration-300 ease-out hover:-translate-y-0.5 text-left",
+        "p-5 rounded-[24px] border bg-white relative overflow-hidden group transition-all duration-300 ease-out hover:-translate-y-1 text-left",
         "shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_4px_16px_rgba(0,0,0,0.02)]",
         "dark:bg-slate-900/40 dark:border-white/[0.04] dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.06),_0_12px_28px_rgba(0,0,0,0.25)]",
         colorClass
@@ -71,7 +71,7 @@ const AiResultCard = ({ title, icon, freelancer, colorClass, setActiveChat, setT
             <div className="min-w-0">
                 <h4 className="font-black text-lg text-slate-900 dark:text-white tracking-tight truncate">{freelancer.name || 'Pro Creator'}</h4>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 text-[9px] font-black uppercase tracking-wider shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)] dark:shadow-none">
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 text-[9px] font-black uppercase tracking-wider">
                         {freelancer.match_score || 95}% Match
                     </span>
                     <span className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-0.5">
@@ -81,7 +81,7 @@ const AiResultCard = ({ title, icon, freelancer, colorClass, setActiveChat, setT
             </div>
             <div className="text-right shrink-0">
                 <p className="font-black text-slate-900 dark:text-white text-lg font-mono leading-none">₹{freelancer.hourly_rate || 0}<span className="text-[10px] text-slate-400 font-bold font-sans">/hr</span></p>
-                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1.5">In {freelancer.response_speed_hours ?? 24}h</p>
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1.5">Replies in {freelancer.response_speed_hours ?? 24}h</p>
             </div>
         </div>
 
@@ -101,9 +101,9 @@ const AiResultCard = ({ title, icon, freelancer, colorClass, setActiveChat, setT
                 setActiveChat({ id: freelancer.id, name: freelancer.name });
                 setTab('messages');
             }}
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-950 font-black text-xs uppercase tracking-wider py-3 rounded-xl shadow-[inset_0_2px_4px_rgba(255,255,255,0.3)] dark:shadow-[inset_0_2px_4px_rgba(255,255,255,0.4)]"
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-950 font-black text-xs uppercase tracking-wider py-3 rounded-xl transition-transform active:scale-95 shadow-sm"
         >
-            Hire Instantly
+            Chat & Hire Now
         </Button>
       </div>
     );
@@ -115,7 +115,7 @@ const TalentCard = ({ freelancer, onAction, setActiveChat, setTab, onTriggerRepo
 
     return (
         <div className={cn(
-            "group relative rounded-[28px] border p-6 flex flex-col transition-all duration-300 ease-out hover:-translate-y-0.5 text-left",
+            "group relative rounded-[28px] border p-6 flex flex-col transition-all duration-300 ease-out hover:-translate-y-1 text-left",
             isElite
               ? 'bg-gradient-to-br from-amber-50/50 to-orange-50/30 border-amber-200 shadow-[inset_0_2px_4px_rgba(255,255,255,0.9),_0_6px_20px_rgba(245,158,11,0.04)] dark:from-amber-950/20 dark:to-slate-900/40 dark:border-amber-500/30 dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.08),_0_16px_36px_rgba(0,0,0,0.35)] hover:border-amber-400 dark:hover:border-amber-500/50'
               : 'bg-white border-slate-200/80 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),_0_4px_16px_rgba(0,0,0,0.01)] dark:bg-slate-900/40 dark:border-white/[0.05] dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.06),_0_16px_36px_rgba(0,0,0,0.25)] hover:border-indigo-500/20 dark:hover:border-indigo-500/30'
@@ -123,15 +123,15 @@ const TalentCard = ({ freelancer, onAction, setActiveChat, setTab, onTriggerRepo
 
             {/* Elite Badge */}
             {isElite && (
-                <div className="absolute top-4 right-4 bg-gradient-to-r from-amber-400 to-amber-600 text-white px-3 py-1 rounded-xl flex items-center gap-1 text-[10px] font-black tracking-widest shadow-[inset_0_1.5px_2.5px_rgba(255,255,255,0.4),_0_6px_14px_rgba(245,158,11,0.25)] z-20 border border-amber-300 dark:border-transparent">
-                    <Crown size={11} className="fill-white" /> ELITE
+                <div className="absolute top-4 right-4 bg-gradient-to-r from-amber-400 to-amber-600 text-white px-3 py-1 rounded-xl flex items-center gap-1 text-[10px] font-black tracking-widest shadow-sm z-20 border border-amber-300 dark:border-transparent">
+                    <Crown size={11} className="fill-white" /> ELITE CREATOR
                 </div>
             )}
 
             <div className="flex items-center gap-4 mb-5 mt-2">
                 <div className="relative shrink-0">
-                    <div className={cn("absolute -inset-1 rounded-full blur opacity-30", isElite ? 'bg-amber-500' : 'bg-indigo-500')} />
-                    <img src={freelancer.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${freelancer.id}`} alt="avatar" className="w-14 h-14 rounded-full bg-slate-50 relative z-10 border-2 border-white dark:border-slate-800 object-cover" />
+                    <div className={cn("absolute -inset-1 rounded-full blur opacity-30 animate-pulse", isElite ? 'bg-amber-500' : 'bg-indigo-500')} />
+                    <img src={freelancer.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${freelancer.id}`} alt="avatar" className="w-14 h-14 rounded-full bg-slate-50 relative z-10 border-2 border-white dark:border-slate-800 object-cover group-hover:scale-105 transition-transform duration-200" />
                 </div>
                 <div className="min-w-0">
                     <h3 className="font-black text-base text-slate-900 dark:text-white tracking-tight leading-tight flex items-center gap-1.5">
@@ -143,12 +143,12 @@ const TalentCard = ({ freelancer, onAction, setActiveChat, setTab, onTriggerRepo
             </div>
 
             <div className="grid grid-cols-2 gap-2.5 mb-5">
-                <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-xl flex flex-col justify-center border border-slate-200/40 dark:border-white/[0.04] shadow-[inset_0_1px_2px_rgba(0,0,0,0.01)]">
-                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-wider mb-1 flex items-center gap-1"><DollarSign size={11} strokeWidth={2.5}/> Rate</p>
+                <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-xl flex flex-col justify-center border border-slate-200/40 dark:border-white/[0.04]">
+                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-wider mb-1 flex items-center gap-1"><DollarSign size={11} strokeWidth={2.5} className="text-indigo-500"/> Rate</p>
                     <p className="text-sm font-black text-slate-900 dark:text-white font-mono">₹{freelancer.hourly_rate || 0}<span className="text-[10px] text-slate-400 font-bold font-sans">/hr</span></p>
                 </div>
-                <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-xl flex flex-col justify-center border border-slate-200/40 dark:border-white/[0.04] shadow-[inset_0_1px_2px_rgba(0,0,0,0.01)]">
-                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-wider mb-1 flex items-center gap-1"><Star size={11} strokeWidth={2.5}/> Rating</p>
+                <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-xl flex flex-col justify-center border border-slate-200/40 dark:border-white/[0.04]">
+                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-wider mb-1 flex items-center gap-1"><Star size={11} strokeWidth={2.5} className="text-amber-500"/> Score</p>
                     <p className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-0.5 font-mono"><Star size={12} className="fill-amber-400 text-amber-400 mb-0.5"/> {freelancer.rating || "5.0"}</p>
                 </div>
             </div>
@@ -162,23 +162,22 @@ const TalentCard = ({ freelancer, onAction, setActiveChat, setTab, onTriggerRepo
             </div>
 
             <div className="flex gap-2.5 pt-4 border-t border-slate-100 dark:border-white/[0.04] items-center justify-between">
-                <Button variant="outline" className="flex-1 text-xs font-bold rounded-xl h-9" onClick={() => onAction('view_profile', freelancer)}>
-                    <User size={13} className="mr-1"/> Profile
+                <Button variant="outline" className="flex-1 text-xs font-bold rounded-xl h-9 border-slate-200 dark:border-slate-800" onClick={() => onAction('view_profile', freelancer)}>
+                    <User size={13} className="mr-1"/> Portfolio
                 </Button>
-                <Button className="flex-1 text-xs font-black uppercase tracking-wider bg-indigo-600 hover:bg-indigo-700 text-white shadow-md rounded-xl h-9" onClick={() => {
+                <Button className="flex-1 text-xs font-black uppercase tracking-wider bg-indigo-600 hover:bg-indigo-700 text-white shadow-md rounded-xl h-9 transition-transform active:scale-95" onClick={() => {
                     setActiveChat({ id: freelancer.id, name: freelancer.name });
                     setTab('messages');
                 }}>
-                    Chat <ArrowUpRight size={13} strokeWidth={2.5}/>
+                    Let's Chat <ArrowUpRight size={13} strokeWidth={2.5}/>
                 </Button>
             </div>
 
-            {/* Embedded Flag Action */}
             <button
               onClick={() => onTriggerReport({ target_type: 'user', target_id: freelancer.id, reported_user_id: freelancer.id })}
               className="text-[9px] font-bold text-slate-300 dark:text-slate-600 hover:text-red-400 dark:hover:text-red-400 flex items-center gap-1 mt-2.5 transition-colors self-start ml-1"
             >
-                <Flag size={10}/> Flag Content Profile
+                <Flag size={10}/> Report Profile
             </button>
         </div>
     );
@@ -188,11 +187,11 @@ const TalentCard = ({ freelancer, onAction, setActiveChat, setTab, onTriggerRepo
 const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
-    const description = data?.description || "No description provided.";
+    const description = data?.description || "No description details provided.";
     const isLongText = description.length > 120;
     const displayName = data.client_name || 'Client';
     const isOfficialClient = data.client_is_official === true;
-    const verifiedLabel = data.client_verified_label || 'Official TeenVerseHub account';
+    const verifiedLabel = data.client_verified_label || 'Official Account Verified';
     const isElite = checkIsElite(data.is_elite);
 
     const hasAttachments = data.attachments && data.attachments.length > 0;
@@ -222,17 +221,17 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
     const priceColor = isElite ? "text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-400" : "text-slate-900 dark:text-white";
 
     return (
-      <div className={cn("group relative rounded-[28px] border transition-all duration-300 ease-out hover:-translate-y-0.5 overflow-hidden flex flex-col h-full text-left", cardBg)}>
+      <div className={cn("group relative rounded-[28px] border transition-all duration-300 ease-out hover:-translate-y-1 overflow-hidden flex flex-col h-full text-left", cardBg)}>
 
         {isElite && (
             <div className="absolute top-4 left-4 bg-gradient-to-r from-yellow-400 via-amber-500 to-orange-500 text-black px-3 py-1 rounded-xl flex items-center gap-1.5 text-[10px] font-black shadow-[0_0_15px_rgba(245,158,11,0.5)] z-20 ring-1 ring-white/20">
                 <Crown size={11} className="fill-black relative z-10" />
-                <span className="relative z-10 tracking-widest uppercase">Elite</span>
+                <span className="relative z-10 tracking-widest uppercase">Elite Drop</span>
             </div>
         )}
 
         <div className={cn("h-24 w-full relative overflow-hidden bg-gradient-to-br", headerGradient)}>
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-overlay" />
             <div className={cn("absolute bottom-0 left-0 w-full h-2/3 bg-gradient-to-t to-transparent", isElite ? 'from-[#161616]' : 'from-white dark:from-[#070A14]')} />
             <div className={cn("absolute top-4 right-4 backdrop-blur-md border px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm z-20", isElite ? 'bg-slate-950/60 border-amber-500/30 text-amber-300' : 'bg-white/90 dark:bg-slate-950/40 border-slate-200/60 dark:border-white/10 text-slate-800 dark:text-white')}>
                 <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse shadow-[0_0_6px_currentColor]", isElite ? 'bg-amber-400' : 'bg-emerald-500')} />
@@ -242,20 +241,19 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
 
         <div className="p-6 pt-0 flex flex-col flex-grow relative z-10 -mt-1">
             <div className="mb-4">
-              <h3 className={cn("text-lg font-black leading-snug mb-2 transition-all tracking-tight", isExpanded ? '' : 'line-clamp-2', titleColor)}>
-                  {data.title || 'Untitled Project Operational Log'}
+              <h3 className={cn("text-lg font-black leading-snug mb-2 transition-all tracking-tight group-hover:opacity-90", isExpanded ? '' : 'line-clamp-2', titleColor)}>
+                  {data.title || 'Untitled Gig Post'}
               </h3>
               <div className={cn("text-xs font-bold flex items-center gap-2 mt-2", isElite ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400')}>
                   <span className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black uppercase shadow-inner", isElite ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300')}>
                     {displayName.charAt(0)}
                   </span>
-                  <span className="truncate">Client: {displayName}</span>
+                  <span className="truncate">{displayName}</span>
                   {isOfficialClient && (
                     <BadgeCheck
                       size={15}
                       strokeWidth={2.8}
                       className="shrink-0 fill-sky-500 text-white drop-shadow-sm"
-                      aria-label={verifiedLabel}
                       title={verifiedLabel}
                     />
                   )}
@@ -263,24 +261,24 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
             </div>
 
             <div className="grid grid-cols-2 gap-2 mb-4 font-bold">
-                <div className={cn("border rounded-xl p-2.5 flex items-center gap-2 shadow-[inset_0_1px_2px_rgba(0,0,0,0.01)]", pillBg)}>
+                <div className={cn("border rounded-xl p-2.5 flex items-center gap-2", pillBg)}>
                     <Clock size={14} strokeWidth={2.5} className={iconColor}/>
                     <div className="leading-tight">
-                        <p className={cn("text-[9px] font-black uppercase tracking-wider", subText)}>Duration</p>
+                        <p className={cn("text-[9px] font-black uppercase tracking-wider", subText)}>Timeline</p>
                         <p className={cn("text-xs font-black truncate mt-0.5", pillText)}>{data.duration || "Flexible"}</p>
                     </div>
                 </div>
-                <div className={cn("border rounded-xl p-2.5 flex items-center gap-2 shadow-[inset_0_1px_2px_rgba(0,0,0,0.01)]", pillBg)}>
+                <div className={cn("border rounded-xl p-2.5 flex items-center gap-2", pillBg)}>
                     <Briefcase size={14} strokeWidth={2.5} className={typeIconColor}/>
                     <div className="leading-tight">
-                        <p className={cn("text-[9px] font-black uppercase tracking-wider", subText)}>Payment Format</p>
-                        <p className={cn("text-xs font-black truncate mt-0.5", pillText)}>{data.job_type || "Fixed Contract"}</p>
+                        <p className={cn("text-[9px] font-black uppercase tracking-wider", subText)}>Job Structure</p>
+                        <p className={cn("text-xs font-black truncate mt-0.5", pillText)}>{data.job_type || "Fixed Pay"}</p>
                     </div>
                 </div>
-                <div className={cn("col-span-2 border rounded-xl p-2 flex items-center gap-1.5 justify-center shadow-[inset_0_1px_2px_rgba(0,0,0,0.01)]", pillBg)}>
+                <div className={cn("col-span-2 border rounded-xl p-2 flex items-center gap-1.5 justify-center", pillBg)}>
                     <Calendar size={12} strokeWidth={2.5} className={isElite ? "text-amber-500/40" : "text-slate-400"}/>
                     <span className={cn("text-[10px] font-black uppercase tracking-wider font-mono", isElite ? 'text-amber-200/50' : 'text-slate-400 dark:text-slate-500')}>
-                        Indexed {getTimeAgo(data.created_at)}
+                        Posted {getTimeAgo(data.created_at)}
                     </span>
                 </div>
             </div>
@@ -294,7 +292,7 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
                         onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
                         className={cn("mt-2 text-[10px] font-black uppercase tracking-wider flex items-center gap-0.5 transition-colors hover:underline outline-none", isElite ? 'text-amber-400 hover:text-amber-300' : 'text-indigo-600 dark:text-indigo-400')}
                     >
-                        {isExpanded ? <>Collapse Parameters <ChevronUp size={11} strokeWidth={2.5}/></> : <>Read Full Parameters <ChevronDown size={11} strokeWidth={2.5}/></>}
+                        {isExpanded ? <>Show Less <ChevronUp size={11} strokeWidth={2.5}/></> : <>Read Full Bio <ChevronDown size={11} strokeWidth={2.5}/></>}
                     </button>
                 )}
             </div>
@@ -316,14 +314,14 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
                             )}
                         >
                             <Paperclip size={11} strokeWidth={2.5} />
-                            Asset {data.attachments.length > 1 ? idx + 1 : ''}
+                            Brief File {data.attachments.length > 1 ? idx + 1 : ''}
                         </a>
                     ))}
                 </div>
             )}
 
             <div className="flex flex-wrap gap-1.5 mb-5 mt-auto">
-                {(data.tags ? data.tags.split(',') : [data.category || 'Mission']).slice(0,3).map((t, i) => (
+                {(data.tags ? data.tags.split(',') : [data.category || 'Gig']).slice(0,3).map((t, i) => (
                     <span key={i} className={cn("px-2.5 py-0.5 rounded-lg border text-[9px] font-black uppercase tracking-wider", tagBg)}>
                         {t.trim()}
                     </span>
@@ -332,7 +330,7 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
 
             <div className={cn("pt-4 border-t flex items-center justify-between", isElite ? 'border-amber-500/10' : 'border-slate-100 dark:border-white/[0.04]')}>
                 <div className="text-left">
-                    <p className={cn("text-[9px] uppercase tracking-widest font-black mb-0.5", isElite ? 'text-amber-500/50' : 'text-slate-400 dark:text-slate-500')}>Budget Plate</p>
+                    <p className={cn("text-[9px] uppercase tracking-widest font-black mb-0.5", isElite ? 'text-amber-500/50' : 'text-slate-400 dark:text-slate-500')}>Offer Payout</p>
                     <div className={cn("flex items-baseline font-black text-lg font-mono leading-none", priceColor)}>
                         <span className={cn("text-xs font-bold mr-0.5 font-sans", isElite ? 'text-amber-600' : 'text-slate-400')}>₹</span>
                         {data.price || data.budget || 0}
@@ -344,7 +342,7 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
                       }}
                       className={cn("text-[9px] font-bold flex items-center gap-1 mt-2 transition-colors outline-none", isElite ? 'text-slate-600 hover:text-red-400' : 'text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400')}
                     >
-                      <Flag size={9} strokeWidth={2.5} /> Flag Entry
+                      <Flag size={9} strokeWidth={2.5} /> Flag Post
                     </button>
                 </div>
 
@@ -353,11 +351,11 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
                    className={cn(
                      "h-10 px-5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center gap-1.5 hover:scale-105 active:scale-95 transition-all outline-none",
                      isElite
-                       ? 'bg-gradient-to-r from-amber-400 to-yellow-600 text-black border border-amber-300 shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.4),_0_6px_14px_rgba(245,158,11,0.35)]'
-                       : 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-[inset_0_2px_4px_rgba(255,255,255,0.2)]'
+                       ? 'bg-gradient-to-r from-amber-400 to-yellow-600 text-black border border-amber-300 shadow-md shadow-amber-500/10'
+                       : 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-sm'
                    )}
                 >
-                    Apply
+                    Apply Now
                     <ArrowUpRight size={15} strokeWidth={3}/>
                 </button>
             </div>
@@ -378,7 +376,6 @@ const Jobs = ({
   const [parsedData, setParsedData] = useState(null);
   const [jobView, setJobView] = useState('normal');
 
-  // --- FILTER 1: FREELANCER VIEW (Missions Board Filter) ---
   const publicMissions = filteredJobs.filter(job => {
       if (job.category === 'Direct Hire') return false;
       if (job.status && !['Pending', 'Open'].includes(job.status)) return false;
@@ -392,7 +389,7 @@ const Jobs = ({
 
   const handleToggle = (view) => {
       if (view === 'elite' && getEffectivePlanName(user) !== 'Elite') {
-          if (showToast) showToast("Subscription verification failed. Upgrade to Elite to scan premium nodes.", "error");
+          if (showToast) showToast("Subscription verification failed. Upgrade to Elite to scan premium jobs.", "error");
           return;
       }
       setJobView(view);
@@ -435,7 +432,7 @@ const Jobs = ({
           setAiResults({ best, fast, budget });
       }
     } catch (err) {
-      console.error("AI Node Execution Fault:", err);
+      console.error("AI Match Error:", err);
       if (showToast) showToast(err.message || "Talent matching failed.", "error");
     } finally {
       setIsAiSearching(false);
@@ -445,7 +442,7 @@ const Jobs = ({
   return (
     <div className={cn("min-h-screen pb-20 relative px-0 text-center space-y-8", isClient ? 'mx-auto w-full max-w-7xl' : '')}>
 
-      {/* --- COMMAND GLASS FILTERS CONTROLLERS BAR --- */}
+      {/* --- FLOATING CONTROLLERS BAR --- */}
       <div className="sticky top-6 z-[40] mx-auto max-w-4xl px-4">
         {isClient ? (
           /* Client AI Match Panel */
@@ -454,17 +451,17 @@ const Jobs = ({
 
             <div className="mb-4 relative z-10">
                 <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center justify-center gap-2 tracking-tight">
-                    <Sparkles className="text-indigo-600 dark:text-indigo-400 shrink-0" size={22} strokeWidth={2.5}/> AI Talent Matcher
+                    <Sparkles className="text-indigo-600 dark:text-indigo-400 shrink-0" size={22} strokeWidth={2.5}/> Smart AI Matcher
                 </h2>
                 <p className="text-xs font-medium text-slate-400 dark:text-slate-500 mt-1 max-w-lg mx-auto leading-relaxed">
-                    Specify project scopes, tech stacks, or targeted budget parameters to automatically query matching workspace modules.
+                    Describe your project scope, ideal tech stack, or maximum target budget to find the perfect creator instantly.
                 </p>
             </div>
 
             <form onSubmit={handleAiSearch} className="relative group z-10 w-full">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl sm:rounded-full blur opacity-10 group-hover:opacity-20 transition-all duration-300" />
 
-                <div className="relative bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/[0.05] rounded-2xl sm:rounded-full p-1.5 flex flex-col sm:flex-row items-stretch sm:items-center shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.4)] gap-2 sm:gap-0">
+                <div className="relative bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/[0.05] rounded-2xl sm:rounded-full p-1.5 flex flex-col sm:flex-row items-stretch sm:items-center shadow-inner gap-2 sm:gap-0">
                     <div className="flex items-center flex-1 px-2.5">
                         {isAiSearching ? (
                             <Loader2 className="text-indigo-500 animate-spin shrink-0" size={18} strokeWidth={2.5} />
@@ -473,7 +470,7 @@ const Jobs = ({
                         )}
                         <input
                             type="text"
-                            placeholder="e.g., Need a Python dev for video backend pipelines..."
+                            placeholder="e.g., Need a Python developer to build a video editor backend..."
                             className="w-full bg-transparent px-3 py-2.5 outline-none text-slate-900 dark:text-white placeholder-slate-400 font-bold text-xs sm:text-sm"
                             value={searchTerm || ''}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -484,9 +481,9 @@ const Jobs = ({
                         <Button
                             type="submit"
                             disabled={isAiSearching || !searchTerm}
-                            className="w-full sm:w-auto rounded-xl sm:rounded-full py-3 sm:py-2.5 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider shadow-md whitespace-nowrap flex justify-center items-center dark:bg-indigo-500"
+                            className="w-full sm:w-auto rounded-xl sm:rounded-full py-3 sm:py-2.5 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider shadow-md whitespace-nowrap flex justify-center items-center dark:bg-indigo-500 active:scale-95 transition-transform"
                         >
-                            {isAiSearching ? 'Searching...' : 'Find Talent'}
+                            {isAiSearching ? 'Scanning Network...' : 'Find Matches'}
                         </Button>
                     </div>
                 </div>
@@ -504,15 +501,15 @@ const Jobs = ({
             )}
           </div>
         ) : (
-          /* Freelancer Main Mission Filter Search Box */
+          /* Freelancer Main Filter Search Box */
           <div className="relative group w-full">
             <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl sm:rounded-full blur opacity-10 transition-opacity" />
-            <div className="relative bg-white/90 dark:bg-slate-900/60 backdrop-blur-xl border border-slate-200 dark:border-white/[0.05] rounded-2xl sm:rounded-full p-1.5 flex flex-col sm:flex-row items-stretch sm:items-center shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_12px_36px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_1.5px_3px_rgba(255,255,255,0.06),_0_20px_40px_rgba(0,0,0,0.3)] gap-2 sm:gap-0">
+            <div className="relative bg-white/90 dark:bg-slate-900/60 backdrop-blur-xl border border-slate-200 dark:border-white/[0.05] rounded-2xl sm:rounded-full p-1.5 flex flex-col sm:flex-row items-stretch sm:items-center shadow-md gap-2 sm:gap-0">
                 <div className="flex items-center flex-1 px-2.5">
                     <Search className="text-slate-400 shrink-0" size={18} strokeWidth={2.5}/>
                     <input
                         type="text"
-                        placeholder="Search open gig boards, verified credentials, or keywords..."
+                        placeholder="Search open work, verified requirements, or keywords..."
                         className="w-full bg-transparent px-3 py-2.5 outline-none text-slate-900 dark:text-white placeholder-slate-400 font-bold text-xs sm:text-sm"
                         value={searchTerm || ''}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -530,7 +527,7 @@ const Jobs = ({
                         type="button"
                         className="flex-[2] sm:flex-none rounded-xl sm:rounded-full py-3 sm:py-2.5 px-6 bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-950 font-black text-xs uppercase tracking-wider shadow-sm"
                     >
-                        Search
+                        Search Gigs
                     </Button>
                 </div>
             </div>
@@ -538,56 +535,56 @@ const Jobs = ({
         )}
       </div>
 
-      {/* --- AI REACTION MATCH RECOMMENDATION RESULTS PANEL --- */}
+      {/* --- TOP MATCHES EXPANSION PANEL --- */}
       {aiResults && isClient && (
         <div className="mx-auto w-full max-w-5xl px-4 mt-8 mb-4 animate-fade-in-up">
             <h3 className="text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.18em] mb-4 flex items-center justify-center gap-2">
-                <Sparkles size={14} className="text-indigo-500"/> Direct Top Matching Recommendations
+                <Sparkles size={14} className="text-indigo-500 animate-pulse"/> Smartest Recommendations Picked For You
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <AiResultCard title="Best Overall Match" icon={<Flame size={12} fill="currentColor"/>} freelancer={aiResults.best} colorClass="border-orange-200/80 bg-orange-50/10 text-orange-600 dark:border-orange-500/20 dark:text-orange-400" setActiveChat={setActiveChat} setTab={setTab} />
-              <AiResultCard title="Fastest Responder" icon={<Zap size={12} fill="currentColor"/>} freelancer={aiResults.fast} colorClass="border-yellow-200/80 bg-yellow-50/10 text-yellow-600 dark:border-yellow-500/20 dark:text-yellow-400" setActiveChat={setActiveChat} setTab={setTab} />
-              <AiResultCard title="Most Cost Effective" icon={<DollarSign size={12} strokeWidth={2.5}/>} freelancer={aiResults.budget} colorClass="border-emerald-200/80 bg-emerald-50/10 text-emerald-600 dark:border-emerald-500/20 dark:text-emerald-400" setActiveChat={setActiveChat} setTab={setTab} />
+              <AiResultCard title="Best Overall Match" icon={<Flame size={12} fill="currentColor" className="text-orange-500"/>} freelancer={aiResults.best} colorClass="border-orange-200/80 bg-orange-50/10 text-orange-600 dark:border-orange-500/20 dark:text-orange-400" setActiveChat={setActiveChat} setTab={setTab} />
+              <AiResultCard title="Fastest Responder" icon={<Zap size={12} fill="currentColor" className="text-yellow-500"/>} freelancer={aiResults.fast} colorClass="border-yellow-200/80 bg-yellow-50/10 text-yellow-600 dark:border-yellow-500/20 dark:text-yellow-400" setActiveChat={setActiveChat} setTab={setTab} />
+              <AiResultCard title="Most Cost Effective" icon={<DollarSign size={12} strokeWidth={2.5} className="text-emerald-500"/>} freelancer={aiResults.budget} colorClass="border-emerald-200/80 bg-emerald-50/10 text-emerald-600 dark:border-emerald-500/20 dark:text-emerald-400" setActiveChat={setActiveChat} setTab={setTab} />
             </div>
             <div className="mt-12 mb-2 flex items-center gap-4">
                 <div className="h-px bg-slate-200 dark:bg-white/[0.04] flex-1" />
-                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Ecosystem Talent Directory</span>
+                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Global Talent Ledger</span>
                 <div className="h-px bg-slate-200 dark:bg-white/[0.04] flex-1" />
             </div>
         </div>
       )}
 
-      {/* --- MAIN ARTIFACT FEED DISPLAY MATRIX --- */}
+      {/* --- MAIN MATRIX GRID --- */}
       <div className={cn("mx-auto w-full max-w-5xl px-4 mt-2")}>
           <div className={cn("flex flex-col mb-6 gap-4 text-left", isClient ? 'items-center text-center' : 'sm:flex-row sm:items-center justify-between')}>
 
               {isClient ? (
                   <div>
                       <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex flex-wrap items-center justify-center gap-2">
-                          Verified Talent Ledger <ShieldCheck className="text-emerald-500" size={24} strokeWidth={2.5}/>
+                          Verified Creative Ledger <ShieldCheck className="text-emerald-500" size={24} strokeWidth={2.5}/>
                       </h2>
-                      <p className="text-xs font-medium text-slate-400 dark:text-slate-500 mt-1 max-w-xl mx-auto">Scan authenticated portfolios, verification tiers, and contract metrics across the userbase.</p>
+                      <p className="text-xs font-medium text-slate-400 dark:text-slate-500 mt-1 max-w-xl mx-auto">Explore public creator profiles, verified review tiers, and history metrics across the app.</p>
                   </div>
               ) : (
-                  <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase italic">
-                      Open Missions
+                  <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase italic flex items-center gap-2">
+                      Open Work <Sparkles size={20} className="text-indigo-500"/>
                   </h2>
               )}
 
-              {/* ELITE FILTERS SLIDER CARD FOR FREELANCERS ONLY */}
+              {/* TIER FILTER TOGGLE */}
               {!isClient && (
-                  <div className="bg-slate-100 border border-slate-200 dark:bg-slate-950 dark:border-white/[0.04] p-1 rounded-full flex items-center w-fit shrink-0 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]">
+                  <div className="bg-slate-100 border border-slate-200 dark:bg-slate-950 dark:border-white/[0.04] p-1 rounded-full flex items-center w-fit shrink-0 shadow-inner">
                       <button
                           onClick={() => handleToggle('normal')}
-                          className={cn("px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all duration-200 outline-none", jobView === 'normal' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-[0_2px_6px_rgba(0,0,0,0.05)]' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400')}
+                          className={cn("px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all duration-200 outline-none", jobView === 'normal' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400')}
                       >
-                          Base
+                          Standard
                       </button>
                       <button
                           onClick={() => handleToggle('elite')}
                           className={cn("px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-1 transition-all duration-200 outline-none", jobView === 'elite' ? 'bg-gradient-to-r from-amber-400 to-amber-600 text-white shadow-md' : 'text-slate-400 hover:text-amber-500 dark:text-slate-500 dark:hover:text-amber-400')}
                       >
-                          <Crown size={12} strokeWidth={2.5} className={jobView === 'elite' ? 'fill-white' : ''}/> Elite
+                          <Crown size={12} strokeWidth={2.5} className={jobView === 'elite' ? 'fill-white' : ''}/> Premium Elite
                       </button>
                   </div>
               )}
@@ -596,47 +593,47 @@ const Jobs = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 relative z-10">
             {isClient
                 ? freelancersList.map(f => <TalentCard key={f.id} freelancer={f} onAction={onAction} setActiveChat={setActiveChat} setTab={setTab} onTriggerReport={setLocalReportModal} />)
-                : publicMissions.map(j => <JobCard key={j.id} data={j} type="Mission" onTriggerReport={setLocalReportModal} launchApplyModal={launchApplyModal} />)
+                : publicMissions.map(j => <JobCard key={j.id} data={j} type="Gig Project" onTriggerReport={setLocalReportModal} launchApplyModal={launchApplyModal} />)
             }
           </div>
       </div>
 
-      {/* --- STANDARDIZED EMPTY STATE VIEWPORTS --- */}
+      {/* --- RE-ENGINEERED EMPTY STATES --- */}
       {((!isClient && publicMissions.length === 0) || (isClient && freelancersList.length === 0)) && (
-        <div className={cn("mx-auto w-full max-w-5xl px-4", isClient ? 'pb-12' : 'py-20 border border-dashed border-slate-200 bg-white/40 dark:border-white/[0.05] dark:bg-slate-900/10 rounded-[32px] text-center shadow-[inset_0_2px_4px_rgba(255,255,255,0.4)]')}>
+        <div className={cn("mx-auto w-full max-w-5xl px-4", isClient ? 'pb-12' : 'py-20 border border-dashed border-slate-200 bg-white/40 dark:border-slate-800/40 dark:bg-slate-900/10 rounded-[32px] text-center shadow-sm')}>
 
            {isClient ? (
-               <div className="w-full bg-white/90 border border-slate-200/80 rounded-[32px] dark:border-white/[0.04] dark:bg-slate-900/40 p-8 md:p-12 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8)] backdrop-blur-xl">
+               <div className="w-full bg-white/90 border border-slate-200/80 rounded-[32px] dark:border-white/[0.04] dark:bg-slate-900/40 p-8 md:p-12 shadow-sm backdrop-blur-xl">
                    <div className="text-center mb-10 space-y-2">
-                       <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Hire Top-Tier Talent, Risk-Free</h3>
+                       <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Hire Verified Talent Safety Guaranteed</h3>
                        <p className="text-slate-400 dark:text-slate-500 text-xs font-medium max-w-xl mx-auto leading-relaxed">
-                           Our system architecture is design-tailored to protect platform operations. From automated parameters matchmaking triggers to secure escrow protective containment layers.
+                           Our workflow rules are optimized to secure your project milestones. Enjoy instant automated matching alongside highly protected escrow holding systems.
                        </p>
                    </div>
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
-                       <div className="bg-slate-50/50 border border-slate-200/60 p-5 rounded-2xl dark:bg-slate-950 dark:border-white/[0.04] shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.01)]">
+                       <div className="bg-slate-50/50 border border-slate-200/60 p-5 rounded-2xl dark:bg-slate-950 dark:border-white/[0.04]">
                            <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-transparent rounded-xl flex items-center justify-center mb-4 shadow-sm"><Cpu size={18} strokeWidth={2.5}/></div>
-                           <h4 className="font-black text-slate-900 dark:text-white tracking-tight text-sm mb-1">Smart AI Matching</h4>
-                           <p className="text-xs font-medium text-slate-400 dark:text-slate-500 leading-normal">Describe system operational dependencies within the controller field input to trace matched profile matrix loops instantly.</p>
+                           <h4 className="font-black text-slate-900 dark:text-white tracking-tight text-sm mb-1">Smart AI Recommendations</h4>
+                           <p className="text-xs font-medium text-slate-400 dark:text-slate-500 leading-normal">Describe exactly what you need in the query box above to load matching candidate pools instantly.</p>
                        </div>
-                       <div className="bg-slate-50/50 border border-slate-200/60 p-5 rounded-2xl dark:bg-slate-950 dark:border-white/[0.04] shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.01)]">
+                       <div className="bg-slate-50/50 border border-slate-200/60 p-5 rounded-2xl dark:bg-slate-950 dark:border-white/[0.04]">
                            <div className="w-10 h-10 bg-emerald-50 border border-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-transparent rounded-xl flex items-center justify-center mb-4 shadow-sm"><ShieldCheck size={18} strokeWidth={2.5}/></div>
-                           <h4 className="font-black text-slate-900 dark:text-white tracking-tight text-sm mb-1">Escrow Safeguards</h4>
-                           <p className="text-xs font-medium text-slate-400 dark:text-slate-500 leading-normal">Allocated contract balances are secured inside separate neutral protection nodes, released upon design review approvals.</p>
+                           <h4 className="font-black text-slate-900 dark:text-white tracking-tight text-sm mb-1">Escrow Protections</h4>
+                           <p className="text-xs font-medium text-slate-400 dark:text-slate-500 leading-normal">Deposited job milestone funds are securely guarded on our end, and released only when you approve the work deliverable updates.</p>
                        </div>
-                       <div className="bg-slate-50/50 border border-slate-200/60 p-5 rounded-2xl dark:bg-slate-950 dark:border-white/[0.04] shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.01)]">
+                       <div className="bg-slate-50/50 border border-slate-200/60 p-5 rounded-2xl dark:bg-slate-950 dark:border-white/[0.04]">
                            <div className="w-10 h-10 bg-amber-50 border border-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400 dark:border-transparent rounded-xl flex items-center justify-center mb-4 shadow-sm"><Award size={18} strokeWidth={2.5}/></div>
-                           <h4 className="font-black text-slate-900 dark:text-white tracking-tight text-sm mb-1">Verified Badging</h4>
-                           <p className="text-xs font-medium text-slate-400 dark:text-slate-500 leading-normal">Users complete dedicated verification assessments before processing open bids, minimizing transaction risk profiles.</p>
+                           <h4 className="font-black text-slate-900 dark:text-white tracking-tight text-sm mb-1">Skill Verification Checks</h4>
+                           <p className="text-xs font-medium text-slate-400 dark:text-slate-500 leading-normal">Creators must complete custom ecosystem verification assessments loops before bidding to keep your project outcomes risk-free.</p>
                        </div>
                    </div>
                </div>
            ) : (
                <div className="space-y-2">
                    <Briefcase size={36} className="text-slate-300 dark:text-slate-600 mx-auto mb-2" strokeWidth={2.5}/>
-                   <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">Empty Parameter Index</h3>
+                   <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">No Open Briefs Listed</h3>
                    <p className="text-xs font-bold text-slate-400 dark:text-slate-500 max-w-xs mx-auto leading-normal">
-                       {jobView === 'elite' ? "No premium Elite missions currently indexed on the directory log." : "No open records matching your filter parameters structure."}
+                       {jobView === 'elite' ? "No premium Elite gigs are currently active on the main dashboard grid right now." : "No job entries match your active search strings."}
                    </p>
                </div>
            )}
@@ -644,18 +641,18 @@ const Jobs = ({
         </div>
       )}
 
-      {/* --- STANDARDIZED INTEGRATED LOCAL REPORT MODAL --- */}
+      {/* --- REPORT CONTROLLER MODAL --- */}
       {localReportModal && (
-        <Modal title="Submit System Report" onClose={() => setLocalReportModal(null)}>
+        <Modal title="Submit Content Report" onClose={() => setLocalReportModal(null)}>
             <form onSubmit={handleReportSubmit} className="space-y-4">
-                <div className="bg-red-50 border border-red-100 dark:bg-red-950/20 dark:border-red-900/30 p-4 rounded-2xl flex gap-3 text-red-900 dark:text-red-300 text-left shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.6)] dark:shadow-none">
-                    <Flag size={16} strokeWidth={2.5} className="text-red-500 mt-0.5 shrink-0" />
-                    <p className="text-xs font-medium leading-relaxed">Incident parameters are subjected to administrative moderation audits. Flagging entries deceptively updates account security risk constraints index variables.</p>
+                <div className="bg-red-50 border border-red-100 dark:bg-red-950/20 dark:border-red-900/30 p-4 rounded-2xl flex gap-3 text-red-900 dark:text-red-300 text-left">
+                    <Flag size={16} strokeWidth={2.5} className="text-red-500 mt-0.5 shrink-0 animate-bounce" />
+                    <p className="text-xs font-medium leading-relaxed">All incident tickets undergo official human admin reviews. Creating false or deceptive reports will negatively flag your account security evaluation status parameters.</p>
                 </div>
 
                 <div className="space-y-1.5 text-left">
-                    <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider ml-1">Reason</label>
-                    <select name="reason" required className="w-full p-3 rounded-xl border bg-slate-50 border-slate-200 dark:border-white/[0.05] dark:bg-slate-950 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500 shadow-[inset_0_1.5px_2px_rgba(0,0,0,0.02)]">
+                    <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider ml-1">Reason for Report</label>
+                    <select name="reason" required className="w-full p-3 rounded-xl border bg-slate-50 border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-sm font-bold outline-none focus:ring-2 focus:ring-red-500">
                         <option value="">Select a reason...</option>
                         <option value="Scam/Fraud">Scam or Fraudulent Activity</option>
                         <option value="Harassment">Harassment / Abusive Content</option>
@@ -665,13 +662,13 @@ const Jobs = ({
                 </div>
 
                 <div className="space-y-1.5 text-left">
-                    <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider ml-1">Details</label>
-                    <textarea name="description" required placeholder="Clarify context metrics comprehensively here..." className="w-full p-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none min-h-[110px] text-sm font-bold bg-slate-50 dark:bg-slate-950 dark:text-white dark:border-white/[0.05] shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.4)] resize-none"></textarea>
+                    <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider ml-1">Additional Details</label>
+                    <textarea name="description" required placeholder="Describe the issue with clear context details here..." className="w-full p-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none min-h-[110px] text-sm font-bold bg-slate-50 dark:bg-slate-950 dark:text-white dark:border-slate-800 resize-none"></textarea>
                 </div>
 
                 <div className="flex justify-end gap-2.5 pt-2">
                      <Button variant="ghost" type="button" className="font-bold text-xs uppercase tracking-wider rounded-xl" onClick={() => setLocalReportModal(null)}>Cancel</Button>
-                     <Button className="bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-[inset_0_2px_4px_rgba(255,255,255,0.35),_0_8px_16px_rgba(220,38,38,0.2)]">Submit Report</Button>
+                     <Button className="bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-transform active:scale-95 shadow-md">Submit Report</Button>
                 </div>
             </form>
         </Modal>
