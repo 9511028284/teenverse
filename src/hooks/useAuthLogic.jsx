@@ -641,6 +641,14 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
       if (syncResult?.status === 'error') {
         throw new Error(syncResult.message || 'Google sign-in could not open your dashboard.');
       }
+      if (syncResult?.status === 'ready' && ['/', '/login', '/signup'].includes(window.location.pathname)) {
+        const targetPath = syncResult.user?.type === 'client' ? '/client-dashboard' : '/dashboard';
+        setTimeout(() => {
+          if (['/', '/login', '/signup'].includes(window.location.pathname)) {
+            window.location.href = targetPath;
+          }
+        }, 300);
+      }
     } catch (error) {
       console.error("Google login error:", error);
       showToast(error?.message || AUTH_GENERIC_ERROR);

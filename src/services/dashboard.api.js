@@ -97,111 +97,112 @@ const decorateJobsWithOfficialAccounts = async (jobs = []) => {
 
 export const fetchDashboardData = async (user) => {
   const isClient = user.type === 'client';
-  try {
-    // 1. Services Query (Limit 20)
-    let servicesQuery = supabase
-      .from('services')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20);
-    
-    if (!isClient) {
-      servicesQuery = servicesQuery.eq('freelancer_id', user.id);
-    }
 
-    // 2. Jobs Query (Limit 20)
-    let jobsQuery = supabase
-      .from('jobs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20);
-    
-    if (isClient) {
-      jobsQuery = jobsQuery.eq('client_id', user.id);
-    }
+  // 1. Services Query (Limit 20)
+  let servicesQuery = supabase
+    .from('services')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  
+  if (!isClient) {
+    servicesQuery = servicesQuery.eq('freelancer_id', user.id);
+  }
 
-    // 3. Applications Query (Limit 50) - include related project fields for portfolio/profile views
-    let appsQuery = supabase
-      .from('applications')
-      .select(`
-        *,
-        jobs ( title, category, budget, description, created_at )
-      `)
-      .order('created_at', { ascending: false })
-      .limit(50);
+  // 2. Jobs Query (Limit 20)
+  let jobsQuery = supabase
+    .from('jobs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  
+  if (isClient) {
+    jobsQuery = jobsQuery.eq('client_id', user.id);
+  }
 
-    if (isClient) {
-      appsQuery = appsQuery.eq('client_id', user.id);
-    } else {
-      appsQuery = appsQuery.eq('freelancer_id', user.id);
-    }
+  // 3. Applications Query (Limit 50) - include related project fields for portfolio/profile views
+  let appsQuery = supabase
+    .from('applications')
+    .select(`
+      *,
+      jobs ( title, category, budget, description, created_at )
+    `)
+    .order('created_at', { ascending: false })
+    .limit(50);
 
-    // 4. Notifications Query (Limit 20)
-    const notificationsQuery = supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(20);
+  if (isClient) {
+    appsQuery = appsQuery.eq('client_id', user.id);
+  } else {
+    appsQuery = appsQuery.eq('freelancer_id', user.id);
+  }
 
-    // ✅ EXECUTE IN PARALLEL
-    const [servicesRes, jobsRes, appsRes, notifRes] = await Promise.all([
-      servicesQuery,
-      jobsQuery,
-      appsQuery,
-      notificationsQuery
-    ]);
+  // 4. Notifications Query (Limit 20)
+  const notificationsQuery = supabase
+    .from('notifications')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(20);
 
-    if (servicesRes.error) throw servicesRes.error;
-    if (jobsRes.error) throw jobsRes.error;
-    if (appsRes.error) throw appsRes.error;
-    if (notifRes.error) throw notifRes.error;
+  // ✅ EXECUTE IN PARALLEL - each query error is isolated so one failure doesn't crash all
+  const [servicesRes, jobsRes, appsRes, notifRes] = await Promise.all([
+    servicesQuery,
+    jobsQuery,
+    appsQuery,
+    notificationsQuery
+  ]);
 
-    let applications = appsRes.data || [];
+  if (servicesRes.error) console.warn('Services fetch failed:', servicesRes.error);
+  if (jobsRes.error) console.warn('Jobs fetch failed:', jobsRes.error);
+  if (appsRes.error) console.warn('Applications fetch failed:', appsRes.error);
+  if (notifRes.error) console.warn('Notifications fetch failed:', notifRes.error);
 
-    if (isClient && applications.length > 0) {
-      const freelancerIds = [...new Set(applications.map((app) => app.freelancer_id).filter(Boolean))];
+  let applications = appsRes.data || [];
 
-      if (freelancerIds.length > 0) {
-        const { data: freelancerPlans, error: planError } = await supabase
-          .from('freelancers')
-          .select('id, current_plan, plan_expires_at')
-          .in('id', freelancerIds);
+  if (isClient && applications.length > 0) {
+    const freelancerIds = [...new Set(applications.map((app) => app.freelancer_id).filter(Boolean))];
 
-        if (planError) {
-          console.warn('Freelancer plan lookup failed:', planError);
-        } else {
-          const planByFreelancerId = new Map(
-            (freelancerPlans || []).map((freelancer) => [freelancer.id, freelancer])
-          );
+    if (freelancerIds.length > 0) {
+      const { data: freelancerPlans, error: planError } = await supabase
+        .from('freelancers')
+        .select('id, current_plan, plan_expires_at')
+        .in('id', freelancerIds);
 
-          applications = applications.map((app) => {
-            const freelancerPlan = planByFreelancerId.get(app.freelancer_id);
-            if (!freelancerPlan) return app;
+      if (planError) {
+        console.warn('Freelancer plan lookup failed:', planError);
+      } else {
+        const planByFreelancerId = new Map(
+          (freelancerPlans || []).map((freelancer) => [freelancer.id, freelancer])
+        );
 
-            return {
-              ...app,
-              freelancer_current_plan: freelancerPlan.current_plan,
-              freelancer_plan_expires_at: freelancerPlan.plan_expires_at,
-            };
-          });
-        }
+        applications = applications.map((app) => {
+          const freelancerPlan = planByFreelancerId.get(app.freelancer_id);
+          if (!freelancerPlan) return app;
+
+          return {
+            ...app,
+            freelancer_current_plan: freelancerPlan.current_plan,
+            freelancer_plan_expires_at: freelancerPlan.plan_expires_at,
+          };
+        });
       }
     }
-
-    const decoratedJobs = await decorateJobsWithOfficialAccounts(jobsRes.data || []);
-
-    return { 
-      services: servicesRes.data || [], 
-      jobs: decoratedJobs,
-      applications,
-      notifications: notifRes.data || [],
-      referralCount: 0 
-    };
-  } catch (error) {
-    console.error("Dashboard Data Fetch Error:", error);
-    return { error };
   }
+
+  let decoratedJobs = jobsRes.data || [];
+  try {
+    decoratedJobs = await decorateJobsWithOfficialAccounts(jobsRes.data || []);
+  } catch (err) {
+    console.warn('Job decoration failed:', err);
+  }
+
+  return { 
+    services: servicesRes.data || [], 
+    jobs: decoratedJobs,
+    applications,
+    notifications: notifRes.data || [],
+    referralCount: 0 
+  };
 };
 
 export const searchJobsAPI = async (searchTerm) => {

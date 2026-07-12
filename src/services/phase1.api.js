@@ -67,6 +67,7 @@ const getAuthUserAvatar = (authUser) => (
 
 const normalizeSafeProfileRole = (role) => {
   if (role === 'guardian' || role === 'parent') return 'guardian';
+  if (role === 'client' || role === 'business') return 'business';
   return 'student';
 };
 
@@ -151,7 +152,9 @@ const buildProfileInsert = (authUser, legacy) => {
     ? 'admin'
     : legacy.freelancer
       ? 'student'
-      : normalizeSafeProfileRole(metadataRole);
+      : legacy.client
+        ? 'business'
+        : normalizeSafeProfileRole(metadataRole);
 
   return {
     id: authUser.id,

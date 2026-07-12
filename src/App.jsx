@@ -585,7 +585,7 @@ export default function App() {
 
     const redirectToRoleHome = (target, routeGroup) => {
       if (isTermsPage) return;
-      if (isPublic && currentPath !== '/') return;
+      if (isPublic && !isAuthPage) return;
 
       if (isExternalTarget(target)) {
         window.location.href = target;
@@ -801,14 +801,16 @@ export default function App() {
       return inFlightSessionSyncRef.current.promise;
     }
 
-    if (lastSessionSyncKeyRef.current === key) {
+    if (lastSessionSyncKeyRef.current === key && lastSessionSyncResultRef.current?.status === 'ready') {
       return Promise.resolve(lastSessionSyncResultRef.current);
     }
 
     const promise = Promise.resolve(handleSession(session))
       .then((result) => {
-        lastSessionSyncKeyRef.current = key;
-        lastSessionSyncResultRef.current = result;
+        if (result?.status === 'ready' || result?.status === 'redirecting') {
+          lastSessionSyncKeyRef.current = key;
+          lastSessionSyncResultRef.current = result;
+        }
         return result;
       })
       .finally(() => {
@@ -828,12 +830,22 @@ export default function App() {
 
   // Auth & Session Logic
   useEffect(() => {
-    const checkUser = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    const failSafe = setTimeout(() => {
+      setLoading(false);
+    }, 15000);
 
-      await syncSessionOnce(session);
+    const checkUser = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        await syncSessionOnce(session);
+      } catch (err) {
+        console.error('Session sync failed:', err);
+        setUser(null);
+        setLoading(false);
+      }
     };
 
     void checkUser();
@@ -841,10 +853,17 @@ export default function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      void syncSessionOnce(session);
+      try {
+        void syncSessionOnce(session);
+      } catch (err) {
+        console.error('Auth state change handler error:', err);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(failSafe);
+      subscription.unsubscribe();
+    };
   }, [syncSessionOnce]);
 
   // Theme Logic
