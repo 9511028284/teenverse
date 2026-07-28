@@ -702,7 +702,7 @@ export const getPublicProfile = async (userId) => {
     const [userRes, badgesRes, portfolioRes, servicesRes] = await Promise.all([
       supabase
         .from('freelancers')
-        .select('id, name, bio, nationality, tag_line, journey_statement, unlocked_skills, created_at, social_links, referral_code, cover_image, specialty, qualification, hourly_rate, current_plan, trust_score, trust_score_breakdown, risk_level')
+        .select('id, name, bio, nationality, tag_line, journey_statement, unlocked_skills, created_at, social_links, referral_code, cover_image, specialty, qualification, hourly_rate, current_plan, trust_score, trust_score_breakdown, risk_level, challenge_score, confidence_level, verified_skills, confidence_scores, project_analysis, technical_summary')
         .eq('id', userId)
         .single(),
       supabase

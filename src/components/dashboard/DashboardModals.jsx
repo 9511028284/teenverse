@@ -40,7 +40,8 @@ const DashboardModals = ({ user, logic, showToast }) => {
     viewWorkApp, currentQuestionIndex, score, viewProfileId, 
     publicProfileData, editProfileModal, applications, 
     paymentModal, selectedJob, energy, deliveryFiles = [],
-    deliveryUploadProgress = {}, isSubmittingWork = false
+    deliveryUploadProgress = {}, isSubmittingWork = false,
+    isQuizLoading = false
   } = state;
 
   const { 
@@ -319,7 +320,7 @@ const DashboardModals = ({ user, logic, showToast }) => {
             </div>
             <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-1.5">Verify Your Skillset</h3>
             <p className="text-slate-500 dark:text-slate-400 text-xs font-medium max-w-sm mx-auto mb-5 leading-relaxed">
-              This job requires a verified <span className="text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md">'{modal.category}'</span> badge. Complete the dynamic skills evaluation quiz below to proceed.
+              This job requires verified <span className="text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md">'{modal.category}'</span> evidence. Complete a unique practical challenge to proceed.
             </p>
             
             <div className="flex gap-3">
@@ -327,10 +328,14 @@ const DashboardModals = ({ user, logic, showToast }) => {
                 Decline
               </button>
               <button 
-                onClick={() => actions.startAiQuiz(modal.category, modal.jobTitle)}
-                className="flex-[2] py-3 rounded-xl bg-indigo-600 text-white font-semibold text-xs hover:-translate-y-0.5 transition-all dark:bg-indigo-500 dark:hover:bg-indigo-600 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/10"
+                onClick={() => actions.startAiQuiz(modal.category, modal.jobTitle, modal.jobId)}
+                disabled={isQuizLoading}
+                className={cn(
+                  "flex-[2] py-3 rounded-xl bg-indigo-600 text-white font-semibold text-xs hover:-translate-y-0.5 transition-all dark:bg-indigo-500 dark:hover:bg-indigo-600 flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/10",
+                  isQuizLoading ? "opacity-60 cursor-not-allowed hover:translate-y-0" : ""
+                )}
               >
-                Start Quiz <ArrowRight size={14} />
+                {isQuizLoading ? 'Opening Challenge...' : 'Start Challenge'} <ArrowRight size={14} />
               </button>
             </div>
           </div>

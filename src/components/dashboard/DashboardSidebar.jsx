@@ -57,6 +57,7 @@ const SidebarItem = ({
       'academy': 'text-emerald-500 dark:text-emerald-400',
       'store': 'text-pink-500 dark:text-pink-400',
       'pricing': 'text-amber-500 dark:text-amber-400',
+      'trust': 'text-emerald-500 dark:text-emerald-400',
     };
     return mapping[id] || 'text-indigo-600 dark:text-indigo-400';
   };
@@ -146,8 +147,6 @@ const DashboardSidebar = ({
   tab,
   setTab,
   onLogout,
-  onSwitchDashboardRole,
-  roleSwitching,
   energy = 0,
   jobsCount = 0,
   applicationsCount = 0,
@@ -156,8 +155,6 @@ const DashboardSidebar = ({
   const initial = user?.name?.[0]?.toUpperCase() || <User size={16} />;
   const profileTarget = isClient ? 'settings' : 'profile';
   const safeProgress = Math.max(0, Math.min(100, Number(progressPercent) || 0));
-  const switchTargetRole = isClient ? 'freelancer' : 'client';
-  const isSwitchingThisRole = roleSwitching === switchTargetRole;
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -196,6 +193,7 @@ const DashboardSidebar = ({
       ];
 
   const systemItems = [
+    
     { id: 'records', icon: ShieldCheck, label: 'Ledger Records' },
     { id: 'support', icon: HelpCircle, label: 'Help Desk' },
   ];

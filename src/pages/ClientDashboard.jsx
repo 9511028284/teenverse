@@ -40,6 +40,7 @@ import ChatSystem from '../components/features/ChatSystem';
 import Portfolio from '../components/dashboard/Portfolio';
 import Pricing from '../components/dashboard/Pricing';
 import SupportHub from '../components/dashboard/SupportHub';
+import MarketingCampaign from '../components/dashboard/MarketingCampaign';
 const Applications = React.lazy(() => import('../components/dashboard/Applications'));
 const Records = React.lazy(() => import('../components/dashboard/Records'));
 const SettingsComp = React.lazy(() => import('../components/dashboard/SettingsComp'));
@@ -995,6 +996,7 @@ export const ClientDashboard = ({ user, setUser, onLogout, showToast, darkMode, 
       </main>
 
       <DashboardModals user={user} logic={logic} showToast={showToast} />
+      <MarketingCampaign />
     </div>
   );
 };

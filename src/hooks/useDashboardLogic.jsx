@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import * as api from '../services/dashboard.api';
+import { createSkillChallenge, submitSkillChallenge } from '../services/trust.api';
 import { toPng, toBlob } from 'html-to-image';
 import { jsPDF } from "jspdf";
 import { QUIZZES, APP_STATUS } from '../utils/constants';
@@ -241,6 +242,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
   const profileCardRef = useRef(null);
   const cashfree = useRef(null);
   const dashboardLoadRef = useRef({ key: null, promise: null });
+  const challengeStartRef = useRef({ key: null, promise: null });
 
   useEffect(() => {
     setParentMode(Boolean(user?.parent_mode));
@@ -397,7 +399,7 @@ export const useDashboardLogic = (user, setUser, showToast) => {
                             ? Promise.resolve({ data: null })
                             : supabase
                                 .from('freelancers')
-                                .select('energy_points, last_login_date, qualification, specialty, resume_url, hourly_rate, current_plan, plan_expires_at, bids_remaining, resumes_remaining, wallet_balance')
+                                .select('energy_points, last_login_date, qualification, specialty, resume_url, hourly_rate, current_plan, plan_expires_at, bids_remaining, resumes_remaining, wallet_balance, trust_score, trust_score_breakdown, challenge_score, challenge_report, confidence_level, verified_skills, confidence_scores, project_analysis, technical_summary, ai_interview_score, response_speed_hours, availability_status')
                                 .eq('id', user.id)
                                 .single();
 
@@ -426,6 +428,18 @@ export const useDashboardLogic = (user, setUser, showToast) => {
                     bids_remaining: normalizedProfile.bids_remaining,
                     resumes_remaining: normalizedProfile.resumes_remaining,
                     wallet_balance: normalizedProfile.wallet_balance,
+                    trust_score: normalizedProfile.trust_score,
+                    trust_score_breakdown: normalizedProfile.trust_score_breakdown,
+                    challenge_score: normalizedProfile.challenge_score,
+                    challenge_report: normalizedProfile.challenge_report,
+                    confidence_level: normalizedProfile.confidence_level,
+                    verified_skills: normalizedProfile.verified_skills,
+                    confidence_scores: normalizedProfile.confidence_scores,
+                    project_analysis: normalizedProfile.project_analysis,
+                    technical_summary: normalizedProfile.technical_summary,
+                    ai_interview_score: normalizedProfile.ai_interview_score,
+                    response_speed_hours: normalizedProfile.response_speed_hours,
+                    availability_status: normalizedProfile.availability_status,
                 };
                 const hasPlanDrift = Object.entries(planFields).some(([key, value]) => user?.[key] !== value);
                 if (hasPlanDrift) {
@@ -965,7 +979,8 @@ const handlePostJob = async (e) => {
         setModal({ 
             type: 'skill_gate', 
             category: jobCategory, 
-            jobTitle: selectedJob.title 
+            jobTitle: selectedJob.title,
+            jobId: selectedJob.id
         });
         return; 
       }
@@ -1644,41 +1659,93 @@ const handlePostJob = async (e) => {
       }
   };
 
-  const startAiQuiz = async (categoryId, specificTopic = 'Basics') => {
+  const startAiQuiz = async (categoryId, specificTopic = 'Basics', jobId = null) => {
+    const requestKey = `${user.id}:${categoryId}:${jobId || 'general'}`;
+    if (challengeStartRef.current.key === requestKey && challengeStartRef.current.promise) {
+      showToast("Opening your active challenge...", "info");
+      return challengeStartRef.current.promise;
+    }
+
     setIsQuizLoading(true);
     setModal(null); 
-    showToast(`🤖 Generating ${specificTopic} assessment...`, "info");
+    showToast(`Opening your ${specificTopic} practical challenge...`, "info");
+
+    const request = (async () => {
+      const challengeData = await createSkillChallenge({
+        userId: user.id,
+        category: categoryId,
+        topic: specificTopic,
+        jobId,
+        jobTitle: specificTopic,
+      });
+      if (challengeData?.reused) {
+        showToast("Resumed your active challenge with the original timer.", "info");
+      }
+      setModal({ type: 'quiz', category: categoryId, data: challengeData, userId: user.id });
+      return challengeData;
+    })();
+
+    challengeStartRef.current = { key: requestKey, promise: request };
 
     try {
-      const { data, error } = await supabase.functions.invoke('generate-academy-quiz', {
-        body: { userId: user.id, category: categoryId, topic: specificTopic, subCategory: specificTopic, level: 'beginner', count: 10 }
-      });
-      if (error) throw new Error(await getFunctionErrorMessage(error, "Quiz generation failed."));
-      const quizData = unwrapFunctionData(data);
-      setModal({ type: 'quiz', category: categoryId, data: quizData });
+      return await request;
     } catch (err) {
       console.error(err);
-      showToast(err.message || "Quiz generation failed. Try again.", "error");
+      showToast(err.message || "Challenge generation failed. Try again.", "error");
+      return null;
     } finally {
+      if (challengeStartRef.current.key === requestKey) {
+        challengeStartRef.current = { key: null, promise: null };
+      }
       setIsQuizLoading(false);
     }
   };
 
-  const handleQuizSelection = async (categoryId, passed, isGeneral = false) => {
+  const handleQuizSelection = async (categoryId, passed, isGeneral = false, evaluationPayload = null) => {
     if (passed) {
       setTimeout(async () => {
+        let challengeResult = null;
+        if (evaluationPayload?.challengeId) {
+          try {
+            showToast("Evaluating challenge with AI trust engine...", "info");
+            challengeResult = await submitSkillChallenge({
+              userId: user.id,
+              challengeId: evaluationPayload.challengeId,
+              submission: evaluationPayload.submission,
+            });
+            setUser(prev => ({
+              ...prev,
+              challenge_score: challengeResult.challengeScore,
+              challenge_report: challengeResult.challengeReport,
+              confidence_level: challengeResult.confidenceLevel,
+              trust_score: challengeResult.trust?.score ?? prev.trust_score,
+              trust_score_breakdown: challengeResult.trust?.breakdown ?? prev.trust_score_breakdown,
+            }));
+          } catch (err) {
+            showToast(err.message || "Challenge evaluation failed.", "error");
+            return;
+          }
+        }
+
         if (isGeneral) {
              const reward = await api.awardEnergy(user.id, 2, 'quiz_general', categoryId);
              if (reward.success) setEnergy(prev => prev + reward.amount);
-             showToast(`🎉 Module Complete! +50 XP${reward.success ? ` & +${reward.amount} Energy ⚡` : ''}`, "success");
+             showToast(`Practical module complete.${reward.success ? ` +${reward.amount} Energy` : ''}`, "success");
              setModal(null); setScore(0); setCurrentQuestionIndex(0);
              return;
         }
 
-        const newSkills = [...unlockedSkills, categoryId];
+        const passedChallengeScore = !challengeResult || Number(challengeResult.challengeScore) >= 60;
+        if (!passedChallengeScore) {
+          showToast("Challenge submitted, but the score was below the verification threshold. Review the AI suggestions and try again.", "warning");
+          setModal(null); setScore(0); setCurrentQuestionIndex(0);
+          return;
+        }
+
+        const newSkills = [...new Set([...unlockedSkills, categoryId])];
         setUnlockedSkills(newSkills);
         await api.unlockSkill(user.id, newSkills); 
-        setUser({ ...user, unlockedSkills: newSkills });
+        setUser(prev => ({ ...prev, unlockedSkills: newSkills }));
         
         const reward = await api.awardEnergy(user.id, 5, 'skill_certified', categoryId);
         if (reward.success) setEnergy(prev => prev + reward.amount);
@@ -1688,12 +1755,12 @@ const handlePostJob = async (e) => {
             await supabase.from('user_badges').insert({ user_id: user.id, badge_name: 'Skill Certified' });
         }
         
-        showToast(`🏆 CERTIFIED! +500 XP${reward.success ? ` & +${reward.amount} Energy ⚡` : ''}`, "success");
+        showToast(`Skill verified through practical challenge.${reward.success ? ` +${reward.amount} Energy` : ''}`, "success");
         setModal(null); setScore(0); setCurrentQuestionIndex(0);
 
       }, 1000);
     } else {
-        showToast("❌ Failed. Try again to earn rewards.", "error");
+        showToast("Challenge not passed. Try again with stronger evidence.", "error");
     }
   };
 

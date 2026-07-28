@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Menu, LayoutDashboard, Briefcase, BookOpen, Settings, 
@@ -23,6 +23,7 @@ import Academy from '../components/dashboard/Academy';
 import Portfolio from '../components/dashboard/Portfolio';
 import ProfileCard from '../components/dashboard/ProfileCard';
 import Pricing from '../components/dashboard/Pricing';
+import MarketingCampaign from '../components/dashboard/MarketingCampaign';
 
 const Applications = React.lazy(() => import('../components/dashboard/Applications'));
 const ResumeBuilder = React.lazy(() => import('../components/dashboard/ResumeBuilder'));
@@ -30,6 +31,7 @@ const Records = React.lazy(() => import('../components/dashboard/Records'));
 const SettingsComp = React.lazy(() => import('../components/dashboard/SettingsComp'));
 const UserProfile = React.lazy(() => import('../components/dashboard/UserProfile'));
 const Store = React.lazy(() => import('../components/dashboard/Store'));
+const TrustCenter = React.lazy(() => import('../components/dashboard/TrustCenter'));
 
 // Snappy, modern spring transitions perfect for Gen Z interfaces
 const pageVariants = {
@@ -82,6 +84,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme, 
       'portfolio': <Briefcase size={18} className="text-cyan-500 dark:text-cyan-400" />,
       'pricing': <Crown size={18} className="text-amber-500 dark:text-amber-400" />,
       'records': <ShieldCheck size={18} className="text-blue-500 dark:text-blue-400" />,
+      'trust': <ShieldCheck size={18} className="text-emerald-500 dark:text-emerald-400" />,
       'store': <ShoppingBag size={18} className="text-teal-500 dark:text-teal-400" />
     };
     return icons[tab] || <LayoutDashboard size={18} className="text-indigo-500"/>;
@@ -273,7 +276,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme, 
                     {tab === 'applications' && (
                       <React.Suspense fallback={<TabLoadingFallback label="Assembling application states…" />}>
                         <Applications 
-                          applications={applications} isClient={isClient} parentMode={parentMode}
+                          user={user} applications={applications} isClient={isClient} parentMode={parentMode}
                           onAction={actions.handleAppAction} onViewTimeline={(app) => setters.setTimelineApp(app)}
                           showToast={showToast}
                         />
@@ -306,6 +309,18 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme, 
 
                     {tab === 'portfolio' && (
                       <Portfolio isClient={isClient} applications={applications} jobs={jobs} services={services} />
+                    )}
+
+                    {tab === 'trust' && (
+                      <React.Suspense fallback={<TabLoadingFallback label="Loading trust intelligence…" />}>
+                        <TrustCenter
+                          user={user}
+                          setUser={setUser}
+                          jobs={jobs}
+                          applications={applications}
+                          showToast={showToast}
+                        />
+                      </React.Suspense>
                     )}
                     
                     {tab === 'profile-card' && !isClient && (
@@ -463,6 +478,7 @@ const Dashboard = ({ user, setUser, onLogout, showToast, darkMode, toggleTheme, 
         )}
       </AnimatePresence>
 
+      <MarketingCampaign />
     </div>
   );
 };
