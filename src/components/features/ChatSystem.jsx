@@ -18,12 +18,13 @@ import Input from '../ui/Input';
 const containsContactDetails = (text) => {
     if (!text) return false;
     const normalized = text.toLowerCase().replace(/[\s\-_.]+/g, '');
-    const phoneRegex = /(?:\d[\s-._]*){7,15}/;
+    const phoneRegex = /(?:\+?91)?[6-9]\d{9}/;
     const emailRegex = /[a-z0-9._%+-]+(?:@|\[at\]|\(at\)|\s+at\s+)[a-z0-9.-]+(?:\.|\[dot\]|\(dot\)|\s+dot\s+)[a-z]{2,}/i;
     const urlRegex = /(https?:\/\/|www\.)[^\s]+|[a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s]*)?/i;
-    const socialRegex = /(instagram|insta|ig|whatsapp|wa|telegram|tg|discord|snapchat|snap|skype|twitter|x|linkedin|facebook|fb|wechat|viber|zoom|meet|teams)/i;
+    const handleRegex = /(^|\s)@[a-zA-Z0-9._]{3,30}\b/;
+    const contactIntentRegex = /\b(call me|text me|dm me|message me|mail me|email me|contact me|send number|share number|mobile number|phone number|personal number|mera number|apna number|number do|number de|dm kar|call kar|whatsapp kar|insta pe|telegram pe|add me|add me on|follow me|send link|share link|my id|my handle|my instagram|my whatsapp|my telegram|send your)\b/i;
 
-    return phoneRegex.test(text) || emailRegex.test(text) || urlRegex.test(text) || socialRegex.test(text) || socialRegex.test(normalized);
+    return phoneRegex.test(normalized) || emailRegex.test(text) || urlRegex.test(text) || handleRegex.test(text) || contactIntentRegex.test(text);
 };
 
 // ==========================================
@@ -365,7 +366,7 @@ const ChatSystem = ({ user, activeChat, setActiveChat, initialMessage = "", show
       if (!input.trim() || isSending || isChatLocked) return;
 
       const now = Date.now();
-      if (now - lastSentRef.current < 1000) return; 
+      if (now - lastSentRef.current < 350) return; 
       lastSentRef.current = now;
 
       if (containsContactDetails(input)) {

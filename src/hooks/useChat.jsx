@@ -9,21 +9,21 @@ const WORKER_URL = RAW_WORKER_URL.replace(/\/$/, '');
 // =====================================================
 
 const CHAT_SECURITY = {
-  MAX_MESSAGE_LENGTH: 750,
-  MIN_SEND_INTERVAL_MS: 3500,
+  MAX_MESSAGE_LENGTH: 2000,
+  MIN_SEND_INTERVAL_MS: 350,
 
   RATE_LIMITS: {
-    PER_MINUTE: 5,
-    PER_10_MINUTES: 20,
-    PER_DAY: 80,
+    PER_MINUTE: 60,
+    PER_10_MINUTES: 500,
+    PER_DAY: 3000,
   },
 
-  DUPLICATE_WINDOW_MS: 10 * 60 * 1000,
+  DUPLICATE_WINDOW_MS: 2 * 60 * 1000,
   VIOLATION_WINDOW_MS: 60 * 60 * 1000,
-  COOLDOWN_AFTER_VIOLATIONS: 3,
-  COOLDOWN_MS: 30 * 60 * 1000,
+  COOLDOWN_AFTER_VIOLATIONS: 10,
+  COOLDOWN_MS: 15 * 60 * 1000,
 
-  STORAGE_PREFIX: 'teenversehub_chat_guard_v3',
+  STORAGE_PREFIX: 'teenversehub_chat_guard_v4',
 };
 
 const BLOCK_REASONS = {
@@ -172,7 +172,6 @@ const registerViolation = (userId, chatId, type) => {
 const detectBlockedContent = (rawText) => {
   const text = normalizeForDetection(rawText);
   const compact = compactForDetection(rawText);
-  const digitsOnly = rawText.replace(/\D/g, '');
 
   if (!text) {
     return { blocked: false };
@@ -193,31 +192,35 @@ const detectBlockedContent = (rawText) => {
   const compactEmailRegex =
     /[a-z0-9._%+-]{2,}@[a-z0-9.-]{2,}\.[a-z]{2,}/i;
 
-  // Phone numbers, including spaced or dashed numbers
-  const phoneRegex = /(?:\+?\d[\s\-._()]*){7,15}/;
+  // Phone numbers, including spaced, dashed, or country-code prefixes.
+  // Only real mobile numbers (10-digit, starting 6-9, optional +91) are flagged.
+  const compactPhoneRegex = /(?:\+?91)?[6-9]\d{9}/;
 
   // Links and domains
   const linkRegex =
     /(https?:\/\/|www\.)[^\s]+|(?:^|\s)[a-zA-Z0-9-]{2,}\.(com|in|net|org|io|co|me|dev|app|xyz|site|link|bio|ai|tech|online)(?:\/[^\s]*)?/i;
 
-  // Social handles and platforms
+  // Social platforms
   const socialRegex =
     /\b(instagram|insta|ig|whatsapp|whats app|watsapp|wa|telegram|tg|discord|snapchat|snap|skype|twitter|linkedin|facebook|fb|wechat|viber|zoom|google meet|meet link|signal|reddit|github|portfolio|behance|dribbble)\b/i;
 
   const handleRegex = /(^|\s)@[a-zA-Z0-9._]{3,30}\b/;
 
   const contactIntentRegex =
-    /\b(call me|text me|dm me|message me|mail me|email me|contact me|send number|share number|mobile number|phone number|personal number|mera number|apna number|number do|number de|dm kar|call kar|whatsapp kar|insta pe|telegram pe)\b/i;
+    /\b(call me|text me|dm me|message me|mail me|email me|contact me|send number|share number|mobile number|phone number|personal number|mera number|apna number|number do|number de|dm kar|call kar|whatsapp kar|insta pe|telegram pe|add me|add me on|follow me|send link|share link|my id|my handle|my instagram|my whatsapp|my telegram|send your)\b/i;
+
+  const sharingContact =
+    compactPhoneRegex.test(compact) ||
+    handleRegex.test(rawText) ||
+    contactIntentRegex.test(text);
 
   if (
     emailRegex.test(rawText) ||
     compactEmailRegex.test(compact) ||
-    phoneRegex.test(rawText) ||
-    digitsOnly.length >= 7 ||
+    compactPhoneRegex.test(compact) ||
     linkRegex.test(rawText) ||
-    socialRegex.test(text) ||
-    handleRegex.test(rawText) ||
-    contactIntentRegex.test(text)
+    sharingContact ||
+    (socialRegex.test(text) && sharingContact)
   ) {
     return {
       blocked: true,
