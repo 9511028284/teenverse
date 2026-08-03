@@ -4,6 +4,7 @@ import {
   Users, Eye, Crown, Clock, DollarSign 
 } from 'lucide-react';
 import Button from '../ui/Button';
+import DescriptionViewer, { isStructuredDescription } from '../ui/DescriptionViewer';
 
 // --- HELPER ---
 const checkIsElite = (val) => {
@@ -13,9 +14,11 @@ const checkIsElite = (val) => {
 // --- PROJECT CARD COMPONENT ---
 const ProjectCard = ({ job, handleDeleteJob }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showDescription, setShowDescription] = useState(false);
 
   const description = job?.description || '';
   const isLongDescription = description.length > 100;
+  const isVeryLong = isStructuredDescription(description);
   const isElite = checkIsElite(job?.is_elite);
 
   return (
@@ -68,10 +71,19 @@ const ProjectCard = ({ job, handleDeleteJob }) => {
 
       {/* Description */}
       <div className="mb-6 flex-grow">
-         <p className={`text-xs font-medium leading-relaxed ${isExpanded ? '' : 'line-clamp-2'} ${isElite ? 'text-slate-700 dark:text-slate-300' : 'text-slate-600 dark:text-slate-400'}`}>
+         <p className={`text-xs font-medium leading-relaxed ${isExpanded || isVeryLong ? '' : 'line-clamp-2'} ${isElite ? 'text-slate-700 dark:text-slate-300' : 'text-slate-600 dark:text-slate-400'}`}>
             {description || <span className="italic opacity-50">No description provided.</span>}
          </p>
-         {isLongDescription && (
+         {isVeryLong ? (
+            <button 
+                onClick={() => setShowDescription(true)} 
+                className={`text-[10px] font-black mt-2.5 uppercase tracking-wider flex items-center gap-0.5 transition-colors ${
+                    isElite ? 'text-amber-600 dark:text-amber-400 hover:text-amber-700' : 'text-indigo-600 dark:text-indigo-400 hover:text-indigo-700'
+                }`}
+            >
+                View Full Details <Eye size={11} strokeWidth={2.5}/>
+            </button>
+         ) : isLongDescription && (
             <button 
                 onClick={() => setIsExpanded(!isExpanded)} 
                 className={`text-[10px] font-black mt-2.5 uppercase tracking-wider flex items-center gap-0.5 transition-colors ${
@@ -82,6 +94,15 @@ const ProjectCard = ({ job, handleDeleteJob }) => {
             </button>
          )}
       </div>
+
+      {showDescription && (
+        <DescriptionViewer
+          title={job?.title || 'Untitled Project'}
+          badge="Project Details"
+          description={description}
+          onClose={() => setShowDescription(false)}
+        />
+      )}
 
       {/* Stats Footer */}
       <div className={`mt-auto pt-4 border-t flex items-end justify-between ${isElite ? 'border-amber-200/80 dark:border-amber-500/20' : 'border-slate-100 dark:border-white/[0.04]'}`}>

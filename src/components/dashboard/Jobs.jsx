@@ -3,11 +3,13 @@ import {
   Search, MapPin, ArrowUpRight, Sparkles, Filter, Briefcase,
   ChevronDown, ChevronUp, Clock, Calendar, DollarSign, Flag, AlertTriangle,
   Loader2, Flame, Zap, Crown, User, Star, Paperclip, ShieldCheck, Cpu, Award,
-  BadgeCheck
+  BadgeCheck, Eye
 } from 'lucide-react';
 import { supabase } from '../../supabase';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import DescriptionViewer from '../ui/DescriptionViewer';
+import MediaViewer, { isImageUrl, getFileName } from '../ui/MediaViewer';
 import { getEffectivePlanName, isPremiumPlanActive } from '../../utils/subscription';
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
@@ -185,10 +187,11 @@ const TalentCard = ({ freelancer, onAction, setActiveChat, setTab, onTriggerRepo
 
 // --- STANDARD JOB CARD COMPONENT (FOR FREELANCERS) ---
 const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [showDescription, setShowDescription] = useState(false);
+    const [attachmentViewerIndex, setAttachmentViewerIndex] = useState(null);
 
     const description = data?.description || "No description details provided.";
-    const isLongText = description.length > 120;
+    const showReadMore = description.length > 160;
     const displayName = data.client_name || 'Client';
     const isOfficialClient = data.client_is_official === true;
     const verifiedLabel = data.client_verified_label || 'Official Account Verified';
@@ -241,7 +244,7 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
 
         <div className="p-6 pt-0 flex flex-col flex-grow relative z-10 -mt-1">
             <div className="mb-4">
-              <h3 className={cn("text-lg font-black leading-snug mb-2 transition-all tracking-tight group-hover:opacity-90", isExpanded ? '' : 'line-clamp-2', titleColor)}>
+              <h3 className={cn("text-lg font-black leading-snug mb-2 transition-all tracking-tight group-hover:opacity-90 line-clamp-2", titleColor)}>
                   {data.title || 'Untitled Gig Post'}
               </h3>
               <div className={cn("text-xs font-bold flex items-center gap-2 mt-2", isElite ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400')}>
@@ -284,15 +287,15 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
             </div>
 
             <div className="mb-4 relative">
-                <p className={cn("text-xs font-medium leading-relaxed", isExpanded ? '' : 'line-clamp-3', descriptionColor)}>
+                <p className={cn("text-xs font-medium leading-relaxed line-clamp-4 whitespace-pre-line", descriptionColor)}>
                     {description}
                 </p>
-                {isLongText && (
+                {showReadMore && (
                     <button
-                        onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
+                        onClick={(e) => { e.stopPropagation(); setShowDescription(true); }}
                         className={cn("mt-2 text-[10px] font-black uppercase tracking-wider flex items-center gap-0.5 transition-colors hover:underline outline-none", isElite ? 'text-amber-400 hover:text-amber-300' : 'text-indigo-600 dark:text-indigo-400')}
                     >
-                        {isExpanded ? <>Show Less <ChevronUp size={11} strokeWidth={2.5}/></> : <>Read Full Bio <ChevronDown size={11} strokeWidth={2.5}/></>}
+                        Read More <ChevronDown size={11} strokeWidth={2.5}/>
                     </button>
                 )}
             </div>
@@ -300,24 +303,60 @@ const JobCard = ({ data, type, onTriggerReport, launchApplyModal }) => {
             {hasAttachments && (
                 <div className="mb-4 flex flex-wrap items-center gap-1.5">
                     {data.attachments.map((url, idx) => (
-                        <a
-                            key={idx}
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className={cn(
-                              "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95",
-                              isElite
-                                ? 'bg-amber-500/10 border-amber-500/20 text-amber-300 hover:bg-amber-500/20'
-                                : 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-100 dark:border-indigo-900 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100/50'
-                            )}
-                        >
-                            <Paperclip size={11} strokeWidth={2.5} />
-                            Brief File {data.attachments.length > 1 ? idx + 1 : ''}
-                        </a>
+                        isImageUrl(url) ? (
+                            <button
+                                key={idx}
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setAttachmentViewerIndex(idx); }}
+                                className="group/att h-16 w-16 rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 relative shadow-sm hover:scale-105 active:scale-95 transition-all"
+                                title={getFileName(url)}
+                            >
+                                <img
+                                    src={url}
+                                    alt={getFileName(url)}
+                                    className="h-full w-full object-cover"
+                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                                <span className="absolute inset-0 bg-black/0 group-hover/att:bg-black/30 flex items-center justify-center transition-colors">
+                                    <Eye size={14} className="text-white opacity-0 group-hover/att:opacity-100 transition-opacity" />
+                                </span>
+                            </button>
+                        ) : (
+                            <button
+                                key={idx}
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setAttachmentViewerIndex(idx); }}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95",
+                                  isElite
+                                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-300 hover:bg-amber-500/20'
+                                    : 'bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-100 dark:border-indigo-900 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100/50'
+                                )}
+                            >
+                                <Paperclip size={11} strokeWidth={2.5} />
+                                Brief File {data.attachments.length > 1 ? idx + 1 : ''}
+                            </button>
+                        )
                     ))}
                 </div>
+            )}
+
+            {showDescription && (
+                <DescriptionViewer
+                    title={data.title || 'Untitled Gig Post'}
+                    badge="Project Brief"
+                    description={description}
+                    onClose={() => setShowDescription(false)}
+                />
+            )}
+
+            {attachmentViewerIndex !== null && (
+                <MediaViewer
+                    items={data.attachments.map((url) => ({ url, name: getFileName(url) }))}
+                    index={attachmentViewerIndex}
+                    onClose={() => setAttachmentViewerIndex(null)}
+                    onIndexChange={setAttachmentViewerIndex}
+                />
             )}
 
             <div className="flex flex-wrap gap-1.5 mb-5 mt-auto">

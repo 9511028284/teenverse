@@ -1,15 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { 
   Package, Eye, FileText, Lock, ShieldCheck, 
   CloudUpload, Github, Linkedin, Instagram, Globe, 
   Sparkles, XCircle, Image as ImageIcon, CheckCircle2,
-  ArrowRight, ExternalLink
+  ArrowRight, ExternalLink, Download
 } from 'lucide-react';
 
 // UI Components
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
+import MediaViewer, { isImageUrl, getFileName } from '../ui/MediaViewer';
 
 // Modals
 import PostJobModal from '../modals/PostJobModal';
@@ -35,6 +36,7 @@ const formatFileSize = (size) => {
 
 const DashboardModals = ({ user, logic, showToast }) => {
   const { state, setters, actions } = logic;
+  const [workViewerIndex, setWorkViewerIndex] = useState(null);
   const { 
     modal, showRewardModal, isClaiming, kycFile, timelineApp, 
     viewWorkApp, currentQuestionIndex, score, viewProfileId, 
@@ -277,16 +279,46 @@ const DashboardModals = ({ user, logic, showToast }) => {
                 </a>
               )}
               
-              {viewWorkApp.work_files && viewWorkApp.work_files.map((url, i) => (
-                <a key={i} href={url} target="_blank" rel="noreferrer" 
-                   className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-xl hover:border-emerald-500/50 dark:hover:border-emerald-400/50 transition-all group">
-                  <div className="w-9 h-9 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-lg flex items-center justify-center"><FileText size={16}/></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm truncate">Attachment Delivery #{i+1}</p>
+              {viewWorkApp.work_files && viewWorkApp.work_files.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Delivered Files</p>
+                  <div className="space-y-2">
+                    {viewWorkApp.work_files.map((url, i) => (
+                      isImageUrl(url) ? (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setWorkViewerIndex(i)}
+                          className="w-full flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-xl hover:border-emerald-500/50 dark:hover:border-emerald-400/50 transition-all group text-left"
+                        >
+                          <div className="w-11 h-11 shrink-0 rounded-lg overflow-hidden border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+                            <img src={url} alt="" className="h-full w-full object-cover" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm truncate">{getFileName(url)}</p>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500">Image • Tap to view</p>
+                          </div>
+                          <Eye size={14} className="text-slate-400 group-hover:text-emerald-500 transition-colors mr-1 shrink-0"/>
+                        </button>
+                      ) : (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setWorkViewerIndex(i)}
+                          className="w-full flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-xl hover:border-emerald-500/50 dark:hover:border-emerald-400/50 transition-all group text-left"
+                        >
+                          <div className="w-9 h-9 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-lg flex items-center justify-center shrink-0"><FileText size={16}/></div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm truncate">{getFileName(url, `Attachment Delivery #${i+1}`)}</p>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500">File • Tap to view & download</p>
+                          </div>
+                          <Download size={14} className="text-slate-400 group-hover:text-emerald-500 transition-colors mr-1 shrink-0"/>
+                        </button>
+                      )
+                    ))}
                   </div>
-                  <Eye size={14} className="text-slate-400 group-hover:text-emerald-500 transition-colors mr-1"/>
-                </a>
-              ))}
+                </div>
+              )}
             </div>
 
             <div className="pt-2 flex gap-3">
@@ -294,6 +326,15 @@ const DashboardModals = ({ user, logic, showToast }) => {
               <Button className="flex-[2] py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold shadow-md shadow-emerald-500/10" onClick={() => actions.handleApproveWork(viewWorkApp)}>Approve & Release Funds</Button>
             </div>
           </div>
+
+          {workViewerIndex !== null && viewWorkApp?.work_files?.[workViewerIndex] && (
+            <MediaViewer
+              items={viewWorkApp.work_files.map((url) => ({ url, name: getFileName(url) }))}
+              index={workViewerIndex}
+              onClose={() => setWorkViewerIndex(null)}
+              onIndexChange={setWorkViewerIndex}
+            />
+          )}
         </Modal>
       )}
 

@@ -113,6 +113,7 @@ Deno.serve(async (req: Request) => {
     const messageBody = String(body.body || body.message || "").slice(0, 240);
     const url = getPublicUrl(String(body.url || "/dashboard"));
     const audience = body.audience;
+    const saveInApp = body.saveInApp !== false;
     let targetUserIds = sanitizeIds(body.targetUserIds);
 
     if (!messageBody) {
@@ -126,6 +127,20 @@ Deno.serve(async (req: Request) => {
 
       if (error) throw error;
       targetUserIds = (data || []).map((row) => row.id);
+    } else if (audience === "clients") {
+      const { data, error } = await supabaseAdmin
+        .from("clients")
+        .select("id");
+
+      if (error) throw error;
+      targetUserIds = (data || []).map((row) => row.id);
+    } else if (audience === "all" || audience === "everyone") {
+      const { data: flData } = await supabaseAdmin.from("freelancers").select("id");
+      const { data: clData } = await supabaseAdmin.from("clients").select("id");
+      targetUserIds = [
+        ...(flData || []).map((r) => r.id),
+        ...(clData || []).map((r) => r.id),
+      ];
     }
 
     targetUserIds = [...new Set(targetUserIds)];
@@ -133,6 +148,18 @@ Deno.serve(async (req: Request) => {
       return json({ sent: 0, skipped: "no-target-users" });
     }
 
+    // 🚀 ALWAYS SAVE IN-APP NOTIFICATIONS so realtime alerts & bell badge update instantly!
+    if (saveInApp) {
+      const notifRows = targetUserIds.slice(0, 500).map((userId) => ({
+        user_id: userId,
+        message: title ? `${title}: ${messageBody}` : messageBody,
+      }));
+      await supabaseAdmin.from("notifications").insert(notifRows).catch((e) => {
+        console.warn("Failed saving in-app notification rows:", e);
+      });
+    }
+
+    // Query active FCM device tokens for these users
     const { data: tokenRows, error: tokenError } = await supabaseAdmin
       .from("push_tokens")
       .select("id, fcm_token")
@@ -141,7 +168,7 @@ Deno.serve(async (req: Request) => {
 
     if (tokenError) throw tokenError;
     if (!tokenRows?.length) {
-      return json({ sent: 0, skipped: "no-registered-devices" });
+      return json({ sent: 0, inAppSaved: targetUserIds.length, skipped: "no-registered-fcm-devices" });
     }
 
     const projectId = Deno.env.get("FIREBASE_PROJECT_ID") || "teenverse-app";
@@ -199,7 +226,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const sent = results.filter((result) => result.ok).length;
-    return json({ sent, failed: results.length - sent });
+    return json({ sent, inAppSaved: targetUserIds.length, failed: results.length - sent });
   } catch (error) {
     const message = getSafeError(error);
 
