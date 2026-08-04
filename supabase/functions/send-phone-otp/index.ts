@@ -28,9 +28,8 @@ Deno.serve(async (req: Request) => {
 
     if (!widgetId || !authkey) throw new Error("OTP service is not configured.");
 
-    await assertTurnstile(captchaToken);
     await assertRateLimit("otp_send_phone", msg91Identifier, 3, 15 * 60);
-    await assertRateLimit("otp_send_ip", clientIp(req), 10, 15 * 60);
+    await assertRateLimit("otp_send_ip", clientIp(req), 5, 15 * 60);
 
     const response = await fetch(`${MSG91_BASE_URL}/sendOtp`, {
       method: "POST",
