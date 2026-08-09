@@ -11,6 +11,9 @@ import {
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { auth } from '../utils/firebase';
 
+// reCAPTCHA Enterprise is initialized in firebase.js via initializeRecaptchaConfig.
+// The SDK auto-injects Enterprise tokens when calling signInWithPhoneNumber.
+
 // Safe environment boundary extractions with clean short-circuits
 const CLOUDFLARE_SITE_KEY = typeof window !== 'undefined' ? (import.meta.env.VITE_CLOUDFLARE_SITE_KEY || null) : null;
 const AUTH_GENERIC_ERROR = "We couldn't complete this request. Please check your details and try again.";
@@ -469,37 +472,52 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
   };
 
   // ─── THIRD-PARTY SMS AUTH DISPATCHERS ───────────────────────────────────────
-  
-  // Cleanup RecaptchaVerifier when component unmounts to prevent detached DOM nodes
+  // reCAPTCHA Enterprise is auto-configured via initializeRecaptchaConfig in firebase.js.
+  // We still need a RecaptchaVerifier instance as a parameter, but the SDK overrides it
+  // with Enterprise tokens internally when Identity Platform is active.
+
+  const getRecaptchaVerifier = () => {
+    if (!auth) {
+      console.error("[Firebase Auth] Auth instance is null. Verify VITE_FIREBASE_* environment variables.");
+      throw new Error("Firebase is not configured. Please check your environment variables.");
+    }
+    if (!window.recaptchaVerifier) {
+      try {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          size: 'invisible',
+          callback: () => {
+            console.log("[Firebase Auth] reCAPTCHA solved successfully.");
+          },
+          'expired-callback': () => {
+            console.warn("[Firebase Auth] reCAPTCHA token expired. Resetting verifier.");
+            try { window.recaptchaVerifier?.clear(); } catch (_) {}
+            window.recaptchaVerifier = null;
+          }
+        });
+      } catch (err) {
+        console.error("[Firebase Auth] RecaptchaVerifier setup failed:", err);
+        throw new Error(`reCAPTCHA initialization failed: ${err.message}`);
+      }
+    }
+    return window.recaptchaVerifier;
+  };
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (window.recaptchaVerifier) {
-        try {
-          window.recaptchaVerifier.clear();
-        } catch (e) {
-          // ignore
-        }
+        try { window.recaptchaVerifier.clear(); } catch (_) {}
         window.recaptchaVerifier = null;
       }
     };
   }, []);
-
-  const setupRecaptcha = () => {
-    if (!window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'invisible',
-        callback: () => {}
-      });
-    }
-  };
 
   const handleSendPhoneOtp = async () => {
     setOtpLoading(true);
     setOtpAction('send');
     try {
         const { e164Phone } = getPhoneIdentifiers();
-        setupRecaptcha();
-        const appVerifier = window.recaptchaVerifier;
+        const appVerifier = getRecaptchaVerifier();
         
         const confirmation = await signInWithPhoneNumber(auth, e164Phone, appVerifier);
         setConfirmationResult(confirmation);
@@ -510,7 +528,6 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
         setIsPhoneVerified(false);
         setFormData(prev => ({ ...prev, phone: e164Phone }));
         showToast("OTP sent to your mobile number.", "success");
-        resetCaptcha();
     } catch (err) {
         console.error("Firebase phone auth error:", err);
         showToast(err.message || "We couldn't send the OTP. Please try again.");
@@ -527,8 +544,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     setOtpAction('retry');
     try {
       const { e164Phone } = getPhoneIdentifiers();
-      setupRecaptcha();
-      const appVerifier = window.recaptchaVerifier;
+      const appVerifier = getRecaptchaVerifier();
       const confirmation = await signInWithPhoneNumber(auth, e164Phone, appVerifier);
       setConfirmationResult(confirmation);
       
