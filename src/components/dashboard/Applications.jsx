@@ -3,6 +3,7 @@ import Button from '../ui/Button';
 import Modal from '../ui/Modal';    
 import ReviewModal from '../modals/ReviewModal'; 
 import ChatSystem from '../features/ChatSystem'; 
+import ConfirmationModal from '../ui/ConfirmationModal'; 
 import { 
   Clock, CheckCircle, XCircle, Package, Lock, Unlock, 
   FileText, ExternalLink, RefreshCw, AlertTriangle, Star, ShieldCheck, 
@@ -22,6 +23,9 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
   const [releaseModal, setReleaseModal] = useState(null); 
   const [rejectModal, setRejectModal] = useState(null);
   const [reportModal, setReportModal] = useState(null); 
+
+  // CONFIRMATION STATE
+  const [confirmAction, setConfirmAction] = useState(null); // { type, app, customTitle, customDesc, customBtnText, extraContent }
   
   // CHAT STATES
   const [chatApp, setChatApp] = useState(null);
@@ -56,6 +60,38 @@ const Applications = ({ user, applications, isClient, onAction, onViewTimeline, 
     if(!reason) return;
     onAction('reject', rejectModal, { reason });
     setRejectModal(null);
+  };
+
+  // CONFIRMATION HANDLER — executes the action after user confirms
+  const handleConfirmAction = () => {
+    if (!confirmAction) return;
+    const { type, app } = confirmAction;
+    
+    switch (type) {
+      case 'approve':
+        onAction('approve', app);
+        break;
+      case 'release':
+        setReleaseModal(app);
+        break;
+      case 'hire':
+        setCheckoutApp(app);
+        break;
+      case 'cancel':
+        setRejectModal(app);
+        break;
+      case 'revision':
+        handleRequestRevision(app);
+        break;
+      default:
+        break;
+    }
+    setConfirmAction(null);
+  };
+
+  // Trigger confirmation modal
+  const requestConfirm = (type, app, customTitle, customDesc, customBtnText, extraContent) => {
+    setConfirmAction({ type, app, customTitle, customDesc, customBtnText, extraContent });
   };
 
   const handleReportSubmit = async (e) => {

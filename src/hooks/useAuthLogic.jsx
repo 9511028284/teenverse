@@ -8,6 +8,8 @@ import {
   setPendingSignupProfile,
   SIGNUP_PROFILE_METADATA_KEY,
 } from '../utils/pendingSignupProfile';
+import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+import { auth } from '../utils/firebase';
 
 // Safe environment boundary extractions with clean short-circuits
 const CLOUDFLARE_SITE_KEY = typeof window !== 'undefined' ? (import.meta.env.VITE_CLOUDFLARE_SITE_KEY || null) : null;
@@ -67,6 +69,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
   const [phoneOtpReqId, setPhoneOtpReqId] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpAction, setOtpAction] = useState(null);
+  const [confirmationResult, setConfirmationResult] = useState(null);
 
   // Consolidated Onboarding Identity Object Schema
   const [formData, setFormData] = useState({
@@ -466,32 +469,51 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
   };
 
   // ─── THIRD-PARTY SMS AUTH DISPATCHERS ───────────────────────────────────────
-  const handleSendPhoneOtp = async () => {
-    const activeCaptchaToken = getFreshCaptchaToken();
-    if (CLOUDFLARE_SITE_KEY && !activeCaptchaToken) {
-      resetCaptcha();
-      return showToast("Please complete the security check.");
-    }
+  
+  // Cleanup RecaptchaVerifier when component unmounts to prevent detached DOM nodes
+  useEffect(() => {
+    return () => {
+      if (window.recaptchaVerifier) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (e) {
+          // ignore
+        }
+        window.recaptchaVerifier = null;
+      }
+    };
+  }, []);
 
+  const setupRecaptcha = () => {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible',
+        callback: () => {}
+      });
+    }
+  };
+
+  const handleSendPhoneOtp = async () => {
     setOtpLoading(true);
     setOtpAction('send');
     try {
-        const { msg91Identifier, e164Phone } = getPhoneIdentifiers();
-        const { data, error } = await supabase.functions.invoke('send-phone-otp', {
-          body: { phone: e164Phone, identifier: msg91Identifier, captchaToken: activeCaptchaToken },
-        });
-        if (error || !data?.success) throw new Error(data?.error || "Failed to send OTP.");
+        const { e164Phone } = getPhoneIdentifiers();
+        setupRecaptcha();
+        const appVerifier = window.recaptchaVerifier;
+        
+        const confirmation = await signInWithPhoneNumber(auth, e164Phone, appVerifier);
+        setConfirmationResult(confirmation);
 
         setPhoneOtpSent(true);
-        setPhoneOtpReqId(data.reqId || '');
+        setPhoneOtpReqId('firebase');
         setPhoneOtp('');
         setIsPhoneVerified(false);
         setFormData(prev => ({ ...prev, phone: e164Phone }));
         showToast("OTP sent to your mobile number.", "success");
         resetCaptcha();
     } catch (err) {
+        console.error("Firebase phone auth error:", err);
         showToast(err.message || "We couldn't send the OTP. Please try again.");
-        resetCaptcha();
     } finally {
         setOtpLoading(false);
         setOtpAction(null);
@@ -505,13 +527,14 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     setOtpAction('retry');
     try {
       const { e164Phone } = getPhoneIdentifiers();
-      const { data, error } = await supabase.functions.invoke('retry-phone-otp', {
-        body: { phone: e164Phone, reqId: phoneOtpReqId, channel: null },
-      });
-      if (error || !data?.success) throw new Error(data?.error || "Failed to resend OTP.");
-      if (data.reqId) setPhoneOtpReqId(data.reqId);
+      setupRecaptcha();
+      const appVerifier = window.recaptchaVerifier;
+      const confirmation = await signInWithPhoneNumber(auth, e164Phone, appVerifier);
+      setConfirmationResult(confirmation);
+      
       showToast("OTP resent successfully.", "success");
     } catch (err) {
+      console.error("Firebase phone auth error:", err);
       showToast(err.message || "We couldn't resend the OTP. Please try again.");
     } finally {
       setOtpLoading(false);
@@ -522,22 +545,30 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
   const handleVerifyPhoneOtp = async () => {
     if (!phoneOtpSent) return showToast("Send OTP first.");
     if (!phoneOtp || phoneOtp.trim().length < 4) return showToast("Enter the OTP sent to your mobile.");
+    if (!confirmationResult) return showToast("Session expired. Please request OTP again.");
 
     setOtpLoading(true);
     setOtpAction('verify');
     try {
+      const result = await confirmationResult.confirm(phoneOtp.trim());
+      const user = result.user;
+      const firebaseIdToken = await user.getIdToken();
+
       const { e164Phone } = getPhoneIdentifiers();
+      
       const { data, error } = await supabase.functions.invoke('verify-phone-otp', {
-        body: { phone: e164Phone, otp: phoneOtp.trim(), reqId: phoneOtpReqId },
+        body: { firebaseIdToken },
       });
-      if (error || !data?.success) throw new Error(data?.error || "Phone verification failed.");
+      
+      if (error || !data?.success) throw new Error(data?.error || "Phone verification failed on server.");
 
       setFormData(prev => ({ ...prev, phone: e164Phone }));
       setIsPhoneVerified(true);
       setPhoneOtp('');
       showToast("Phone verified successfully.", "success");
     } catch (err) {
-        showToast(err.message || "Phone verification failed.");
+        console.error("OTP verification error:", err);
+        showToast(err.message || "Phone verification failed. Invalid OTP.");
     } finally {
         setOtpLoading(false);
         setOtpAction(null);
@@ -675,7 +706,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
       googleLoading,
       showResetVerify, resetOtp, newPassword, agreedToTerms,
       captchaToken, rememberMe, socialUser, isPhoneVerified,
-      phoneOtpSent, phoneOtp, phoneOtpReqId,
+      phoneOtpSent, phoneOtp, phoneOtpReqId, confirmationResult,
       otpLoading, otpAction, formData, age, CLOUDFLARE_SITE_KEY,
       lockedSignupRole
     },

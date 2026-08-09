@@ -116,6 +116,8 @@ export default function Auth({
         )}
       </AnimatePresence>
 
+      {/* Firebase invisible Recaptcha container */}
+      <div id="recaptcha-container"></div>
     </div>
   );
 }
