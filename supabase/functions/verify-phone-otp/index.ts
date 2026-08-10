@@ -83,6 +83,7 @@ Deno.serve(async (req: Request) => {
     return json({ success: true, phone: normalizedPhone });
   } catch (error) {
     console.error("verify-phone-otp:", error);
-    return json({ success: false, error: safeAuthError(error, "Phone verification failed.") }, 400);
+    const message = error instanceof Error ? error.message : "Phone verification failed.";
+    return json({ success: false, error: message }, 400);
   }
 });
