@@ -9,7 +9,7 @@ import {
   SIGNUP_PROFILE_METADATA_KEY,
 } from '../utils/pendingSignupProfile';
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
-import { auth } from '../utils/firebase';
+import { auth, ensureRecaptchaConfigLoaded } from '../utils/firebase';
 
 // reCAPTCHA Enterprise is initialized in firebase.js via initializeRecaptchaConfig.
 // The SDK auto-injects Enterprise tokens when calling signInWithPhoneNumber.
@@ -517,6 +517,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     setOtpAction('send');
     try {
         const { e164Phone } = getPhoneIdentifiers();
+        await ensureRecaptchaConfigLoaded();
         const appVerifier = getRecaptchaVerifier();
         
         const confirmation = await signInWithPhoneNumber(auth, e164Phone, appVerifier);
@@ -544,6 +545,7 @@ export const useAuthLogic = (onLogin, onSessionReady, options = {}) => {
     setOtpAction('retry');
     try {
       const { e164Phone } = getPhoneIdentifiers();
+      await ensureRecaptchaConfigLoaded();
       const appVerifier = getRecaptchaVerifier();
       const confirmation = await signInWithPhoneNumber(auth, e164Phone, appVerifier);
       setConfirmationResult(confirmation);
